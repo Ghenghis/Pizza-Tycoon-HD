@@ -9,10 +9,12 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <system_error>
 
 #include "core/common/Ids.h"
 #include "core/debug/DebugCommands.h"
@@ -43,6 +45,8 @@
 #include "engine/input/InputManager.h"
 #include "engine/ui/CursorManager.h"
 #include "engine/ui/TooltipManager.h"
+#include "resources/AssetExporter.h"
+#include "resources/HdPack.h"
 #include "resources/PaletteLoader.h"
 #include "resources/Upscaling.h"
 #include "resources/VgaLoader.h"
@@ -110,7 +114,9 @@ struct Overlays {
 } // end namespace
 
 Game::Game(LaunchOptions opts)
-    : crt_mode_override_(opts.crt_mode),
+    : crt_mode_override_(opts.crt_mode), hd_scale_override_(opts.hd_scale),
+      hd_pack_override_(std::move(opts.hd_pack)),
+      export_assets_dir_(std::move(opts.export_assets)),
       surface_(gfx::Surface(DisplayConstants::SCREEN_WIDTH,
                             DisplayConstants::SCREEN_HEIGHT)),
       filename_(opts.viewer_target.value_or("")),
@@ -177,6 +183,16 @@ int Game::run() {
     // Make sure no clicks are required
     loaded_options.automatic_report = false;
   }
+
+  // Writing out the original art needs no window and no HD settings.
+  if (export_assets_dir_) {
+    const std::string configured = game_path_override_
+                                       ? *game_path_override_
+                                       : configManager.active_game_path();
+    return run_asset_export(engine::find_dos_game(configured));
+  }
+
+  configure_hd(loaded_options);
 
   resources::upscaling({
       .pictures = loaded_options.smoothing == Smoothing::TextAndGraphics
@@ -1027,7 +1043,70 @@ int Game::get_display_height(bool crt_mode) {
 }
 
 SDL_Texture* Game::create_display_texture(int display_height) const {
-  return SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
-                           SDL_TEXTUREACCESS_STREAMING,
-                           DisplayConstants::SCREEN_WIDTH, display_height);
+  const int scale = gfx::hd_scale();
+  if (scale == 1) {
+    return SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+                             SDL_TEXTUREACCESS_STREAMING,
+                             DisplayConstants::SCREEN_WIDTH, display_height);
+  }
+  // HD: the frame is always 640x400 times the scale. The logical
+  // presentation (640 x display_height) stretches it on the GPU, which also
+  // gives the CRT aspect ratio when that is on.
+  SDL_Texture* texture = SDL_CreateTexture(
+      sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+      SDL_TEXTUREACCESS_STREAMING, DisplayConstants::SCREEN_WIDTH * scale,
+      DisplayConstants::SCREEN_HEIGHT * scale);
+  if (texture) {
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
+  }
+  return texture;
+}
+
+void Game::configure_hd(const GameOptions& options) const {
+  const int scale = hd_scale_override_.value_or(options.hd_scale);
+  gfx::hd_scale(std::clamp(scale, 1, gfx::max_hd_scale));
+
+  std::filesystem::path pack;
+  if (hd_pack_override_) {
+    pack = *hd_pack_override_;
+  }
+  else if (!options.hd_pack.empty()) {
+    pack = options.hd_pack;
+  }
+  else if (const char* base = SDL_GetBasePath()) {
+    // Turnkey layout: an "hd" folder next to the program.
+    std::error_code ec;
+    const std::filesystem::path next_to_exe =
+        std::filesystem::path(base) / "hd";
+    if (std::filesystem::is_directory(next_to_exe, ec)) {
+      pack = next_to_exe;
+    }
+  }
+  resources::HdPack::instance().configure(pack);
+  if (gfx::hd_scale() > 1) {
+    Logger::info("HD rendering at {}x ({}x{})", gfx::hd_scale(),
+                 DisplayConstants::SCREEN_WIDTH * gfx::hd_scale(),
+                 DisplayConstants::SCREEN_HEIGHT * gfx::hd_scale());
+  }
+}
+
+int Game::run_asset_export(const std::string& game_path) const {
+  if (game_path.empty()) {
+    std::cerr << "error: no original game found. Pass --game-path <folder "
+                 "with PT.EXE>.\n";
+    return 1;
+  }
+  const std::filesystem::path out(*export_assets_dir_);
+  std::cout << "Exporting original art from " << game_path << " to "
+            << out.string() << "\n";
+  const auto report = resources::export_assets(game_path, out);
+  for (const auto& warning : report.warnings) {
+    std::cerr << "warning: " << warning << "\n";
+  }
+  std::cout << "VGA pictures: " << report.vga_files
+            << "\nBOB files: " << report.bob_files
+            << "\nBOB frames: " << report.bob_frames
+            << "\nSkipped: " << report.skipped << "\nFailed: " << report.failed
+            << "\nManifest: " << (out / "manifest.json").string() << "\n";
+  return report.failed == 0 ? 0 : 1;
 }

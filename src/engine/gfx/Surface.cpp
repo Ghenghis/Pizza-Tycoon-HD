@@ -70,7 +70,48 @@ Surface Surface::from_indexed(std::span<const uint8_t> src, int w, int h,
 Surface Surface::clone() const {
   Surface copy(width_, height_, palette_.value_or(PaletteHandle{0}));
   std::memcpy(copy.data(), pixels_.data(), pixels_.size());
+  copy.hd_ = hd_; // shared until either side draws
   return copy;
+}
+
+/* HD overlay */
+
+void Surface::attach_hd(std::shared_ptr<const HdImage> hd) {
+  const int k = hd_scale();
+  if (k <= 1) {
+    fatal("Surface::attach_hd: HD rendering is off (hd_scale is 1)");
+  }
+  if (!hd || hd->width != width_ * k || hd->height != height_ * k) {
+    fatal("Surface::attach_hd: HD image does not match surface size");
+  }
+  // Never written through while shared: hd_mut() clones first.
+  hd_ = std::const_pointer_cast<HdImage>(std::move(hd));
+}
+
+HdImage& Surface::hd_mut() {
+  const int k = hd_scale();
+  if (!hd_) {
+    hd_ = std::make_shared<HdImage>(width_ * k, height_ * k, 0u);
+  }
+  else if (hd_.use_count() > 1) {
+    hd_ = std::make_shared<HdImage>(*hd_);
+  }
+  return *hd_;
+}
+
+void Surface::hd_clear_rect(int x0, int y0, int x1, int y1) noexcept {
+  if (!hd_ || x1 <= x0 || y1 <= y0) {
+    return;
+  }
+  HdImage& hd = hd_mut();
+  const int k = hd_scale();
+  for (int ty = y0 * k; ty < y1 * k; ++ty) {
+    std::fill_n(hd.row(ty) + x0 * k, (x1 - x0) * k, 0u);
+  }
+}
+
+void Surface::hd_clear_pixel(int x, int y) noexcept {
+  hd_clear_rect(x, y, x + 1, y + 1);
 }
 
 /* Check if the point is within this surface */
@@ -91,12 +132,14 @@ void Surface::put(ViewPoint p, ColorIndex idx,
     return;
   }
   pixels_[(p.y * pitch_) + p.x] = idx.get();
+  hd_clear_pixel(p.x, p.y);
 }
 
 /* fill, all the pixels will be updated */
 void Surface::fill(ColorIndex idx, std::optional<PaletteHandle> pal) {
   (void)pal;
   std::memset(pixels_.data(), idx.get(), height_ * pitch_);
+  hd_.reset();
 }
 
 /* fill_rect, give it a rect and all the pixels in it will be updated */
@@ -115,6 +158,7 @@ void Surface::fill_rect(ViewRect r, ColorIndex idx,
   for (int y = y0; y < y1; ++y) {
     std::fill_n(&pixels_[y * pitch_ + x0], x1 - x0, idx.get());
   }
+  hd_clear_rect(x0, y0, x1, y1);
 }
 
 // blit  (no transparency / colorkey yet: copy all bytes)
@@ -144,6 +188,30 @@ void Surface::blit_raw(const Surface& src, ViewPoint dst) {
     const uint8_t* src_row = &src.pixels_[(sy * src.pitch_) + sx];
     uint8_t* dst_row = &pixels_[(dy * pitch_) + dx];
     std::memcpy(dst_row, src_row, static_cast<std::size_t>(copy_w));
+  }
+
+  if (!src.hd_ && !hd_) {
+    return;
+  }
+  // The same clipping as above, for the whole block at once.
+  const int sx0 = std::max(0, -dst.x);
+  const int sy0 = std::max(0, -dst.y);
+  const int sx1 = std::min(src.width_, width_ - dst.x);
+  const int sy1 = std::min(src.height_, height_ - dst.y);
+  if (sx1 <= sx0 || sy1 <= sy0) {
+    return;
+  }
+  if (!src.hd_) {
+    hd_clear_rect(dst.x + sx0, dst.y + sy0, dst.x + sx1, dst.y + sy1);
+    return;
+  }
+  const int k = hd_scale();
+  const HdImage& from = *src.hd_;
+  HdImage& to = hd_mut();
+  const auto count = static_cast<std::size_t>((sx1 - sx0) * k);
+  for (int ty = sy0 * k; ty < sy1 * k; ++ty) {
+    std::memcpy(to.row(ty + dst.y * k) + (dst.x + sx0) * k,
+                from.row(ty) + sx0 * k, count * sizeof(uint32_t));
   }
 }
 
@@ -208,6 +276,51 @@ void Surface::blit(const Surface& src, ViewRect s, ViewPoint d,
       }
     }
   }
+
+  if (!src.hd_) {
+    if (!hd_) {
+      return;
+    }
+    // Plain pixels landed on an HD picture: let them show through.
+    for (int row = 0; row < s.h; ++row) {
+      const uint8_t* src_row = &src.pixels_[(s.y + row) * src.pitch_ + s.x];
+      for (int col = 0; col < s.w; ++col) {
+        if (src_row[col] != transparent) {
+          hd_clear_pixel(d.x + col, d.y + row);
+        }
+      }
+    }
+    return;
+  }
+
+  // HD source. Where the source pixel is opaque, the HD block replaces what
+  // was there (the indexed pixel underneath is now the source's own pixel).
+  // Where it is transparent, the HD texels may still carry soft edges that
+  // reach past the original outline, so they are blended over.
+  const int k = hd_scale();
+  const HdImage& from = *src.hd_;
+  HdImage& to = hd_mut();
+  for (int row = 0; row < s.h; ++row) {
+    const uint8_t* src_row = &src.pixels_[(s.y + row) * src.pitch_ + s.x];
+    for (int ty = 0; ty < k; ++ty) {
+      const uint32_t* from_row = from.row((s.y + row) * k + ty) + s.x * k;
+      uint32_t* to_row = to.row((d.y + row) * k + ty) + d.x * k;
+      for (int col = 0; col < s.w; ++col) {
+        const uint32_t* f = from_row + col * k;
+        uint32_t* t = to_row + col * k;
+        if (src_row[col] != transparent) {
+          std::memcpy(t, f, static_cast<std::size_t>(k) * sizeof(uint32_t));
+        }
+        else {
+          for (int tx = 0; tx < k; ++tx) {
+            if (alpha(f[tx]) != 0) {
+              t[tx] = blend_over(f[tx], t[tx]);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 void Surface::blit_stencil(const Surface& src, ViewRect s, ViewPoint d,
@@ -223,6 +336,53 @@ void Surface::blit_stencil(const Surface& src, ViewRect s, ViewPoint d,
     for (int col = 0; col < s.w; ++col) {
       if (src_row[col] != transparent) {
         dst_row[col] = color;
+        hd_clear_pixel(d.x + col, d.y + row);
+      }
+    }
+  }
+}
+
+void Surface::blit_half(const Surface& src, ViewRect src_rect, ViewPoint dst) {
+  const int w = src_rect.w / 2;
+  const int h = src_rect.h / 2;
+  const int k = hd_scale();
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      const ViewPoint from{src_rect.x + (x * 2), src_rect.y + (y * 2)};
+      const ViewPoint to{dst.x + x, dst.y + y};
+      if (!in_bounds(to) || !src.in_bounds(from)) {
+        continue;
+      }
+      pixels_[to.y * pitch_ + to.x] = src.get(from);
+      if (!src.hd_) {
+        hd_clear_pixel(to.x, to.y);
+        continue;
+      }
+      // Average the 2k x 2k source texels into k x k, premultiplied.
+      HdImage& out = hd_mut();
+      const HdImage& in = *src.hd_;
+      for (int ty = 0; ty < k; ++ty) {
+        for (int tx = 0; tx < k; ++tx) {
+          uint32_t r = 0;
+          uint32_t g = 0;
+          uint32_t b = 0;
+          uint32_t a = 0;
+          for (int sy = 0; sy < 2; ++sy) {
+            for (int sx = 0; sx < 2; ++sx) {
+              const uint32_t p =
+                  in.at(from.x * k + tx * 2 + sx, from.y * k + ty * 2 + sy);
+              const uint32_t pa = alpha(p);
+              r += red(p) * pa;
+              g += green(p) * pa;
+              b += blue(p) * pa;
+              a += pa;
+            }
+          }
+          out.at(to.x * k + tx, to.y * k + ty) =
+              a == 0 ? 0u
+                     : pack_rgba((r + a / 2) / a, (g + a / 2) / a,
+                                 (b + a / 2) / a, (a + 2) / 4);
+        }
       }
     }
   }
@@ -268,7 +428,11 @@ void Surface::replace_colors(std::initializer_list<uint8_t> keys,
   for (int y = y0; y < y1; ++y) {
     uint8_t* row = pixels_.data() + (y * pitch_) + x0;
     for (int x = x0; x < x1; ++x) {
-      row[x - x0] = map[row[x - x0]];
+      const uint8_t before = row[x - x0];
+      row[x - x0] = map[before];
+      if (hd_ && row[x - x0] != before) {
+        hd_clear_pixel(x, y);
+      }
     }
   }
 }

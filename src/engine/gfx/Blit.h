@@ -28,12 +28,7 @@ inline void blit_with_palette(Surface& dst, const Surface& src,
 inline void blit_half_with_palette(Surface& dst, const Surface& src,
                                    ViewRect src_rect, ViewPoint pt = {0, 0}) {
   dst.palette(src.palette());
-  for (int y = 0; y < src_rect.h / 2; ++y) {
-    for (int x = 0; x < src_rect.w / 2; ++x) {
-      dst.put(ViewPoint{pt.x + x, pt.y + y},
-              src.get(ViewPoint{src_rect.x + (x * 2), src_rect.y + (y * 2)}));
-    }
-  }
+  dst.blit_half(src, src_rect, pt);
 }
 
 } // namespace gfx::blit

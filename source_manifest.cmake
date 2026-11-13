@@ -272,6 +272,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/viewers/PaletteView.cpp
     src/views/viewers/SoundViewer.cpp
     src/views/viewers/VgaViewer.cpp
+    src/resources/AssetExporter.cpp
     src/resources/AssetMetadata.cpp
     src/resources/BlitmapManager.cpp
     src/resources/Bob.cpp
@@ -279,6 +280,7 @@ set(GAME_PLEGACY_SOURCES
     src/resources/Font.cpp
     src/resources/FontLoader.cpp
     src/resources/FontManager.cpp
+    src/resources/HdPack.cpp
     src/resources/MFileLoader.cpp
     src/resources/PaletteLoader.cpp
     src/resources/Upscaling.cpp
@@ -305,7 +307,9 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/geom/Camera.cpp
     src/engine/gfx/ColorIndex.cpp
     src/engine/gfx/Draw.cpp
+    src/engine/gfx/HdImage.cpp
     src/engine/gfx/Mmpx.cpp
+    src/engine/gfx/Png.cpp
     src/engine/gfx/Surface.cpp
     src/engine/gfx/SurfaceBuilder.cpp
     src/engine/input/BindingsFile.cpp
@@ -574,10 +578,12 @@ set(PLEGACY_HEADERS
     src/engine/gfx/Color.h
     src/engine/gfx/ColorIndex.h
     src/engine/gfx/Draw.h
+    src/engine/gfx/HdImage.h
     src/engine/gfx/Mmpx.h
     src/engine/gfx/PaletteBank.h
     src/engine/gfx/PaletteCycleController.h
     src/engine/gfx/PaletteHandle.h
+    src/engine/gfx/Png.h
     src/engine/gfx/RawRenderable.h
     src/engine/gfx/Surface.h
     src/engine/gfx/SurfaceBuilder.h
@@ -603,6 +609,7 @@ set(PLEGACY_HEADERS
     src/engine/ui/TooltipManager.h
     src/engine/ui/TooltipRequest.h
     src/engine/ui/UiMode.h
+    src/resources/AssetExporter.h
     src/resources/AssetMetadata.h
     src/resources/Blitmap.h
     src/resources/Blitmap.inl
@@ -617,6 +624,7 @@ set(PLEGACY_HEADERS
     src/resources/FontLoader.h
     src/resources/FontManager.h
     src/resources/FontTypes.h
+    src/resources/HdPack.h
     src/resources/MFileLoader.h
     src/resources/PaletteLoader.h
     src/resources/ResourceManager.h

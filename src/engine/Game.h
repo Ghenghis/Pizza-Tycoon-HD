@@ -42,12 +42,15 @@ public:
         viewer_target; // positional <file|fonts|pal|char>
     // "console <...>", one entry per argv word
     std::optional<std::vector<std::string>> console_args;
-    std::optional<std::string> exec_script; // --exec <file>, then exit
-    std::optional<uint32_t> rng_seed;       // --seed <n>
-    std::optional<bool> crt_mode;           // --crt to force CRT mode
-    std::optional<std::string> vga_viewer;  // --vga <path>
-    std::optional<std::string> bob_viewer;  // --bob <path>
-    std::optional<std::string> card_text;   // --card <text>
+    std::optional<std::string> exec_script;   // --exec <file>, then exit
+    std::optional<uint32_t> rng_seed;         // --seed <n>
+    std::optional<bool> crt_mode;             // --crt to force CRT mode
+    std::optional<std::string> vga_viewer;    // --vga <path>
+    std::optional<std::string> bob_viewer;    // --bob <path>
+    std::optional<std::string> card_text;     // --card <text>
+    std::optional<int> hd_scale;              // --hd-scale <1-8>
+    std::optional<std::string> hd_pack;       // --hd-pack <dir>
+    std::optional<std::string> export_assets; // --export-assets <dir>
   };
 
   Game(LaunchOptions opts);
@@ -86,6 +89,13 @@ private:
   bool window_resizing_in_progress_{false};
   int display_height_{DisplayConstants::SCREEN_HEIGHT};
   std::optional<bool> crt_mode_override_;
+  std::optional<int> hd_scale_override_;
+  std::optional<std::string> hd_pack_override_;
+  std::optional<std::string> export_assets_dir_;
+  // Applies hd_scale and finds the HD pack folder. Before init().
+  void configure_hd(const GameOptions& options) const;
+  // --export-assets: writes the PNGs and manifest, returns the exit code.
+  int run_asset_export(const std::string& game_path) const;
   std::unique_ptr<BobManager> bob_manager_;
   std::unique_ptr<FontManager> font_manager_;
   std::unique_ptr<VgaManager> vga_manager_;

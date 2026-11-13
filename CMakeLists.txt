@@ -233,6 +233,7 @@ include(source_manifest.cmake)
 #  Set -DPLEGACY_ENABLE_MUSIC=OFF to disable music entirely
 # -----------------------------------------------------
 option(PLEGACY_ENABLE_MUSIC "Enable OPL2/CMF music playback (requires libADLMIDI)" ON)
+option(PLEGACY_ADLMIDI_STATIC "Link the vendored libADLMIDI statically" OFF)
 
 if(PLEGACY_ENABLE_MUSIC)
   set(_ADLMIDI_FOUND    FALSE)
@@ -272,16 +273,25 @@ if(PLEGACY_ENABLE_MUSIC)
       set(USE_ESFMU_EMULATOR  OFF)
       set(USE_MAME_EMULATOR   OFF)
       set(WITH_ADLMIDI2       OFF)
-      set(libADLMIDI_STATIC   OFF  CACHE BOOL "" FORCE)
-      set(libADLMIDI_SHARED   ON CACHE BOOL "" FORCE)
+      # PLEGACY_ADLMIDI_STATIC links it into the program (single-file
+      # Windows release); the default keeps upstream's shared library.
+      if(PLEGACY_ADLMIDI_STATIC)
+        set(_ADLMIDI_TARGET ADLMIDI_static)
+        set(libADLMIDI_STATIC   ON  CACHE BOOL "" FORCE)
+        set(libADLMIDI_SHARED   OFF CACHE BOOL "" FORCE)
+      else()
+        set(_ADLMIDI_TARGET ADLMIDI_shared)
+        set(libADLMIDI_STATIC   OFF  CACHE BOOL "" FORCE)
+        set(libADLMIDI_SHARED   ON CACHE BOOL "" FORCE)
+      endif()
 
       add_subdirectory(third_party/libadlmidi)
 
       # Suppress warnings from vendored C sources so they don't pollute output
       if(MSVC)
-        target_compile_options(ADLMIDI_shared PRIVATE /W0)
+        target_compile_options(${_ADLMIDI_TARGET} PRIVATE /W0)
       else()
-        target_compile_options(ADLMIDI_shared PRIVATE -w)
+        target_compile_options(${_ADLMIDI_TARGET} PRIVATE -w)
       endif()
     else()
       message(FATAL_ERROR
@@ -377,6 +387,15 @@ if(WIN32)
     )
     target_sources(plegacy PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/assets/Pizza Legacy.rc")
     set_target_properties(plegacy PROPERTIES OUTPUT_NAME "Pizza Legacy")
+    # A GUI program, so no console window opens next to the game; it attaches
+    # to the parent terminal when there is one (see Main.cpp). Keep main() as
+    # the entry point.
+    set_target_properties(plegacy PROPERTIES WIN32_EXECUTABLE TRUE)
+    if(MSVC)
+        target_link_options(plegacy PRIVATE "/ENTRY:mainCRTStartup")
+    else()
+        target_link_options(plegacy PRIVATE "-Wl,--entry=mainCRTStartup")
+    endif()
 endif()
 
 # Build as a proper macOS .app bundle when on Apple platforms
@@ -506,9 +525,26 @@ if(PLEGACY_BUILD_TESTS)
 
     file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "tests/*.cpp")
     if(TEST_SOURCES)
-        add_executable(test_plegacy ${TEST_SOURCES}
-            tests/stubs/test_stubs.cpp)
-        target_link_libraries(test_plegacy PRIVATE game_plegacy Catch2::Catch2WithMain)
+        # The tests link the real engine (everything but main), so they run
+        # the same code paths as the game.
+        set(PLEGACY_TEST_ENGINE_SOURCES ${ENGINE_PLEGACY_SOURCES})
+        list(FILTER PLEGACY_TEST_ENGINE_SOURCES EXCLUDE REGEX "src/Main\\.cpp$")
+        add_executable(test_plegacy ${TEST_SOURCES} ${PLEGACY_TEST_ENGINE_SOURCES})
+        target_link_libraries(test_plegacy PRIVATE game_plegacy SDL3::SDL3 Catch2::Catch2WithMain)
+        target_compile_definitions(test_plegacy PRIVATE HAS_STD_FORMAT=$<IF:$<BOOL:${HAS_STD_FORMAT}>,1,0>)
+        if(PLEGACY_ENABLE_MUSIC)
+            if(_ADLMIDI_VENDORED)
+                target_link_libraries(test_plegacy PRIVATE ADLMIDI)
+                target_include_directories(test_plegacy PRIVATE
+                    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libadlmidi/include)
+            elseif(WIN32)
+                target_link_libraries(test_plegacy PRIVATE libADLMIDI)
+            else()
+                target_link_libraries(test_plegacy PRIVATE ${ADLMIDI_LIBRARIES})
+                target_include_directories(test_plegacy PRIVATE ${ADLMIDI_INCLUDE_DIRS})
+                target_link_directories(test_plegacy PRIVATE ${ADLMIDI_LIBRARY_DIRS})
+            endif()
+        endif()
         target_include_directories(test_plegacy PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/src
         )

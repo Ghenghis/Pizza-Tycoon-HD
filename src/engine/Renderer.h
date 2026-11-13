@@ -14,6 +14,7 @@
 #include "engine/SDLContext.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Blit.h"
+#include "engine/gfx/HdImage.h"
 #include "engine/gfx/Surface.h"
 
 class Renderable;
@@ -24,13 +25,19 @@ public:
   enum class FadeState { NONE, FADING_OUT, FADED_OUT, FADING_IN };
 
   Renderer(const SDLContext& sdl, int display_height)
-      : sdl_(sdl), display_height_(display_height) {}
+      : sdl_(sdl), display_height_(display_height), scale_(gfx::hd_scale()) {}
   void add_layers(Renderable* r);
   void render();
   void clear_layers();
   void clear_layers_preserve_backbuffer();
+  // Expands an indexed surface to RGBA. With scale > 1 every pixel becomes
+  // scale x scale texels and the surface's HD texels are laid over them.
   static SDL_Surface_unique_ptr to_sdl_surface(const Surface& surface,
-                                               float fade_factor = 1.0f);
+                                               float fade_factor = 1.0f,
+                                               int scale = 1);
+  // Size of the frame this renderer produces, in texels.
+  [[nodiscard]] int frame_width() const;
+  [[nodiscard]] int frame_height() const;
   void with_current_frame(std::function<void(SDL_Surface*)> callback) const;
   void set_display_height(int height) { display_height_ = height; }
   // Recomposite and present even when no layer is dirty.
@@ -71,6 +78,9 @@ private:
   std::vector<LayerInfo> layers_;
   const SDLContext& sdl_;
   int display_height_;
+  // HD texels per engine pixel (gfx::hd_scale() when constructed).
+  int scale_;
+  [[nodiscard]] bool software_crt() const;
 
   FadeState fade_state_{FadeState::NONE};
   float fade_factor_{1.0f}; // 1.0 = normal, 0.0 = black

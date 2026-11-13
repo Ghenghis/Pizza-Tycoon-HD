@@ -7,12 +7,14 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <vector>
 #include "engine/Size.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/ColorIndex.h"
+#include "engine/gfx/HdImage.h"
 #include "engine/gfx/PaletteBank.h"
 #include "engine/gfx/Upscaler.h"
 
@@ -96,6 +98,19 @@ public:
     return disable_palette_translation_;
   }
 
+  /* HD overlay (see HdImage.h) */
+
+  // Attach high-resolution pixels for this whole surface. The image must be
+  // exactly width() * hd_scale() by height() * hd_scale(); it is shared, not
+  // copied, until this surface is drawn on.
+  void attach_hd(std::shared_ptr<const HdImage> hd);
+  [[nodiscard]] const HdImage* hd() const noexcept { return hd_.get(); }
+  [[nodiscard]] bool has_hd() const noexcept { return hd_ != nullptr; }
+
+  // Copies src_rect at half size, keeping one pixel of each 2x2 block, and
+  // averaging the HD texels of the same block when there are any.
+  void blit_half(const Surface& src, ViewRect src_rect, ViewPoint dst);
+
   [[nodiscard]] Size size() const { return Size{width_, height_}; }
   [[nodiscard]] ViewRect rect() const {
     return ViewRect{0, 0, width_, height_};
@@ -112,6 +127,15 @@ private:
 
   // Skip palette mapping (for fonts)
   bool disable_palette_translation_{false};
+
+  // HD texels for this surface, or null. Shared copy-on-write: hd_mut()
+  // clones before the first change if anyone else holds the image.
+  std::shared_ptr<HdImage> hd_;
+
+  [[nodiscard]] HdImage& hd_mut();
+  // Clears the HD texels behind one engine pixel, so the indexed pixel shows.
+  void hd_clear_pixel(int x, int y) noexcept;
+  void hd_clear_rect(int x0, int y0, int x1, int y1) noexcept;
 
   [[nodiscard]] bool in_bounds(ViewPoint p) const noexcept;
   // Clips src_rect against both surfaces, moving dst to match. False when

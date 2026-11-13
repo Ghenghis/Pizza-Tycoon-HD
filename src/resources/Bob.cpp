@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "resources/AssetMetadata.h"
+#include "resources/HdPack.h"
 #include "resources/Upscaling.h"
 
 Bob::Bob(std::string filename, std::vector<uint8_t> raw_data,
@@ -57,8 +58,16 @@ Surface Bob::frame(std::size_t frame_index,
   memcpy(picture.data(), raw_data_.data() + offset,
          static_cast<std::size_t>(w * h));
 
-  return Surface::from_indexed(picture, w, h, palette, 2,
-                               resources::upscaling().pictures);
+  Surface surface = Surface::from_indexed(picture, w, h, palette, 2,
+                                          resources::upscaling().pictures);
+
+  auto& pack = resources::HdPack::instance();
+  if (pack.enabled()) {
+    if (auto hd = pack.bob_frame(filename_, frame_index, surface.size())) {
+      surface.attach_hd(std::move(hd));
+    }
+  }
+  return surface;
 }
 
 std::size_t Bob::frame_count() const { return frames_.size(); }

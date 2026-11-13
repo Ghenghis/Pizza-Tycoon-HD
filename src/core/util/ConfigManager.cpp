@@ -19,6 +19,7 @@
 #include "engine/Fatal.h"
 #include "engine/Logger.h"
 #include "engine/StringUtil.h"
+#include "engine/gfx/HdImage.h"
 #include "resources/util/FileUtils.h"
 
 ConfigManager::ConfigManager(std::string filename)
@@ -69,6 +70,14 @@ OptionDef int_option(std::string_view key, std::string_view section = {},
             }
           },
           section, note};
+}
+
+template <auto Field>
+OptionDef string_option(std::string_view key, std::string_view section = {},
+                        std::string_view note = {}) {
+  return {key, [](const GameOptions& o) { return std::string(o.*Field); },
+          [](GameOptions& o, const std::string& s) { o.*Field = s; }, section,
+          note};
 }
 
 template <auto Field>
@@ -125,6 +134,14 @@ const auto option_defs = std::to_array({
     enum_option<&GameOptions::smoothing, &smoothing_from_config_value>(
         "smoothing", {},
         "off, text or all; round off the blocky edges of the original art"),
+    int_option<&GameOptions::hd_scale, 1, gfx::max_hd_scale>(
+        "hd_scale", {},
+        "1 = original 640x400; 2-8 renders that many texels per pixel "
+        "(3 = 1920x1200, 6 = 3840x2400). Needs a restart"),
+    string_option<&GameOptions::hd_pack>(
+        "hd_pack", {},
+        "folder of HD replacement art; empty uses the hd folder next to the "
+        "program if there is one. Needs a restart"),
 
     bool_option<&GameOptions::map_fx>("map_fx", "Sound"),
     bool_option<&GameOptions::restaurant_fx>("restaurant_fx"),

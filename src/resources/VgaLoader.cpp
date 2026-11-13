@@ -16,6 +16,7 @@
 #include "engine/Endian.h"
 #include "engine/Fatal.h"
 #include "resources/AssetMetadata.h"
+#include "resources/HdPack.h"
 #include "resources/Upscaling.h"
 #include "resources/Vga.h"
 #include "resources/util/FileUtils.h"
@@ -23,7 +24,8 @@
 Surface VgaLoader::load(const std::string& filename) {
   std::string actual_path = filename + ".vga";
   Logger::debug("Loading VGA file: {}", actual_path);
-  if (filename.find("euromap") != std::string::npos) {
+  if (filename.find("euromap") != std::string::npos &&
+      !filename.starts_with("gfx/")) {
     actual_path = "gfx/" + actual_path;
   }
 
@@ -128,7 +130,16 @@ Surface VgaLoader::load(const std::string& filename) {
   auto palette_opt = resources::AssetMetadataRegistry::get_palette(filename);
   uint8_t index = palette_opt.value_or(0);
 
-  return Surface::from_indexed(
+  Surface surface = Surface::from_indexed(
       std::move(picture), width, height, gfx::PaletteHandle{index},
       gfx::asset_pixel_scale, resources::upscaling().pictures);
+
+  auto& pack = resources::HdPack::instance();
+  if (pack.enabled()) {
+    // Keyed on the file actually read, so "euromap" and "gfx/euromap" agree.
+    if (auto hd = pack.vga(actual_path, surface.size())) {
+      surface.attach_hd(std::move(hd));
+    }
+  }
+  return surface;
 }

@@ -6,8 +6,12 @@
 
 #include "engine/Renderer.h"
 
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <span>
+#include <thread>
+#include <vector>
 #include "engine/DisplayConstants.h"
 #include "engine/Fatal.h"
 #include "engine/Renderable.h"
@@ -27,8 +31,7 @@ void Renderer::add_layers(Renderable* r) {
 
 void Renderer::render() {
   // For now all layers have to be full screen size
-  ensure_backbuffer(DisplayConstants::SCREEN_WIDTH,
-                    DisplayConstants::SCREEN_HEIGHT);
+  ensure_backbuffer(frame_width(), frame_height());
 
   // During fade, clear cache so all layers regenerate with current fade_factor
   if (is_fading()) {
@@ -58,6 +61,10 @@ void Renderer::render() {
     }
 
     SDL_Rect dest_rect = SDLAdapter::to_sdl_rect(r);
+    dest_rect.x *= scale_;
+    dest_rect.y *= scale_;
+    dest_rect.w *= scale_;
+    dest_rect.h *= scale_;
 
     bool rerender = view->is_dirty();
     bool recomposite = rerender || below_changed;
@@ -145,7 +152,7 @@ void Renderer::render() {
 
   SDL_Surface* final_surface = composited;
 
-  if (display_height_ == DisplayConstants::CRT_DISPLAY_HEIGHT) {
+  if (software_crt()) {
     final_surface = apply_crt_scaling(composited);
   }
 
@@ -174,12 +181,12 @@ bool Renderer::ensure_present_surface(int w, int h) {
 
 SDL_Rect Renderer::draw_software_cursor(SDL_Surface* dst, const Surface& sprite,
                                         ScreenPoint pos, bool centered) const {
-  SDL_Surface_unique_ptr sdl_sprite = to_sdl_surface(sprite);
+  SDL_Surface_unique_ptr sdl_sprite = to_sdl_surface(sprite, 1.0f, scale_);
 
   // The logical display height may differ from SCREEN_HEIGHT due to CRT
   // correction, so just the y coord has to be rescaled.
-  int x = pos.x;
-  int y = pos.y * DisplayConstants::SCREEN_HEIGHT / display_height_;
+  int x = pos.x * scale_;
+  int y = pos.y * DisplayConstants::SCREEN_HEIGHT / display_height_ * scale_;
   if (centered) {
     x -= sdl_sprite->w / 2;
     y -= sdl_sprite->h / 2;
@@ -207,8 +214,23 @@ void Renderer::clear_layers_preserve_backbuffer() {
 }
 
 void Renderer::update_cache(Renderable* layer, const Surface& surface) {
-  cache_[layer] =
-      to_sdl_surface(surface, layer->ignore_fade() ? 1.0f : fade_factor_);
+  cache_[layer] = to_sdl_surface(
+      surface, layer->ignore_fade() ? 1.0f : fade_factor_, scale_);
+}
+
+int Renderer::frame_width() const {
+  return DisplayConstants::SCREEN_WIDTH * scale_;
+}
+
+int Renderer::frame_height() const {
+  return DisplayConstants::SCREEN_HEIGHT * scale_;
+}
+
+// In HD the GPU stretches the frame to the CRT aspect ratio when it is
+// presented (see Game::create_display_texture), so the software pass that
+// works on the 640x400 frame is only for the original resolution.
+bool Renderer::software_crt() const {
+  return scale_ == 1 && display_height_ == DisplayConstants::CRT_DISPLAY_HEIGHT;
 }
 
 void Renderer::ensure_backbuffer(int w, int h) {
@@ -224,9 +246,99 @@ void Renderer::ensure_backbuffer(int w, int h) {
 }
 
 SDL_Surface_unique_ptr Renderer::to_sdl_surface(const Surface& src,
-                                                float fade_factor) {
+                                                float fade_factor, int scale) {
   const int w = src.width();
   const int h = src.height();
+
+  if (scale > 1) {
+    const int big_w = w * scale;
+    SDL_Surface* rgba =
+        SDL_CreateSurface(big_w, h * scale, SDL_PIXELFORMAT_RGBA8888);
+    if (!rgba) {
+      fatal(SDL_GetError());
+    }
+    // Index 0 is always the transparent colour key.
+    std::array<uint32_t, 256> lut{};
+    lut.fill(gfx::pack_rgba(0, 0, 0, 255));
+    const auto& pal = src.colors();
+    for (std::size_t i = 0; i < pal.size() && i < lut.size(); ++i) {
+      lut[i] = gfx::pack_rgba(
+          static_cast<uint32_t>(static_cast<float>(pal[i].r) * fade_factor),
+          static_cast<uint32_t>(static_cast<float>(pal[i].g) * fade_factor),
+          static_cast<uint32_t>(static_cast<float>(pal[i].b) * fade_factor),
+          255);
+    }
+    lut[0] = 0;
+
+    const gfx::HdImage* hd = src.hd();
+    const uint8_t* index = src.pixels().data();
+    SDL_LockSurface(rgba);
+    auto* base = static_cast<uint8_t*>(rgba->pixels);
+    const int pitch = rgba->pitch;
+    const bool full_brightness = fade_factor >= 1.0f;
+
+    // Rows are independent, so big frames are split across threads.
+    auto expand_rows = [&](int y0, int y1) {
+      for (int y = y0; y < y1; ++y) {
+        auto* first = reinterpret_cast<uint32_t*>(
+            base + static_cast<std::ptrdiff_t>(y * scale) * pitch);
+        const uint8_t* src_row = index + static_cast<std::ptrdiff_t>(y) * w;
+        for (int x = 0; x < w; ++x) {
+          std::fill_n(first + x * scale, scale, lut[src_row[x]]);
+        }
+        for (int ty = 0; ty < scale; ++ty) {
+          auto* out = reinterpret_cast<uint32_t*>(
+              base + static_cast<std::ptrdiff_t>(y * scale + ty) * pitch);
+          if (ty > 0) {
+            std::memcpy(out, first,
+                        static_cast<std::size_t>(big_w) * sizeof(uint32_t));
+          }
+          if (!hd) {
+            continue;
+          }
+          const uint32_t* texels = hd->row(y * scale + ty);
+          for (int tx = 0; tx < big_w; ++tx) {
+            const uint32_t t = texels[tx];
+            const uint32_t a = gfx::alpha(t);
+            if (a == 255) {
+              out[tx] = full_brightness ? t : gfx::scale_rgb(t, fade_factor);
+            }
+            else if (a != 0) {
+              out[tx] = gfx::blend_over(
+                  full_brightness ? t : gfx::scale_rgb(t, fade_factor),
+                  out[tx]);
+            }
+          }
+        }
+      }
+    };
+
+    const auto texels = static_cast<std::size_t>(big_w) * h * scale;
+    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    const int workers =
+        texels < 1'000'000
+            ? 1
+            : static_cast<int>(std::min({hw, 8u, static_cast<unsigned>(h)}));
+    if (workers <= 1) {
+      expand_rows(0, h);
+    }
+    else {
+      std::vector<std::jthread> pool;
+      pool.reserve(static_cast<std::size_t>(workers - 1));
+      const int step = (h + workers - 1) / workers;
+      for (int i = 1; i < workers; ++i) {
+        const int y0 = std::min(h, i * step);
+        const int y1 = std::min(h, y0 + step);
+        if (y0 < y1) {
+          pool.emplace_back([&expand_rows, y0, y1] { expand_rows(y0, y1); });
+        }
+      }
+      expand_rows(0, std::min(h, step));
+    } // jthreads join here
+    SDL_UnlockSurface(rgba);
+    SDL_SetSurfaceBlendMode(rgba, SDL_BLENDMODE_BLEND);
+    return SDL_Surface_unique_ptr(rgba);
+  }
 
   SDL_Surface* index8 = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_INDEX8);
   if (!index8) {
@@ -273,7 +385,7 @@ SDL_Surface_unique_ptr Renderer::to_sdl_surface(const Surface& src,
 
 void Renderer::with_current_frame(
     std::function<void(SDL_Surface*)> callback) const {
-  if (display_height_ == DisplayConstants::CRT_DISPLAY_HEIGHT) {
+  if (software_crt()) {
     callback(apply_crt_scaling(backbuffer_.get()));
   }
   else {

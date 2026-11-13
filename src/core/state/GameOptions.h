@@ -176,6 +176,12 @@ struct GameOptions {
   bool software_cursor = true;
   // Read once at startup.
   Smoothing smoothing = Smoothing::Off;
+  // HD rendering, read once at startup. hd_scale is how many screen texels
+  // back every pixel of the 640x400 game screen (1 = original, 3 = 1920x1200,
+  // 6 = 3840x2400). hd_pack is a folder of replacement art; empty means the
+  // "hd" folder next to the program, when there is one.
+  int hd_scale = 1;
+  std::string hd_pack;
   FpsOption render_fps = FpsOption::Fps60;
   bool vsync = true;
 
