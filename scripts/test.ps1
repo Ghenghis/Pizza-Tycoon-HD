@@ -14,7 +14,7 @@ if ($GamePath) { $env:PLEGACY_TEST_GAME_PATH = $GamePath }
 Write-Host '== format (clang-format, files this fork adds or changes)'
 $files = @(Get-ChangedCppFiles)
 if ($files.Count -gt 0) { Invoke-Checked clang-format (@('--dry-run', '--Werror') + $files) }
-else { Write-Note 'skipped: not a git checkout with the upstream tag' }
+else { Write-Note 'skipped: not a git checkout' }
 
 Write-Host '== C++ tests'
 Invoke-Checked (Join-Path $build 'test_plegacy.exe')

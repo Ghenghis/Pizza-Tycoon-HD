@@ -11,15 +11,18 @@ export SDL_VIDEO_DRIVER=offscreen SDL_AUDIO_DRIVER=dummy
 echo "== format (clang-format, files this fork adds or changes)"
 # Upstream files keep upstream's formatting; clang-format versions differ in
 # small ways, so only our own changes are held to the local version.
+# The upstream import: its tag, or the first commit (which is that import).
 BASE=upstream-pizzalegacy-1.0.0-beta.2
-if git -C "$ROOT" rev-parse -q --verify "$BASE" >/dev/null; then
+git -C "$ROOT" rev-parse -q --verify "$BASE" >/dev/null 2>&1 ||
+  BASE=$(git -C "$ROOT" rev-list --max-parents=0 HEAD 2>/dev/null | tail -1)
+if [ -n "$BASE" ] && git -C "$ROOT" rev-parse -q --verify "$BASE" >/dev/null 2>&1; then
   FILES=$( (git -C "$ROOT" diff --name-only "$BASE" -- src tests
             git -C "$ROOT" ls-files --others --exclude-standard -- src tests) |
           grep -E '\.(cpp|h|inl)$' | sort -u)
   for f in $FILES; do [ -f "$ROOT/$f" ] && echo "$ROOT/$f"; done |
     xargs -r clang-format --dry-run --Werror
 else
-  echo "skipped: not a git checkout with the $BASE tag"
+  echo "skipped: not a git checkout"
 fi
 
 echo "== C++ tests"

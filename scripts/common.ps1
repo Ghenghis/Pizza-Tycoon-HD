@@ -64,9 +64,13 @@ function Get-Python {
 # C++ files this fork adds or changes since the upstream import. Upstream
 # files keep upstream's formatting (clang-format versions differ slightly).
 function Get-ChangedCppFiles {
+    # The upstream import: its tag, or the first commit (which is that import).
     $base = 'upstream-pizzalegacy-1.0.0-beta.2'
     git -C $script:Root rev-parse -q --verify $base *> $null
-    if ($LASTEXITCODE -ne 0) { return @() }
+    if ($LASTEXITCODE -ne 0) {
+        $base = @(git -C $script:Root rev-list --max-parents=0 HEAD 2>$null) | Select-Object -Last 1
+        if (-not $base) { return @() }
+    }
     $names = @(git -C $script:Root diff --name-only $base -- src tests) +
              @(git -C $script:Root ls-files --others --exclude-standard -- src tests)
     return $names | Where-Object { $_ -match '\.(cpp|h|inl)$' } | Sort-Object -Unique |
