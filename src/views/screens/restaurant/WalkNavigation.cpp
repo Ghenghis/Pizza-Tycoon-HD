@@ -109,8 +109,13 @@ std::vector<Orientation> straighten_path(int from_x, int from_y,
                                          const std::vector<bool>& blocked) {
   using O = Orientation;
 
-  if (path.size() <= 1) {
-    return path;
+  // Spelled out instead of "return path": GCC 13 at -O3 warns about the
+  // vector copy here (-Warray-bounds false positive).
+  if (path.empty()) {
+    return {};
+  }
+  if (path.size() == 1) {
+    return {path.front()};
   }
 
   std::vector<std::pair<int, int>> pos;
