@@ -1205,13 +1205,6 @@ Surface StaffView::create_empty_card(const std::string_view label) {
         int dst_x_tile = x;
         int dst_y_tile = tab_surf.height() + y;
 
-        // Compute the area we can safely draw
-        int remaining_w = CARD_WIDTH - x;
-        int remaining_h = MAX_CARD_HEIGHT - tab_surf.height() - y;
-
-        ViewRect clip = {0, 0, std::min(tile_w, remaining_w),
-                         std::min(tile_h, remaining_h)};
-
         empty_card_surface_->blit_raw(bg_surf,
                                       ViewPoint{dst_x_tile, dst_y_tile});
       }

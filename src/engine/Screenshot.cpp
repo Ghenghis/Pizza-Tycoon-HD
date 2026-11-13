@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <system_error>
 
 #include "engine/Logger.h"
 #include "engine/PlatformPaths.h"
@@ -69,8 +70,16 @@ std::string resolve_screenshot_path(const std::string& name) {
 bool save_screenshot(SDL_Surface* surface, const std::string& path) {
   namespace fs = std::filesystem;
   const fs::path dir = fs::path(path).parent_path();
-  if (!dir.empty() && !fs::exists(dir)) {
-    fs::create_directories(dir);
+  if (!dir.empty()) {
+    // Never throws: a folder that cannot be created (or that the platform
+    // misreports) is logged, and the save below reports the real outcome.
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) {
+      fs::create_directories(dir, ec);
+      if (ec) {
+        Logger::warn("Could not create {}: {}", dir.string(), ec.message());
+      }
+    }
   }
   SDL_Surface* tmp = format_for_png_fixed(surface);
   if (!tmp) {

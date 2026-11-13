@@ -315,7 +315,6 @@ void Terminal::draw_category(const RenderContext& ctx, TerminalCategory cat) {
   for (const auto* actor : actors_to_display) {
     std::string name = actor->name();
     std::string phone_nr = std::to_string(actor->phone_number());
-    ViewRect name_rect = {top_left.x, top_left.y, CELL_WIDTH_NAME, CELL_HEIGHT};
 
     ViewPoint bottom_right =
         top_left + PxOffset{CELL_WIDTH_NAME + CELL_WIDTH_NUMBER, CELL_HEIGHT};
