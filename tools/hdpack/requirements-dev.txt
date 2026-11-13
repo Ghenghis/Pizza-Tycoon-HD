@@ -1,0 +1,6 @@
+# Development tools for the pack tool (tests, lint). Tested versions.
+-r requirements.txt
+pytest==9.1.1
+black==26.5.1
+ruff==0.16.9
+mypy==2.3.1

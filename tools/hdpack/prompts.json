@@ -1,0 +1,136 @@
+{
+ "_comment": "First matching rule wins (globs on the exported file path). denoise: how far the model may move away from the original; low keeps layout and text, high invents more detail.",
+ "style": "hand-painted 2D game art, clean detailed illustration, crisp edges, rich warm colours, soft consistent lighting, 1990s Italian pizzeria business game remastered in high definition",
+ "negative": "blurry, jpeg artifacts, watermark, signature, photo, photorealistic, 3d render, deformed, extra limbs, noisy, low resolution",
+ "default": {
+  "positive": "detailed game artwork",
+  "denoise": 0.35
+ },
+ "rules": [
+  {
+   "match": "gfx/titel*",
+   "positive": "game title logo artwork",
+   "negative": "misspelled text",
+   "denoise": 0.15
+  },
+  {
+   "match": "gfx/menu.png",
+   "positive": "game title logo artwork",
+   "negative": "misspelled text",
+   "denoise": 0.15
+  },
+  {
+   "match": "gfx/cyber.png",
+   "positive": "company logo splash screen artwork",
+   "negative": "misspelled text",
+   "denoise": 0.15
+  },
+  {
+   "match": "gfx/mplogolo.png",
+   "positive": "publisher logo",
+   "negative": "misspelled text",
+   "denoise": 0.1
+  },
+  {
+   "match": "gfx/back*",
+   "positive": "top-down view of an empty restaurant room, floor tiles, walls, doors and windows",
+   "denoise": 0.35
+  },
+  {
+   "match": "gfx/blitmap*",
+   "positive": "top-down restaurant room detail",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/euromap.png",
+   "positive": "illustrated cartoon map of Europe made of pizza toppings, sea with grid lines",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/permap.png",
+   "positive": "illustrated cartoon map",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/g[0-9]*",
+   "positive": "cartoon character portrait, expressive face",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/k[0-9]*",
+   "positive": "row of small user interface icons, beveled buttons",
+   "denoise": 0.2
+  },
+  {
+   "match": "gfx/icons.png",
+   "positive": "user interface icons, beveled buttons",
+   "denoise": 0.2
+  },
+  {
+   "match": "gfx/plakat*",
+   "positive": "advertising poster illustration",
+   "negative": "misspelled text",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/spot*",
+   "positive": "television advertisement still frame illustration",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/jury.png",
+   "positive": "cartoon pizza competition jury sitting at a table",
+   "denoise": 0.3
+  },
+  {
+   "match": "gfx/maestro.png",
+   "positive": "cartoon pizza chef character",
+   "denoise": 0.3
+  },
+  {
+   "match": "z/zb*",
+   "positive": "newspaper photo illustration, cartoon style",
+   "denoise": 0.35
+  },
+  {
+   "match": "bob/zutaten/*",
+   "positive": "single pizza ingredient, appetising food illustration, on a plain background",
+   "denoise": 0.35
+  },
+  {
+   "match": "bob/moebel/*",
+   "positive": "single piece of restaurant furniture seen from above, on a plain background",
+   "denoise": 0.3
+  },
+  {
+   "match": "bob/kuebobs/*",
+   "positive": "kitchen equipment seen from above, on a plain background",
+   "denoise": 0.3
+  },
+  {
+   "match": "bob/typ*",
+   "positive": "cartoon character bust, animation frame, on a plain background",
+   "denoise": 0.25
+  },
+  {
+   "match": "bob/walk*",
+   "positive": "tiny cartoon person walking, top-down game sprite, on a plain background",
+   "denoise": 0.2
+  },
+  {
+   "match": "bob/gaeste/*",
+   "positive": "tiny cartoon restaurant guest seen from above, game sprite",
+   "denoise": 0.2
+  },
+  {
+   "match": "bob/night*",
+   "positive": "night scene cartoon character sprite, on a plain background",
+   "denoise": 0.25
+  },
+  {
+   "match": "bob/*",
+   "positive": "game sprite on a plain background",
+   "denoise": 0.25
+  }
+ ]
+}
