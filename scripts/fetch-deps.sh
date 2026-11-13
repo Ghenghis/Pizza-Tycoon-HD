@@ -35,7 +35,7 @@ fetch libADLMIDI https://github.com/Wohlstand/libADLMIDI.git "$ADLMIDI_TAG"
 # a desktop build gets the full set.
 SDL_ARGS="-DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF"
 if [ "$(uname)" = Linux ] && ! pkg-config --exists x11 xcursor 2>/dev/null; then
-  SDL_ARGS="$SDL_ARGS -DSDL_X11=OFF -DSDL_WAYLAND=OFF"
+  SDL_ARGS="$SDL_ARGS -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON"
 fi
 # shellcheck disable=SC2086
 build SDL $SDL_ARGS
