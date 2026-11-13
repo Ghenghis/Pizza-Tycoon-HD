@@ -1,3 +1,56 @@
+# Pizza Tycoon HD
+
+An HD remaster path for the 1994 DOS game **Pizza Tycoon** (Pizza Connection),
+built on [Pizza Legacy](https://codeberg.org/cowomaly/pizzalegacy), the
+open-source C++20 reimplementation of the game by Cowomaly.
+
+Everything Pizza Legacy does is kept: the full game, start to finish, with the
+original rules. This fork adds:
+
+* **HD rendering**: the game screen drawn at up to 8x (3840x2400 at 6x),
+  set with `hd_scale` or `--hd-scale`.
+* **HD art packs**: any of the 1,699 original pictures and sprite frames can
+  be replaced by a PNG of any size; missing ones keep the original art.
+* **Asset export**: `--export-assets` writes every original picture with its
+  correct palette, plus a `manifest.json`, in exactly the pack layout.
+* **Pack tools** (`tools/hdpack`): a baseline upscaler, a validator that
+  checks a pack the way the engine will, and a batch driver for a local
+  ComfyUI (RTX GPU) to generate remastered art.
+
+![Original vs HD pack at 6x](screenshots/hd_compare.png)
+
+*Left: original art, scaled up. Right: the same spot rendered at
+`hd_scale 6` (3840x2400) with the baseline, non-AI pack. This shows the HD
+pipeline works end to end; remastered art comes from the ComfyUI step.*
+
+**Start here:** [docs/HD_REMASTER.md](docs/HD_REMASTER.md) (workflow, settings,
+ComfyUI setup, limits).
+
+| Script (Windows) | What it does |
+|---|---|
+| `scripts\doctor.ps1` | Checks tools, dependencies, game folder, ComfyUI |
+| `scripts\build.ps1` | Release build (vcpkg + CMake + Ninja), tests included |
+| `scripts\test.ps1` | C++ tests (no window), Python tests, format and lint checks |
+| `scripts\export-assets.ps1` | Writes the original art to `export\` |
+| `scripts\make-pack.ps1` | Builds `pack\` (baseline upscale or ComfyUI) and validates it |
+| `scripts\run-dev.ps1` | Plays the game with a pack at a chosen scale |
+| `scripts\release.ps1` | Packages the Windows zip, with checksums |
+| `scripts\ci-local.ps1` | All quality gates, run locally (no hosted CI) |
+
+Linux and macOS: `scripts/fetch-deps.sh`, `scripts/build.sh`,
+`scripts/test.sh`, `scripts/ci-local.sh`.
+
+Windows build from Linux or WSL2 (no Visual Studio needed):
+`scripts/build-windows-cross.sh` makes one self-contained
+`Pizza Legacy.exe` and the release zip in `release/`.
+
+The Windows program has no console window. Started from a terminal, it prints
+there (exports, `--help`).
+
+The rest of this file is Pizza Legacy's own README.
+
+---
+
 # Pizza Legacy
 
 ![Pizza Legacy city view](screenshots/citymap.png)

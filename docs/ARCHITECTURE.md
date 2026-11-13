@@ -45,6 +45,19 @@ Popups, tooltips, and a debug layer are all independent
 overlays that can block or pass through input to the view beneath them.
 Screen transitions use palette-based fade-out/fade-in.
 
+## HD overlay (Pizza Tycoon HD)
+
+Every `gfx::Surface` can carry an optional true-colour `gfx::HdImage` that is
+`hd_scale()` times its size, shared copy-on-write. Loading a VGA picture or a
+BOB frame attaches the matching PNG from the HD pack (`resources::HdPack`),
+resized once to the exact size. All surface operations keep the overlay in
+step with the indexed pixels: blits of HD surfaces carry their texels; plain
+pixels drawn over HD clear the texels under them so the original shows
+through. The `Renderer` expands each layer to `hd_scale` (rows split across
+threads) and lays the texels over the upscaled indexed pixels; the GPU scales
+the final frame to the window. Game logic and layout still run entirely in
+the 640x400 indexed space. See `docs/HD_REMASTER.md`.
+
 ## Input system
 
 Input is abstracted into two layers: physical keys (SDL backend) and semantic

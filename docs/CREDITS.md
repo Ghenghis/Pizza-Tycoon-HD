@@ -4,6 +4,9 @@ Pizza Legacy is a reimplementation of the 1994 game Pizza Tycoon.
 
 Copyright (C) 2026 Cowomaly <https://pizzalegacy.nl/>
 
+Pizza Tycoon HD additions (HD rendering, packs, export, pack tools):
+Copyright (C) 2026 ShadowByte, under the same GPL-3.0-or-later licence.
+
 ## Original game
 
 Pizza Tycoon (released as Pizza Connection in Germany) was created by

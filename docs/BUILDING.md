@@ -1,5 +1,23 @@
 # Building Pizza Legacy
 
+**Pizza Tycoon HD:** the scripts in `scripts/` do all of this for you with
+pinned dependency versions (`scripts/deps.env`):
+
+| | Windows (PowerShell) | Linux / WSL2 |
+|---|---|---|
+| Check tools | `scripts\doctor.ps1` | |
+| Dependencies | `scripts\fetch-deps.ps1` | `scripts/fetch-deps.sh` |
+| Build (+tests, zero warnings) | `scripts\build.ps1` | `scripts/build.sh` |
+| All quality gates | `scripts\test.ps1` | `scripts/test.sh` |
+| Everything, as local CI | `scripts\ci-local.ps1` | `scripts/ci-local.sh` |
+| Windows release from Linux/WSL2 | | `scripts/build-windows-cross.sh` |
+
+Tests that need the original game read `PLEGACY_TEST_GAME_PATH` (the folder
+with `PT.EXE`) and are skipped without it. The original game is never part of
+the repository.
+
+The rest of this file is the upstream build guide.
+
 ## Prerequisites
 
 - CMake 3.25+

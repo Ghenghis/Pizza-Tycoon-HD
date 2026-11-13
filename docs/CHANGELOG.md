@@ -1,3 +1,33 @@
+Pizza Tycoon HD 1.0.0 (2026-11-13)
+
+Based on Pizza Legacy 1.0.0-beta.2.
+
+* HD rendering: `hd_scale` (1-8) / `--hd-scale` draws the 640x400 game screen
+  at that many texels per pixel; the GPU scales the frame to the window.
+* HD art packs: `hd_pack` / `--hd-pack`, or an `hd` folder next to the
+  program. Any VGA picture or BOB frame can be replaced by a PNG of the same
+  aspect ratio and any size; missing files keep the original art.
+* `--export-assets <dir>` writes all 145 VGA pictures and 1,554 BOB frames
+  with the palettes the engine uses, plus `manifest.json`.
+* `tools/hdpack`: baseline upscaler, pack validator, ComfyUI batch generator
+  with two workflows and per-asset prompt rules.
+* Tests: Catch2 suite linking the real engine (HD image maths, surface overlay
+  rules, renderer expansion, pack loading and full export against the
+  original files), pytest suite for the pack tools, HD frame benchmark.
+* Windows: the game is a GUI program (no console window opens next to it)
+  and borrows the parent terminal for output when started from one.
+  `scripts/build-windows-cross.sh` builds a single self-contained
+  `Pizza Legacy.exe` (SDL3, zlib, libADLMIDI and the C++ runtime linked in;
+  only Windows system DLLs imported) from Linux or WSL2, plus the release zip
+  and SHA-256 files. Verified under Wine: export and HD renders are
+  pixel-identical to the Linux build.
+* `PLEGACY_ADLMIDI_STATIC` CMake option links the vendored libADLMIDI
+  statically.
+* Fixes: the `gfx/euromap` key no longer resolves to `gfx/gfx/euromap.vga`;
+  `ArgSpec.h` includes `<cstdint>` (MinGW build); saving a screenshot no
+  longer throws when its folder can't be checked or created; two unused
+  variables removed (zero compiler warnings).
+
 1.0.0-beta.2 (2026-09-13)
 
 Lots of fixes, some new features; did a lot of work to compare the original
