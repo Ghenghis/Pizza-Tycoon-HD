@@ -1,0 +1,378 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "core/newspaper/NewspaperEventSystem.h"
+
+#include "core/city/City.h"
+#include "core/city/IngredientTrendSystem.h"
+#include "core/food/Ingredient.h"
+#include "core/food/IngredientType.h"
+#include "core/newspaper/NewspaperState.h"
+#include "core/state/GameState.h"
+#include "core/time/GameTime.h"
+#include "engine/Random.h"
+
+using core::food::IngredientType;
+using enum TrendDuration;
+
+namespace core::newspaper {
+
+using enum IngredientType;
+
+void NewspaperEventSystem::daily_update(GameState& state, City& city) {
+  auto& ns = city.newspaper_state();
+
+  // Cooldown for any article that was posted but not viewed yet:
+  if (ns.cooldown > 0) {
+    ns.cooldown--;
+  }
+
+  // Process scheduled countdowns
+  for (int i = 0; i < 50; ++i) {
+    if (scheduled_countdowns_[i] > 0) {
+      scheduled_countdowns_[i]--;
+      if (scheduled_countdowns_[i] == 0) {
+        if (execute_named_event(scheduled_types_[i], state, city)) {
+          return;
+        }
+      }
+    }
+  }
+
+  // 5% chance of a scheduled event
+  if (engine::random::rand_percentage_chance(5)) {
+    auto id = static_cast<NewspaperEvent>(engine::random::rand_max_n(50) + 1);
+    if (execute_named_event(id, state, city)) {
+      return;
+    }
+  }
+
+  // 18% chance of an ingredient trend firing
+  if (engine::random::rand_percentage_chance(18)) {
+    if (try_generate_ingredient_event(ns, city)) {
+      return;
+    }
+  }
+
+  // If cooldown expired, clear the article
+  if (ns.cooldown == 0) {
+    ns.article_id = 0;
+  }
+
+  if (ns.article_id == 0) {
+    seed_flavor_article(ns);
+  }
+}
+
+void NewspaperEventSystem::seed_flavor_article(NewspaperState& ns) {
+  constexpr int flavor_article_count = NewspaperState::FLAVOR_ARTICLE_LAST -
+                                       NewspaperState::FLAVOR_ARTICLE_FIRST + 1;
+  ns.article_id =
+      static_cast<uint8_t>(engine::random::rand_max_n(flavor_article_count) +
+                           NewspaperState::FLAVOR_ARTICLE_FIRST);
+  ns.cooldown = NewspaperState::FALLBACK_COOLDOWN;
+}
+
+void NewspaperEventSystem::schedule_event(int slot, NewspaperEvent event,
+                                          int days) {
+  if (slot >= 0 && slot < 50) {
+    scheduled_types_[slot] = event;
+    scheduled_countdowns_[slot] = days;
+  }
+}
+
+// Returns true if the event fired successfully and set an article.
+// Returns false if the event was suppressed so we can try another source of
+// events
+bool NewspaperEventSystem::execute_named_event(NewspaperEvent event,
+                                               GameState& state, City& city) {
+  auto fix_bugs = state.rules().fix_legacy_bugs;
+  auto& ns = city.newspaper_state();
+  auto& trends = city.ingredient_trend_system();
+  auto event_id = static_cast<int>(event);
+
+  switch (event) {
+    using enum NewspaperEvent;
+  case TomatoesContaminated:
+    trends.apply_effect(
+        IngredientType::TOMATOES,
+        {.initial_value = 0, .control = -50, .duration = Exponential});
+    // Schedule follow-up: decontamination in 10-19 days
+    schedule_event(event_id - 1, TomatoesDecontaminated,
+                   engine::random::rand_max_n(10) + 10);
+    break;
+  case CucumbersPoisoned:
+    trends.apply_effect(
+        IngredientType::CUCUMBERS,
+        {.initial_value = 0, .control = -100, .duration = Exponential});
+    break;
+  case TomatoesDecontaminated:
+    trends.apply_effect(
+        IngredientType::TOMATOES,
+        {.initial_value = 0, .control = 50, .duration = Exponential});
+    break;
+
+  case GroundWaterClear:
+    // TODO: This is a follow-up for the cucumber one, but it is never scheduled
+    // in the original. Maybe as part of our fixes we schedule it?
+  case NewOvenDeveloped:
+    break;
+
+  case HeatWave: {
+    // Only triggers in spring/summer
+    auto season = state.time().season();
+    if (season != Season::Spring && season != Season::Summer) {
+      return false;
+    }
+    city.spoilage_rate(8);
+    city.spoilage_duration_counter(3);
+    break;
+  }
+
+  case ColdSnap:
+    // "Cucumbers are in great demand"
+    trends.apply_effect(
+        IngredientType::CUCUMBERS,
+        {.initial_value = 25, .control = 20, .duration = Countdown});
+    break;
+
+  // Trade embargoes
+  case ImportHaltedVegetables:
+    city.trade_embargo_counter(IngredientCategory::VEGETABLES, 12);
+    break;
+
+  case ImportStoppedMeat:
+    city.trade_embargo_counter(IngredientCategory::MEAT, 4);
+    break;
+
+  case TradeEmbargoFruit:
+    city.trade_embargo_counter(IngredientCategory::FRUIT, 8);
+    break;
+
+  case TradeEmbargoCheese:
+    city.trade_embargo_counter(IngredientCategory::CHEESE, 12);
+    break;
+
+  // Interest rate events
+  case InterestRatesRising: {
+    const int delta = engine::random::rand_max_n(5) + 2;
+    city.interest_rate(city.interest_rate() + delta);
+    break;
+  }
+  case InterestRatesFalling: {
+    const int delta = engine::random::rand_max_n(5) + 2;
+    city.interest_rate(std::max(city.interest_rate() - delta, 0));
+    break;
+  }
+  case LandPricesRising:
+    // Original sets something related to land prices to (2, 30) but this
+    // doesn't have effect in game (only written, never read).
+  case LandPricesFalling:
+    // Sets the same things but to (255, 30) but again no effect
+  case PizzeriaBlownUp:
+  case NetherlandsStopTrade:
+  case NetherlandsResumeTrade:
+  case MusicWhileYouDine:
+  case GamblingAfterDinner:
+  case PizzaRobbery:
+  case SickMenOfEurope:
+  case GarlicBlacklisted:
+  case EuropeSickAgain:
+  case PizzeriaContaminated:
+  case NewNutritionTrend:
+  case HealthConsciousness:
+  case PizzaComingUp:
+    break;
+
+  // Ingredient trend events
+  case SalamiOutOfFavour:
+    trends.apply_effect(
+        IngredientType::SALAMI,
+        {.initial_value = -30, .control = 20, .duration = Countdown});
+    break;
+
+  case PizzeriaBlownUp2:
+    break;
+
+  case ApplesComingUp:
+    trends.apply_effect(
+        IngredientType::APPLES,
+        {.initial_value = 0, .control = 50, .duration = Linear});
+    break;
+
+  case NoPineappleDemand: // BUG: "No pineapples" affects raspberries (58)
+    trends.apply_effect(
+        fix_bugs ? IngredientType::PINEAPPLE : IngredientType::RASPBERRIES,
+        {.initial_value = -20, .control = 30, .duration = Countdown});
+    break;
+
+  case PeachesHealthy: // BUG: "Peaches" affects kiwi (peach doesn't exist)
+    trends.apply_effect(
+        IngredientType::KIWI,
+        {.initial_value = 0, .control = 60, .duration = Exponential});
+    break;
+
+  case KiwiMegaIn: // BUG: "Kiwi mega-in" affects blackberries (59)
+    trends.apply_effect(
+        fix_bugs ? IngredientType::KIWI : IngredientType::BLACKBERRIES,
+        {.initial_value = 50, .control = 30, .duration = Countdown});
+    break;
+
+  case ChilliesOut:
+    trends.apply_effect(IngredientType::CHILLIES, {-20, 30, Countdown});
+    break;
+
+  case PotatoesHealthy:
+    trends.apply_effect(IngredientType::POTATOES, {0, 40, Linear});
+    break;
+
+  case CornIsOut:
+    trends.apply_effect(IngredientType::SWEET_CORN, {-25, 20, Countdown});
+    break;
+
+  case AsparagusLooks:
+    trends.apply_effect(IngredientType::ASPARAGUS, {0, 70, Exponential});
+    break;
+
+  case MushroomsContaminated:
+    trends.apply_effect(IngredientType::W_MUSHROOMS, {0, -100, Exponential});
+    break;
+
+  case SalmonHealthy: // BUG: uses LOBSTER instead of SALMON
+    trends.apply_effect(fix_bugs ? IngredientType::SALMON
+                                 : IngredientType::LOBSTER,
+                        {0, 65, Exponential});
+    break;
+
+  case TroutContaminated: // BUG: "Trout" affects SQUID (trout doesn't exist)
+    trends.apply_effect(IngredientType::SQUID, {0, -80, Exponential});
+    break;
+
+  case CaviarMegaOut: // BUG: affects COCKLES (39)
+    trends.apply_effect(fix_bugs ? IngredientType::CAVIAR
+                                 : IngredientType::COCKLES,
+                        {0, -60, Exponential});
+    break;
+
+  case LobsterBoycotted: // BUG: "Lobster boycotted" affects CAVIAR
+    trends.apply_effect(fix_bugs ? IngredientType::LOBSTER
+                                 : IngredientType::CAVIAR,
+                        {0, -90, Exponential});
+    break;
+
+  case BeefRising:
+    trends.apply_effect(IngredientType::BEEF, {0, 50, Linear});
+    break;
+
+  case NoDemandForEggs:
+    trends.apply_effect(IngredientType::EGG, {-16, -30, Linear});
+    break;
+
+  case GingerInDemand:
+    trends.apply_effect(IngredientType::GINGER, {20, 40, Linear});
+    break;
+
+  case GorgonzolaFantastic:
+    trends.apply_effect(IngredientType::GORGONZOLA, {0, 40, Linear});
+    break;
+
+  case SpansishSaladContaminated:
+    trends.apply_effect(IngredientType::SALAD, {0, -100, Exponential});
+    break;
+
+  case ChildrenPreferSpicy: {
+    auto& tp = state.customer_taste_profiles()[ConsumerType::Children];
+    tp.fat = 8;
+    tp.sweet = 4;
+    tp.salty = 7;
+    tp.hot = 9;
+    state.recalculate_all_pizza_demographics();
+    break;
+  }
+  case ElderlyPreferSweet: {
+    auto& tp = state.customer_taste_profiles()[ConsumerType::SeniorCitizens];
+    tp.fat = 6;
+    tp.sweet = 9;
+    tp.salty = 6;
+    tp.hot = 7;
+    state.recalculate_all_pizza_demographics();
+    break;
+  }
+  }
+
+  // Housekeeping
+  ns.article_id = static_cast<uint8_t>(event_id + NewspaperState::EVENT_OFFSET);
+  ns.cooldown = NewspaperState::EVENT_COOLDOWN;
+  return true;
+}
+
+// Procedurally generates ingredient trend events.
+bool NewspaperEventSystem::try_generate_ingredient_event(NewspaperState& ns,
+                                                         City& city) {
+  auto& trends = city.ingredient_trend_system();
+
+  // Pick random ingredient slot (0-95)
+  auto slot_id = engine::random::rand_max_n(max_ingredient_count);
+  if (!food::is_valid_ingredient_id(static_cast<uint8_t>(slot_id))) {
+    return false;
+  }
+  auto type = static_cast<IngredientType>(slot_id);
+
+  // Skip if already trending
+  if (std::abs(trends.get_trend(type)) > 5) {
+    return false;
+  }
+
+  uint8_t category = static_cast<uint8_t>(engine::random::rand_max_n(4));
+  int8_t polarity = engine::random::coin_flip() ? 1 : -1;
+
+  // Draw order from the original.
+  switch (category) {
+  case 0: {
+    const int target = polarity * (engine::random::rand_max_n(40) + 20);
+    trends.apply_effect(
+        type, {.initial_value = 0, .control = target, .duration = Exponential});
+    break;
+  }
+  case 1: {
+    const int target = polarity * (engine::random::rand_max_n(40) + 20);
+    const int value = polarity * engine::random::rand_max_n(20);
+    trends.apply_effect(
+        type, {.initial_value = value, .control = target, .duration = Linear});
+    break;
+  }
+  case 2: {
+    const int days = engine::random::rand_max_n(20) + 10;
+    const int value = polarity * (engine::random::rand_max_n(20) + 20);
+    trends.apply_effect(
+        type, {.initial_value = value, .control = days, .duration = Countdown});
+    break;
+  }
+  case 3: {
+    const int target = polarity * (engine::random::rand_max_n(30) + 30);
+    trends.apply_effect(
+        type, {.initial_value = 0, .control = target, .duration = Exponential});
+    break;
+  }
+  default:
+    return false;
+  }
+
+  ns.article_id = NewspaperState::INGREDIENT_ARTICLE;
+  ns.polarity = polarity;
+  ns.category = category;
+  ns.target_ingredient = type;
+  ns.cooldown = NewspaperState::EVENT_COOLDOWN;
+
+  return true;
+}
+
+bool NewspaperEventSystem::generate_ingredient_event(GameState& state,
+                                                     City& city) {
+  return try_generate_ingredient_event(city.newspaper_state(), city);
+}
+
+} // namespace core::newspaper

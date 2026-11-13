@@ -1,0 +1,460 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "core/conversations/BankConversation.h"
+
+#include <cmath>
+#include <magic_enum/magic_enum.hpp>
+
+#include "core/character/Actor.h"
+#include "core/character/Player.h"
+#include "core/city/City.h"
+#include "core/conversations/BankLine.h"
+#include "core/events/MilestoneId.h"
+#include "core/finance/BalanceSheet.h"
+#include "core/finance/Investment.h"
+#include "core/finance/Ledger.h"
+#include "engine/Math.h"
+
+constexpr int MAX_NUMBER_OF_LOANS = 4;
+constexpr Money no_loan_above_cash = 10'000'000_usd;
+
+// The offer is a share of the player's cash, until they are rich enough for
+// the flat one.
+constexpr double investment_offer_share = 0.5;
+constexpr Money investment_minimum_cash = 20'000_usd;
+constexpr Money investment_flat_offer_threshold = 3'000'000'000_usd;
+constexpr Money investment_flat_offer = 2'000'000'000_usd;
+
+BankConversation::BankConversation(GameState& state, const Actor* actor,
+                                   const BankSettings& bank_settings)
+    : BaseConversation(compute_start_line(state, actor), state, "t/bank.e",
+                       actor),
+      bank_settings_(bank_settings) {}
+
+/* This advances only the lines that don't require user choices */
+bool BankConversation::advance() {
+  switch (current_line_) {
+  case BankLine::ACCOUNT_OVERDRAWN:
+  case BankLine::HELLO_MAY_I_HELP_YOU:
+  case BankLine::SORRY_ALREADY_HAVE_LOAN:
+  case BankLine::TOO_MANY_LOANS:
+  case BankLine::YOU_DONT_NEED_A_LOAN:
+  case BankLine::GOOD_LUCK_WITH_INVESTMENTS:
+  case BankLine::YOU_DONT_HAVE_ENOUGH_TO_REPAY:
+  case BankLine::YOU_DONT_HAVE_LOAN_WITH_US:
+  case BankLine::TRANSFER_SUCCEEDED:
+  case BankLine::TRANSFER_FAILED:
+  case BankLine::SORRY_WE_DONT_HAVE_INVESTMENT_FOR_YOU:
+    current_line(BankLine::I_NEED_LOAN);
+    break;
+  default:
+    std::cerr << "I don't know how to advance without choice from state "
+              << magic_enum::enum_name(current_line_) << "\n";
+    return false;
+    break;
+  }
+  return true;
+}
+
+bool BankConversation::advance_line_choice(BankLine choice) {
+  Logger::info("Advance with choice {}",
+               std::string(magic_enum::enum_name(choice)));
+  // Do something with the choice
+  switch (choice) {
+  case BankLine::I_NEED_LOAN:
+    if (state_.active_player()->has_loan_with_bank(
+            state_.active_city_id(), core::BankId{actor_->id().value})) {
+      current_line(BankLine::SORRY_ALREADY_HAVE_LOAN);
+    }
+    else if (state_.active_player()->number_of_loans() >= MAX_NUMBER_OF_LOANS) {
+      current_line(BankLine::TOO_MANY_LOANS);
+    }
+    else if (state_.active_player()->cash_balance() > no_loan_above_cash) {
+      current_line(BankLine::YOU_DONT_NEED_A_LOAN);
+    }
+    else {
+      proposed_loan_ = propose_loan();
+      current_line(BankLine::LOAN_ARRANGEMENT);
+    }
+    break;
+  case BankLine::I_WANT_TO_TRANSFER:
+    wants_cheque_ = true;
+    break;
+  case BankLine::I_WANT_TO_REPAY:
+    if (!state_.active_player()->has_loan_with_bank(
+            state_.active_city_id(), core::BankId{actor_->id().value})) {
+      current_line(BankLine::YOU_DONT_HAVE_LOAN_WITH_US);
+    }
+    else {
+      // Find the loan
+      auto& loans =
+          state_.active_player()->loans_in_city(state_.active_city_id());
+      auto it = std::ranges::find_if(loans, [this](const Loan& l) {
+        return !l.is_settled() &&
+               l.bank_id() == core::BankId{actor_->id().value};
+      });
+      repaying_loan_ = &(*it);
+
+      // Check if player has enough money
+      if (state_.active_player()->cash_balance() <
+          repaying_loan_->repay_amount(state_.rules().fix_legacy_bugs)) {
+        current_line(BankLine::YOU_DONT_HAVE_ENOUGH_TO_REPAY);
+      }
+      else {
+        current_line(BankLine::ARE_YOU_SURE_YOU_WANT_TO_REPAY);
+      }
+    }
+    break;
+  case BankLine::I_WANT_TO_INVEST: {
+    auto* player = state_.active_player();
+    if (player->cash_balance() < investment_minimum_cash ||
+        player->number_of_investments() >= Player::max_investment_count) {
+      current_line(BankLine::SORRY_WE_DONT_HAVE_INVESTMENT_FOR_YOU);
+    }
+    else {
+      proposed_investment_ = propose_investment();
+      current_line(BankLine::LATEST_INVESTMENT_TIP);
+    }
+    break;
+  }
+  default:
+    std::cerr << "I don't know how to advance with choice " << choice
+              << " from state " << current_line_ << "\n";
+    return false;
+    break;
+  }
+  return true;
+}
+
+bool BankConversation::advance_proposal(bool agree) {
+  switch (current_line_) {
+  case BankLine::LOAN_ARRANGEMENT:
+    if (agree) {
+      state_.active_player()->add_loan(state_.active_city_id(), proposed_loan_,
+                                       state_.time().current_date());
+      state_.record_milestone(core::events::MilestoneId::TakesOutFirstLoan,
+                              state_.active_player()->id());
+      current_line(BankLine::GOOD_LUCK_WITH_INVESTMENTS);
+    }
+    else {
+      current_line(BankLine::TOO_BAD_MAYBE_ASK_ANOTHER_BANK_FOR_CREDIT);
+    }
+    break;
+  case BankLine::ARE_YOU_SURE_YOU_WANT_TO_REPAY:
+    if (agree) {
+      // advance_line_choice already checked the player can afford this
+      state_.active_player()->repay_loan(*repaying_loan_,
+                                         state_.time().current_date(),
+                                         state_.rules().fix_legacy_bugs);
+    }
+    current_line(BankLine::I_NEED_LOAN);
+    break;
+  case BankLine::LATEST_INVESTMENT_TIP:
+    if (agree) {
+      (void)state_.active_player()->spend_cash(state_.time().current_date(),
+                                               Account::ProfitAndLoss,
+                                               proposed_investment_.amount());
+      state_.active_player()->add_investment(proposed_investment_);
+      current_line(BankLine::YOUR_MONEY_IS_SAFE_WITH_US);
+    }
+    else {
+      current_line(BankLine::I_NEED_LOAN);
+    }
+    break;
+  default:
+    // If there is no choice then just advance.
+    return advance();
+    break;
+  }
+  return true;
+}
+
+Emotion BankConversation::emotion() const { return Emotion::NEUTRAL; }
+
+std::vector<ConversationLine<BankLine>> BankConversation::lines() const {
+  switch (current_line_) {
+  case BankLine::ACCOUNT_OVERDRAWN:
+    return {
+        make_line(BankLine::ACCOUNT_OVERDRAWN),
+    };
+    break;
+  case BankLine::I_NEED_LOAN:
+    return {
+        make_option(BankLine::I_NEED_LOAN),
+        make_option(BankLine::I_WANT_TO_INVEST),
+        make_option(BankLine::I_WANT_TO_TRANSFER),
+        make_option(BankLine::I_WANT_TO_REPAY),
+    };
+    break;
+  case BankLine::LOAN_ARRANGEMENT: {
+    std::ostringstream oss;
+    oss << "   $" << proposed_loan_.start_amount().whole() << ", Interest:  ";
+    oss << static_cast<int>(proposed_loan_.interest_percentage())
+        << "%, Period: ";
+    oss << proposed_loan_.start_months() << " months, payment per ";
+    oss << "month: $" << proposed_loan_.monthly_repayment().whole() << ".";
+
+    return {
+        make_proposal(BankLine::LOAN_ARRANGEMENT, oss.str()),
+    };
+    break;
+  }
+  case BankLine::TOO_RISKY_FOR_LOAN:
+    return {
+        make_line(BankLine::TOO_RISKY_FOR_LOAN),
+    };
+    break;
+  case BankLine::LATEST_INVESTMENT_TIP: {
+    return {
+        make_proposal(BankLine::LATEST_INVESTMENT_TIP,
+                      compat::format(" {}, Period: {} months, interest: {}%",
+                                     proposed_investment_.amount(),
+                                     proposed_investment_.start_months(),
+                                     proposed_investment_.return_rate())),
+    };
+    break;
+  }
+  case BankLine::OF_50:
+    return {
+        make_line(BankLine::OF_50),
+    };
+    break;
+  case BankLine::OF_500:
+    return {
+        make_line(BankLine::OF_500),
+    };
+    break;
+  case BankLine::OF_5000:
+    return {
+        make_line(BankLine::OF_5000),
+    };
+    break;
+  case BankLine::AT_10PCT_INTEREST:
+    return {
+        make_line(BankLine::AT_10PCT_INTEREST),
+    };
+    break;
+  case BankLine::AT_15PCT_INTEREST:
+    return {
+        make_line(BankLine::AT_15PCT_INTEREST),
+    };
+    break;
+  case BankLine::AT_20PCT_INTEREST:
+    return {
+        make_line(BankLine::AT_20PCT_INTEREST),
+    };
+    break;
+  case BankLine::LETS_SELL_FIXED_COST:
+    return {
+        make_line(BankLine::LETS_SELL_FIXED_COST),
+    };
+    break;
+  case BankLine::YOU_DONT_NEED_A_LOAN:
+    return {
+        make_line(BankLine::YOU_DONT_NEED_A_LOAN),
+    };
+    break;
+  case BankLine::MAXIMUM_100:
+    return {
+        make_line(BankLine::MAXIMUM_100),
+    };
+    break;
+  case BankLine::MAXIMUM_500:
+    return {
+        make_line(BankLine::MAXIMUM_500),
+    };
+    break;
+  case BankLine::MAXIMUM_1000:
+    return {
+        make_line(BankLine::MAXIMUM_1000),
+    };
+    break;
+  case BankLine::MAXIMUM_2000:
+    return {
+        make_line(BankLine::MAXIMUM_2000),
+    };
+    break;
+  case BankLine::OK_SO_THATS:
+    return {
+        make_line(BankLine::OK_SO_THATS),
+    };
+    break;
+  case BankLine::ARE_YOU_SURE_YOU_WANT_TO_REPAY: {
+    // "OK. So that's $12000. Are you sure, you want to repay this loan?"
+    std::ostringstream oss;
+    oss << repaying_loan_->repay_amount(state_.rules().fix_legacy_bugs).whole()
+        << ". ";
+    return {
+        make_concat_proposal(BankLine::OK_SO_THATS, oss.str(),
+                             BankLine::ARE_YOU_SURE_YOU_WANT_TO_REPAY),
+    };
+  }
+  case BankLine::YOU_DONT_HAVE_ENOUGH_TO_REPAY:
+    return {
+        make_line(BankLine::YOU_DONT_HAVE_ENOUGH_TO_REPAY),
+    };
+    break;
+  case BankLine::YOU_DONT_HAVE_LOAN_WITH_US:
+    return {
+        make_line(BankLine::YOU_DONT_HAVE_LOAN_WITH_US),
+    };
+    break;
+  case BankLine::WE_HAVE_SOLD_YOUR_LOANS:
+    return {
+        make_line(BankLine::WE_HAVE_SOLD_YOUR_LOANS),
+    };
+    break;
+  case BankLine::TOTAL_COMES_TO:
+    return {
+        make_line(BankLine::TOTAL_COMES_TO),
+    };
+    break;
+  case BankLine::BUSINESS_MEN_ARE_CLIENTS_OFFER_DEAL:
+    return {
+        make_line(BankLine::BUSINESS_MEN_ARE_CLIENTS_OFFER_DEAL),
+    };
+    break;
+  case BankLine::ADVERTISE_FOR_US_FOR_10K:
+    return {
+        make_line(BankLine::ADVERTISE_FOR_US_FOR_10K),
+    };
+    break;
+  case BankLine::TOO_MANY_LOANS:
+    return {
+        make_line(BankLine::TOO_MANY_LOANS),
+    };
+    break;
+  case BankLine::GOOD_LUCK_WITH_INVESTMENTS:
+    return {
+        make_line(BankLine::GOOD_LUCK_WITH_INVESTMENTS),
+    };
+    break;
+  case BankLine::TOO_BAD_MAYBE_ASK_ANOTHER_BANK_FOR_CREDIT:
+    return {
+        make_line(BankLine::TOO_BAD_MAYBE_ASK_ANOTHER_BANK_FOR_CREDIT),
+    };
+    break;
+  case BankLine::SORRY_WE_DONT_HAVE_INVESTMENT_FOR_YOU:
+    return {
+        make_line(BankLine::SORRY_WE_DONT_HAVE_INVESTMENT_FOR_YOU),
+    };
+    break;
+  case BankLine::YOUR_MONEY_IS_SAFE_WITH_US:
+    return {
+        make_line(BankLine::YOUR_MONEY_IS_SAFE_WITH_US),
+    };
+    break;
+  case BankLine::HELLO_MAY_I_HELP_YOU:
+    return {
+        make_text_line(BankLine::HELLO_MAY_I_HELP_YOU, actor_->name() + ". "),
+    };
+    break;
+  case BankLine::SORRY_ALREADY_HAVE_LOAN:
+    return {
+        make_line(BankLine::SORRY_ALREADY_HAVE_LOAN),
+    };
+    break;
+  case BankLine::TRANSFER_SUCCEEDED:
+    return {
+        make_line(BankLine::TRANSFER_SUCCEEDED),
+    };
+    break;
+  case BankLine::TRANSFER_FAILED:
+    return {
+        make_line(BankLine::TRANSFER_FAILED),
+    };
+    break;
+  default:
+    std::cerr << "Get Lines Not yet implemented for line "
+              << lines_.at(static_cast<int>(current_line_)) << "\n";
+    break;
+  }
+  return {};
+}
+
+bool BankConversation::has_ended() const {
+  switch (current_line_) {
+  case BankLine::YOUR_MONEY_IS_SAFE_WITH_US:
+    return true;
+  default:
+    return false;
+  }
+}
+
+Loan BankConversation::propose_loan() const {
+  auto* player_obj = state_.active_player();
+  const auto& character = player_obj->character();
+  const auto& financials = player_obj->financials();
+
+  int stat_score = ((character.management() + character.personality() +
+                     character.experience() + character.age()) *
+                    100) +
+                   (5 * character.popularity_multiplier());
+
+  // Capital plus this year's profit, or nothing when the year is running at a
+  // loss.
+  const BalanceSheet sheet{*player_obj};
+  const Money result = -sheet.profit_and_loss();
+  Money capital;
+  if (result >= 0_usd) {
+    capital = -financials.balance(Account::Capital) + result;
+  }
+
+  // Character stat score and financial position share the same scale
+  int64_t creditworthiness = (stat_score + capital.whole()) / 100;
+
+  int64_t loan_dollars =
+      creditworthiness * bank_settings_.loan_amount_multiplier * 8;
+  loan_dollars >>= state_.difficulty_level();
+  loan_dollars = math::round_up_to_next_power10<3>(loan_dollars);
+
+  uint8_t interest_rate =
+      static_cast<uint8_t>(state_.active_city()->interest_rate() +
+                           bank_settings_.interest_rate_modifier);
+  constexpr uint8_t months = 12;
+
+  return Loan(core::BankId{actor_->id().value},
+              Money::from_dollars(loan_dollars), interest_rate, months);
+}
+
+Investment BankConversation::propose_investment() const {
+  auto* player = state_.active_player();
+  auto cash = player->cash_balance();
+  Money amount = math::round_up_to_next_power10<3>(
+      static_cast<int64_t>(cash.cents * investment_offer_share));
+  if (cash > investment_flat_offer_threshold) {
+    amount = investment_flat_offer;
+  }
+  return {core::BankId{actor_->id().value}, state_.active_city_id(), amount,
+          investment_return_rate, investment_months};
+}
+
+int BankConversation::round_to_nearest(int value, int rounding_unit) const {
+  return static_cast<int>(
+      std::round(static_cast<double>(value) / rounding_unit) * rounding_unit);
+}
+
+BankLine BankConversation::compute_start_line(const GameState& state,
+                                              const Actor*) {
+  auto* player = state.active_player();
+  if (player && player->cash_balance().cents < 0) {
+    return BankLine::ACCOUNT_OVERDRAWN;
+  }
+  return BankLine::HELLO_MAY_I_HELP_YOU;
+}
+
+BankConversation::PopupRequest BankConversation::popup_request() const {
+  return wants_cheque_ ? PopupRequest::CHEQUE : PopupRequest::NONE;
+}
+
+void BankConversation::on_cheque_result(Money amount, int account) {
+  wants_cheque_ = false;
+
+  bool ok = amount > 0_usd && account > 0 &&
+            state_.bank_transfer(account, amount, *state_.active_player());
+  current_line(ok ? BankLine::TRANSFER_SUCCEEDED : BankLine::TRANSFER_FAILED);
+}

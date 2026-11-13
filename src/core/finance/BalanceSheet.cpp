@@ -1,0 +1,69 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "core/finance/BalanceSheet.h"
+
+BalanceSheet::BalanceSheet(const Player& player) : player_(player) {}
+
+Money BalanceSheet::profit_and_loss() const {
+  return player_.financials().balance(Account::ProfitAndLoss);
+}
+
+std::vector<BalanceEntry> BalanceSheet::assets() const {
+  std::vector<BalanceEntry> result;
+  const auto& financials = player_.financials();
+
+  result.push_back({Account::Property, financials.balance(Account::Property)});
+  result.push_back({Account::Machines, financials.balance(Account::Machines)});
+  result.push_back(
+      {Account::Furniture, financials.balance(Account::Furniture)});
+  result.push_back({Account::Weapons, financials.balance(Account::Weapons)});
+  result.push_back({Account::Stock, financials.balance(Account::Stock)});
+  result.push_back({Account::Cash, financials.balance(Account::Cash)});
+
+  const Money result_for_year = profit_and_loss();
+  if (result_for_year.cents > 0) {
+    result.push_back({Account::ProfitAndLoss, result_for_year});
+  }
+
+  return result;
+}
+
+std::vector<BalanceEntry> BalanceSheet::liabilities() const {
+  std::vector<BalanceEntry> result;
+  const auto& financials = player_.financials();
+
+  // Negate balances since liabilities are stored as negative (credit) in ledger
+  // but should display as positive on balance sheet.
+  result.push_back({Account::Capital, -financials.balance(Account::Capital)});
+  result.push_back({Account::Loan, -financials.balance(Account::Loan)});
+  result.push_back({Account::Debts, -financials.balance(Account::Debts)});
+  result.push_back(
+      {Account::DeliveryDebts, -financials.balance(Account::DeliveryDebts)});
+
+  const Money result_for_year = profit_and_loss();
+  if (result_for_year.cents < 0) {
+    result.push_back({Account::ProfitAndLoss, -result_for_year});
+  }
+
+  return result;
+}
+
+Money BalanceSheet::total_assets() const {
+  Money total = 0_c;
+  for (const auto& entry : assets()) {
+    total += entry.amount;
+  }
+  return total;
+}
+
+Money BalanceSheet::total_liabilities() const {
+  Money total = 0_c;
+  for (const auto& entry : liabilities()) {
+    total += entry.amount;
+  }
+  return total;
+}

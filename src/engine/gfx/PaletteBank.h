@@ -1,0 +1,180 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+// PaletteBank - caches the 71 VGA palettes (palette.e) once a loader has
+// handed it the file contents.
+
+#include "engine/Fatal.h"
+#include "engine/gfx/Color.h"
+#include "engine/gfx/PaletteHandle.h"
+
+#include <algorithm>
+#include <array>
+#include <bitset>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace gfx {
+
+// DOS VGA format (6-bit RGB)
+constexpr int VGA_PALETTE_COUNT = 71;
+constexpr int VGA_COLORS_PER_PALETTE = 256;
+constexpr int VGA_BYTES_PER_COLOR = 3;
+
+// Palette storage: 71 palettes x 256 colors x 3 bytes
+constexpr int PALETTE_COUNT = 71;
+constexpr int COLORS_PER_PALETTE = 256;
+constexpr int BYTES_PER_COLOR = 3;
+
+// PaletteOverride - Describes a palette modification relative to a base
+// palette. We specify a list of destination indices to overwrite in the base
+// palette, and a parallel list of source indices (from another palette) to copy
+// into those slots. Both arrays must be the same length.
+//
+// Usage:
+//   PaletteOverride ovr;
+//   ovr.dst_indices    = {100, 101, 102};   // indices in base palette
+//   ovr.src_indices    = {100, 101, 102};   // indices in source palette
+//   ovr.src_palette_id = 13;                // pull colors from palette #13
+//
+//   // Get palette #18 with selected slots replaced by palette #13 colors.
+//   auto new_palette = PaletteBank::instance().colors(PaletteHandle{18}, ovr);
+//
+//   // Apply the overridden palette to a surface:
+//   surface.colors(new_palette);
+//
+// - To revert a Surface to its base palette, call
+// `surface.clear_custom_palette()`.
+struct PaletteOverride {
+  std::vector<uint8_t> dst_indices;
+  std::vector<uint8_t> src_indices;
+  uint8_t src_palette_id{0};
+};
+
+class PaletteBank {
+public:
+  static PaletteBank& instance() {
+    static PaletteBank self;
+    return self;
+  }
+
+  // raw, no override. Returns const reference to 256 Color entries
+  const std::vector<Color>& colors(PaletteHandle h);
+
+  // copy with override applied
+  std::vector<Color> colors(PaletteHandle base, const PaletteOverride& ovr);
+
+  // Takes the DOS PALETTE.E contents: 71 palettes * 256 colors * 3 bytes
+  // (6-bit RGB)
+  void load_dos_palette(const std::vector<uint8_t>& dos_raw);
+
+  // Stands in for palette 0 until palette.e is loaded.
+  void load_placeholder(const std::vector<Color>& palette_zero);
+
+private:
+  PaletteBank() = default;
+
+  /* Packed raw data: 71 palettes x 256 colors x 3 bytes */
+  std::vector<uint8_t> raw_;
+  std::array<std::vector<Color>, PALETTE_COUNT> cache_;
+  std::bitset<PALETTE_COUNT> loaded_;
+  bool placeholder_ = false;
+};
+
+inline const std::vector<Color>& PaletteBank::colors(PaletteHandle h) {
+  if (h.id >= PALETTE_COUNT) {
+    throw std::out_of_range("Palette id out of range" + std::to_string(h.id));
+  }
+  if (raw_.empty()) {
+    fatal("PaletteBank used before palette.e was loaded");
+  }
+
+  if (!loaded_.test(h.id)) {
+    const std::size_t PALETTE_SIZE = COLORS_PER_PALETTE * BYTES_PER_COLOR;
+    std::size_t offset = h.id * PALETTE_SIZE;
+
+    std::vector<Color>& dst = cache_[h.id];
+    dst.resize(COLORS_PER_PALETTE);
+
+    for (int i = 0; i < COLORS_PER_PALETTE; ++i) {
+      std::size_t idx = offset + (i * BYTES_PER_COLOR);
+      dst[i].r = raw_[idx + 0];
+      dst[i].g = raw_[idx + 1];
+      dst[i].b = raw_[idx + 2];
+    }
+    loaded_.set(h.id);
+  }
+  return cache_[h.id];
+}
+
+inline std::vector<Color> PaletteBank::colors(PaletteHandle base,
+                                              const PaletteOverride& ovr) {
+
+  auto out = colors(base); // copy
+
+  if (ovr.dst_indices.size() != ovr.src_indices.size()) {
+    fatal("override index arrays must match length");
+  }
+
+  const auto& src_pal = colors(PaletteHandle{ovr.src_palette_id});
+
+  for (std::size_t i = 0; i < ovr.dst_indices.size(); ++i) {
+    out[ovr.dst_indices[i]] = src_pal[ovr.src_indices[i]];
+  }
+  return out;
+}
+
+inline void PaletteBank::load_dos_palette(const std::vector<uint8_t>& dos_raw) {
+  if (!raw_.empty() && !placeholder_) {
+    return;
+  }
+
+  constexpr std::size_t DOS_FILE_SIZE =
+      VGA_PALETTE_COUNT * VGA_COLORS_PER_PALETTE * VGA_BYTES_PER_COLOR;
+  if (dos_raw.size() != DOS_FILE_SIZE) {
+    fatal("palette.e has the wrong size");
+  }
+
+  constexpr std::size_t TOTAL_SIZE =
+      PALETTE_COUNT * COLORS_PER_PALETTE * BYTES_PER_COLOR;
+  raw_.assign(TOTAL_SIZE, 0);
+
+  // Convert 6-bit RGB to 8-bit and store in raw_
+  for (std::size_t i = 0; i < dos_raw.size(); ++i) {
+    // 6-bit to 8-bit: shift left by 2
+    raw_[i] = static_cast<uint8_t>(dos_raw[i] << 2);
+  }
+
+  cache_ = {};
+  loaded_.reset();
+  placeholder_ = false;
+}
+
+inline void
+PaletteBank::load_placeholder(const std::vector<Color>& palette_zero) {
+  if (!raw_.empty()) {
+    return;
+  }
+
+  constexpr std::size_t TOTAL_SIZE =
+      PALETTE_COUNT * COLORS_PER_PALETTE * BYTES_PER_COLOR;
+  raw_.assign(TOTAL_SIZE, 0);
+
+  const std::size_t count =
+      std::min<std::size_t>(palette_zero.size(), COLORS_PER_PALETTE);
+  for (std::size_t i = 0; i < count; ++i) {
+    raw_[(i * BYTES_PER_COLOR) + 0] = palette_zero[i].r;
+    raw_[(i * BYTES_PER_COLOR) + 1] = palette_zero[i].g;
+    raw_[(i * BYTES_PER_COLOR) + 2] = palette_zero[i].b;
+  }
+  placeholder_ = true;
+}
+
+} // namespace gfx

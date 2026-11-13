@@ -1,0 +1,628 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "core/debug/commands/NavCommands.h"
+#include "core/character/Player.h"
+#include "core/city/City.h"
+#include "core/city/Property.h"
+#include "core/common/Ids.h"
+#include "core/debug/command/CommonArgs.h"
+#include "core/food/IngredientCategoryType.h"
+#include "core/food/StandardPizza.h"
+#include "core/restaurant/Restaurant.h"
+#include "core/state/GameState.h"
+#include "core/state/UIState.h"
+#include "engine/Logger.h"
+
+using namespace debug::command;
+
+namespace debug::commands {
+
+// Helper to create simple screen navigation commands
+static CommandDef make_screen_nav(const std::string& name,
+                                  const std::vector<std::string>& aliases,
+                                  const std::string& desc,
+                                  ScreenTag::Kind screen) {
+  return CommandDef{
+      .name = name,
+      .aliases = aliases,
+      .description = desc,
+      .help_text = compat::format(
+          "Usage: nav {}\n\nNavigates to the {} screen.", name, desc),
+      .handler = [screen](const CommandContext& ctx) -> CommandResult {
+        ctx.state.ui().push<ScreenTag>(ScreenTag::Kind{screen});
+        return CommandResult::success().add_message(
+            compat::format("Navigated to {}", static_cast<int>(screen)));
+      },
+  };
+}
+
+static CommandDef make_nav_options() {
+  return CommandDef{
+      .name = "op",
+      .description = "Navigate to the options menu",
+      .help_text = R"(Usage: nav op [section]
+
+Opens the options menu, or one of its sections directly.
+
+Examples:
+  nav op            # The section list
+  nav op graphics   # Straight into the graphics section
+  nav op bindings   # The key bindings screen under controls
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "section",
+                  .type = ArgType::String,
+                  .optional = true,
+                  .description =
+                      "audio, graphics, controls, gameplay, rules or bindings",
+                  .allowed_values =
+                      std::vector<std::string>{"audio", "graphics", "controls",
+                                               "gameplay", "rules", "bindings"},
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        if (!ctx.has_arg(0)) {
+          ctx.state.ui().push<ScreenTag>(ScreenTag::Kind::MenuOptions);
+          return CommandResult::success().add_message("Navigated to options");
+        }
+        const std::string section = ctx.string_arg(0);
+        if (section == "bindings") {
+          ctx.state.ui().push<ScreenTag>(ScreenTag::Kind::MenuBindings);
+          return CommandResult::success().add_message(
+              "Navigated to key bindings");
+        }
+        static const std::pair<std::string_view, OptionsScreen> sections[] = {
+            {"audio", OptionsScreen::Audio},
+            {"graphics", OptionsScreen::Graphics},
+            {"controls", OptionsScreen::Controls},
+            {"gameplay", OptionsScreen::Gameplay},
+            {"rules", OptionsScreen::Rules}};
+        for (const auto& [name, screen] : sections) {
+          if (name == section) {
+            ctx.state.ui().push<OptionsMenuState>(OptionsMenuState{screen});
+            return CommandResult::success().add_message(
+                compat::format("Navigated to options {}", section));
+          }
+        }
+        return CommandResult::error(
+            compat::format("Unknown options section '{}'", section));
+      },
+  };
+}
+
+static CommandDef make_nav_cityview() {
+  return CommandDef{
+      .name = "cityview",
+      .aliases = {"city", "cv"},
+      .description = "Navigate to city view",
+      .help_text = R"(Usage: nav cityview <city_id>
+
+Opens the city view for the specified city.
+
+Examples:
+  nav cityview 0       # View city 0
+  nav cityview @       # View active city
+  nav city 3           # 'city' is an alias
+)",
+      .args =
+          {
+              active_city_arg(),
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        auto city_id = ctx.city_id(0);
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        ctx.state.active_city(city_id);
+        if (auto* player = ctx.state.active_player()) {
+          ctx.state.on_city_entered(city_id, *player);
+        }
+        ctx.state.ui().replace_top<CityViewState>(CityViewState{city_id.value});
+        return CommandResult::success().add_message(
+            compat::format("Navigated to city view (city {})", city_id.value));
+      },
+  };
+}
+
+static CommandDef make_nav_restaurant() {
+  return CommandDef{
+      .name = "restaurant",
+      .aliases = {"rest", "rv"},
+      .description = "Navigate to restaurant view",
+      .help_text = R"(Usage: nav restaurant <restaurant_id>
+
+Opens the restaurant view for the specified restaurant.
+
+Examples:
+  nav restaurant @     # View active restaurant
+  nav restaurant 0     # View restaurant 0
+  nav rest 3           # 'rest' is an alias
+)",
+      .args =
+          {
+              active_restaurant_arg(),
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        auto rid = ctx.restaurant_id(0);
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        auto* rest = ctx.state.restaurant(rid);
+        if (!rest) {
+          return CommandResult::error(
+              compat::format("Restaurant {} does not exist", rid.value));
+        }
+        const auto city_id = rest->property().city().id();
+        if (city_id != ctx.state.active_city_id()) {
+          ctx.state.active_city(city_id);
+          if (auto* player = ctx.state.active_player()) {
+            ctx.state.on_city_entered(city_id, *player);
+          }
+        }
+        // The screen itself does this when it is built, which a run without
+        // the loop never gets to.
+        ctx.state.active_restaurant(rid);
+        ctx.state.ui().push<RestaurantViewState>(RestaurantViewState{
+            .id = rid, .mode = RestaurantViewMode::PLAYER_DEFAULT});
+        return CommandResult::success().add_message(compat::format(
+            "Navigated to restaurant view (restaurant {})", rid.value));
+      },
+  };
+}
+
+// Index of the week's takings button among the statistics screens.
+constexpr int weeks_takings_screen_index = 3;
+
+static CommandDef make_nav_stats() {
+  return CommandDef{
+      .name = "stats",
+      .description = "Navigate to a restaurant's statistics screens",
+      .help_text = R"(Usage: nav stats <restaurant_id> [screen]
+
+Opens one of a restaurant's statistics screens. They are numbered in the
+order their buttons appear: 0 daily balance, 1 week review, 2 month review,
+3 week's takings, 4 customer statistics, 5 sales curve.
+
+Examples:
+  nav stats @        # Daily balance for the active restaurant
+  nav stats @ 4      # Customer statistics
+)",
+      .args =
+          {
+              active_restaurant_arg(),
+              ArgSpec{
+                  .name = "screen",
+                  .type = ArgType::Int,
+                  .optional = true,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Which statistics screen to open",
+                  .min_value = 0,
+                  .max_value = 5,
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        auto rid = ctx.restaurant_id(0);
+        std::optional<int> screen;
+        if (ctx.has_arg(1)) {
+          screen = static_cast<int>(ctx.int_arg(1));
+        }
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        // The takings report is its own view, opened by a button on the
+        // stats screen rather than shown as one of its screens.
+        if (screen == weeks_takings_screen_index) {
+          ctx.state.ui().push<WeeksTakingsState>(WeeksTakingsState{.id = rid});
+        }
+        else {
+          ctx.state.ui().push<RestaurantStatsState>(
+              RestaurantStatsState{.id = rid, .screen_index = screen});
+        }
+        return CommandResult::success().add_message(compat::format(
+            "Navigated to statistics (restaurant {}, screen {})", rid.value,
+            screen ? std::to_string(*screen) : "default"));
+      },
+  };
+}
+
+static CommandDef make_nav_globalstats() {
+  return CommandDef{
+      .name = "globalstats",
+      .aliases = {"gs"},
+      .description = "Navigate to the company statistics screens",
+      .help_text = R"(Usage: nav globalstats [screen]
+
+Opens one of the company statistics screens. They are numbered in the order
+their buttons appear: 0 month overview, 1 restaurants, 2 cash flow, 3 loans,
+4 insurance, 5 property, 6 balance, 7 daily profits.
+
+Examples:
+  nav globalstats
+  nav globalstats 6
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "screen",
+                  .type = ArgType::Int,
+                  .optional = true,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Which statistics screen to open",
+                  .min_value = 0,
+                  .max_value = 7,
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        std::optional<int> screen;
+        if (ctx.has_arg(0)) {
+          screen = static_cast<int>(ctx.int_arg(0));
+        }
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        // The restaurants screen has a UI state of its own.
+        if (screen == 1) {
+          ctx.state.ui().push<StatsRestaurantsState>(StatsRestaurantsState{
+              .player_id = ctx.state.active_player()->id()});
+        }
+        else {
+          ctx.state.ui().push<GlobalStatsState>(
+              GlobalStatsState{.screen_index = screen});
+        }
+        return CommandResult::success().add_message(
+            compat::format("Navigated to company statistics (screen {})",
+                           screen ? std::to_string(*screen) : "default"));
+      },
+  };
+}
+
+static CommandDef make_nav_profile() {
+  return CommandDef{
+      .name = "profile",
+      .description = "Navigate to a player's profile",
+      .help_text = R"(Usage: nav profile [player_id]
+
+Examples:
+  nav profile @
+  nav profile 1
+)",
+      .args = {active_player_arg()},
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        auto pid = ctx.player_id(0);
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        ctx.state.ui().push<PlayerProfileState>(
+            PlayerProfileState{.player_id = pid});
+        return CommandResult::success().add_message(
+            compat::format("Navigated to profile (player {})", pid.value));
+      },
+  };
+}
+
+// Shared by the stock and depot screens: a category name, or none for the
+// screen that lists them all.
+static ArgSpec ingredient_category_arg() {
+  return ArgSpec{
+      .name = "category",
+      .type = ArgType::String,
+      .optional = true,
+      .description = "vegetables, meat, fruit or cheese",
+      .allowed_values =
+          std::vector<std::string>{"vegetables", "meat", "fruit", "cheese"},
+  };
+}
+
+static std::optional<IngredientCategory>
+parse_ingredient_category(const std::string& name) {
+  for (auto cat : ALL_INGREDIENT_CATEGORIES) {
+    if (to_string(cat) == name) {
+      return cat;
+    }
+  }
+  return std::nullopt;
+}
+
+static CommandDef make_nav_depot() {
+  return CommandDef{
+      .name = "depot",
+      .description = "Navigate to the central depot",
+      .help_text = R"(Usage: nav depot [category]
+
+Opens the central depot of the active city. With a category it opens that
+category's stock page instead of the depot's front screen.
+
+Examples:
+  nav depot
+  nav depot cheese
+)",
+      .args = {ingredient_category_arg()},
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        const std::string name = ctx.has_arg(0) ? ctx.string_arg(0) : "";
+        if (name.empty()) {
+          ctx.state.ui().push<DepotMainState>(DepotMainState{});
+          return CommandResult::success().add_message("Navigated to the depot");
+        }
+        auto category = parse_ingredient_category(name);
+        if (!category) {
+          return CommandResult::error(
+              compat::format("No such ingredient category: {}", name));
+        }
+        ctx.state.ui().push<DepotIngredientCategoryViewState>(
+            DepotIngredientCategoryViewState{.category = *category});
+        return CommandResult::success().add_message(
+            compat::format("Navigated to depot stock ({})", name));
+      },
+  };
+}
+
+static CommandDef make_nav_order() {
+  return CommandDef{
+      .name = "order",
+      .description = "Navigate to an ingredient order screen",
+      .help_text = R"(Usage: nav order <category> <supplier_id> [depot]
+
+Opens the order screen for one of a category's suppliers. Add depot for the
+central depot's version of it rather than the active restaurant's.
+
+Examples:
+  nav order cheese 3
+  nav order cheese 3 depot
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "category",
+                  .type = ArgType::String,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "vegetables, meat, fruit or cheese",
+                  .allowed_values =
+                      std::vector<std::string>{"vegetables", "meat", "fruit",
+                                               "cheese"},
+              },
+              ArgSpec{
+                  .name = "supplier_id",
+                  .type = ArgType::Int,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Which supplier of that category",
+                  .min_value = 0,
+                  .max_value = 255,
+              },
+              ArgSpec{
+                  .name = "depot",
+                  .type = ArgType::String,
+                  .optional = true,
+                  .description =
+                      R"(Say "depot" for the central depot's screen)",
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        auto category = parse_ingredient_category(ctx.string_arg(0));
+        if (!category) {
+          return CommandResult::error(compat::format(
+              "No such ingredient category: {}", ctx.string_arg(0)));
+        }
+        const auto supplier_id = static_cast<uint8_t>(ctx.int_arg(1));
+        const bool depot = ctx.has_arg(2) && ctx.string_arg(2) == "depot";
+        if (depot) {
+          ctx.state.ui().push<DepotIngredientOrderState>(
+              DepotIngredientOrderState{.supplier_id = supplier_id,
+                                        .category = *category});
+        }
+        else {
+          if (!ctx.state.active_restaurant()) {
+            return CommandResult::error(
+                "No active restaurant",
+                "Open one first, e.g. nav restaurant 0");
+          }
+          ctx.state.ui().push<IngredientOrderState>(IngredientOrderState{
+              .supplier_id = supplier_id, .category = *category});
+        }
+        return CommandResult::success().add_message(
+            compat::format("Navigated to the {}order screen (supplier {})",
+                           depot ? "depot " : "", supplier_id));
+      },
+  };
+}
+
+CommandDef make_nav_commands() {
+  return CommandDef{
+      .name = "nav",
+      .aliases = {"ns"},
+      .description = "Navigation commands",
+      .help_text = "Navigate to different screens in the game",
+  } // Menus
+      .add_subcommand(make_screen_nav("intro", {"is"}, "intro screen",
+                                      ScreenTag::Kind::Intro))
+      .add_subcommand(make_screen_nav("main", {"mm"}, "main menu",
+                                      ScreenTag::Kind::MenuMain))
+      .add_subcommand(make_screen_nav("ng", {}, "new game menu",
+                                      ScreenTag::Kind::MenuNewGame))
+      .add_subcommand(make_nav_options())
+      .add_subcommand(make_screen_nav("gameloc", {}, "game location",
+                                      ScreenTag::Kind::GameLocation))
+      .add_subcommand(make_screen_nav("disk", {"dm"}, "disk menu",
+                                      ScreenTag::Kind::DiskMenu))
+      .add_subcommand(make_screen_nav("load", {}, "game load menu",
+                                      ScreenTag::Kind::MenuGameLoad))
+
+      // Screens
+      .add_subcommand(make_screen_nav("advertising", {"ad"}, "advertising",
+                                      ScreenTag::Kind::Advertising))
+
+      // Views with arguments
+      .add_subcommand(make_nav_cityview())
+      .add_subcommand(make_nav_restaurant())
+      .add_subcommand(make_nav_stats())
+      .add_subcommand(make_nav_globalstats())
+      .add_subcommand(make_nav_profile())
+
+      // Pizza manager screens
+      .add_subcommand(
+          CommandDef{
+              .name = "pizza",
+              .description = "Pizza designer/recipes",
+              .help_text = "Usage: nav pizza <design|recipes|export|import>",
+          }
+              .add_subcommand(CommandDef{
+                  .name = "design",
+                  .description = "Pizza design screen",
+                  .handler = [](const CommandContext& ctx) -> CommandResult {
+                    ctx.state.bootstrap_minimal_playable_world(ctx.context);
+                    ctx.state.ui().push<PizzaDesignState>(
+                        PizzaDesignMode::Design);
+                    return CommandResult::success().add_message(
+                        "Navigated to pizza designer");
+                  },
+              })
+              .add_subcommand(CommandDef{
+                  .name = "recipes",
+                  .description = "Recipe list screen",
+                  .handler = [](const CommandContext& ctx) -> CommandResult {
+                    ctx.state.bootstrap_minimal_playable_world(ctx.context);
+                    ctx.state.ui().push<PizzaDesignState>(
+                        PizzaDesignMode::Recipes);
+                    return CommandResult::success().add_message(
+                        "Navigated to recipe list");
+                  },
+              })
+              .add_subcommand(CommandDef{
+                  .name = "export",
+                  .description = "Recipe export screen",
+                  .help_text = "Usage: nav pizza export <recipe_id>",
+                  .args =
+                      {
+                          ArgSpec{
+                              .name = "recipe_id",
+                              .type = ArgType::Int,
+                              .optional = false,
+                              .default_provider = DefaultProvider::None,
+                              .description = "Recipe id",
+                          },
+                      },
+                  .handler = [](const CommandContext& ctx) -> CommandResult {
+                    ctx.state.bootstrap_minimal_playable_world(ctx.context);
+                    const auto* player = ctx.state.active_player();
+                    if (!player) {
+                      return CommandResult::error("No active player");
+                    }
+                    ctx.state.ui().push<RecipeExportState>(RecipeExportState{
+                        .player = player->id(),
+                        .recipe = core::RecipeId{
+                            static_cast<int32_t>(ctx.int_arg(0))}});
+                    return CommandResult::success().add_message(
+                        "Navigated to the recipe export screen");
+                  },
+              })
+              .add_subcommand(CommandDef{
+                  .name = "import",
+                  .description = "Recipe import screen",
+                  .handler = [](const CommandContext& ctx) -> CommandResult {
+                    ctx.state.bootstrap_minimal_playable_world(ctx.context);
+                    const auto* player = ctx.state.active_player();
+                    if (!player) {
+                      return CommandResult::error("No active player");
+                    }
+                    ctx.state.ui().push<RecipeImportState>(
+                        RecipeImportState{.player = player->id()});
+                    return CommandResult::success().add_message(
+                        "Navigated to the recipe import screen");
+                  },
+              }))
+
+      // Other screens
+      .add_subcommand(CommandDef{
+          .name = "euromap",
+          .aliases = {"em"},
+          .description = "Europe map",
+          .handler = [](const CommandContext& ctx) -> CommandResult {
+            ctx.state.ui().push<EuroMapState>(EuroMapState{MapMode::TRAVEL});
+            return CommandResult::success().add_message(
+                "Navigated to Europe map");
+          },
+      })
+      .add_subcommand(CommandDef{
+          .name = "terminal",
+          .aliases = {"tm"},
+          .description = "Terminal",
+          .handler = [](const CommandContext& ctx) -> CommandResult {
+            ctx.state.ui().push<TerminalState>(std::nullopt);
+            return CommandResult::success().add_message(
+                "Navigated to Terminal");
+          },
+      })
+      .add_subcommand(CommandDef{
+          .name = "purchasing",
+          .aliases = {"pm"},
+          .description = "Purchasing screen",
+          .handler = [](const CommandContext& ctx) -> CommandResult {
+            ctx.state.ui().push<PurchasingState>(
+                PurchasingState{SupplierType::FURNITURE});
+            return CommandResult::success().add_message(
+                "Navigated to purchasing");
+          },
+      })
+      .add_subcommand(CommandDef{
+          .name = "demographics",
+          .description = "Furniture & customers page of the active restaurant",
+          .handler = [](const CommandContext& ctx) -> CommandResult {
+            ctx.state.ui().push<CategoryOverviewState>(CategoryOverviewState{
+                .type = SupplierType::FURNITURE, .demographics = true});
+            return CommandResult::success().add_message(
+                "Navigated to furniture & customers");
+          },
+      })
+      .add_subcommand(CommandDef{
+          .name = "suppliers",
+          .aliases = {"sl"},
+          .description = "Supplier list",
+          .handler = [](const CommandContext& ctx) -> CommandResult {
+            ctx.state.ui().push<SupplierListState>(
+                SupplierListState{SupplierType::FURNITURE});
+            return CommandResult::success().add_message(
+                "Navigated to supplier list");
+          },
+      })
+      .add_subcommand(CommandDef{
+          .name = "stock",
+          .aliases = {"st"},
+          .description = "Stock management",
+          .help_text = R"(Usage: nav stock [category]
+
+Opens a restaurant's stock screen. With a category it opens that category's
+page instead of the screen that lists them all.
+
+Examples:
+  nav stock
+  nav stock meat
+)",
+          .args = {ingredient_category_arg()},
+          .handler = [](const CommandContext& ctx) -> CommandResult {
+            ctx.state.bootstrap_minimal_playable_world(ctx.context);
+            if (!ctx.state.active_restaurant()) {
+              return CommandResult::error(
+                  "No active restaurant",
+                  "Open one first, e.g. nav restaurant 0");
+            }
+            const std::string name = ctx.has_arg(0) ? ctx.string_arg(0) : "";
+            if (name.empty()) {
+              ctx.state.ui().push<StockMainState>(StockMainState{});
+              return CommandResult::success().add_message(
+                  "Navigated to stock management");
+            }
+            auto category = parse_ingredient_category(name);
+            if (!category) {
+              return CommandResult::error(
+                  compat::format("No such ingredient category: {}", name));
+            }
+            ctx.state.ui().push<IngredientCategoryViewState>(
+                IngredientCategoryViewState{.category = *category});
+            return CommandResult::success().add_message(
+                compat::format("Navigated to stock ({})", name));
+          },
+      })
+      .add_subcommand(make_nav_depot())
+      .add_subcommand(make_nav_order());
+}
+
+} // namespace debug::commands

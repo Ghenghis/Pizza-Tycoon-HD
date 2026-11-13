@@ -1,0 +1,196 @@
+/*
+ * SPDX-FileCopyrightText: 2010 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#pragma once
+
+#include <map>
+#include <optional>
+#include <vector>
+
+#include "core/city/CarManager.h"
+#include "core/city/CityTypes.h"
+#include "core/city/CityViewCommon.h"
+#include "core/city/CityViewMapState.h"
+#include "core/state/InterruptionRate.h"
+#include "engine/audio/AudioManager.h"
+#include "engine/geom/Camera.h"
+#include "engine/geom/Spaces.h"
+#include "engine/gfx/PaletteCycleController.h"
+#include "engine/input/InputListener.h"
+#include "engine/input/InputManager.h"
+#include "engine/input/ListenerToken.h"
+#include "views/base/MainPanelView.h"
+#include "views/helpers/camera/CameraController.h"
+#include "views/helpers/camera/RmbDragScroller.h"
+#include "views/helpers/camera/ScrollEdges.h"
+#include "views/screens/city_view/CityViewTab.h"
+#include "views/ui/DropdownManager.h"
+#include "views/ui/status/StatusController.h"
+
+class City;
+class Restaurant;
+
+class CityView final : public MainPanelView, public input::InputListener {
+public:
+  CityView(GameContext& context, GameState& state, core::CityId id);
+  ~CityView();
+  void tick() override;
+  void render(const RenderContext& ctx) override;
+  InterruptionRate interruption_rate() const override {
+    return InterruptionRate::Full;
+  }
+  bool on_action(const input::ActionEvent& ev) override;
+
+private:
+  enum class Dropdown { PLAYER, RANGE, LOCATIONS, PROPERTIES };
+
+  // Sound
+  void update_city_sound();
+  void stop_city_sound();
+
+  // Zooming
+  void zoom_in(ViewPoint p);
+  void zoom_out(ViewPoint p);
+  void zoom_scroll(int direction, ViewPoint cursor);
+  void on_zoom_close();
+  void on_zoom_medium();
+  void on_zoom_far();
+  void on_zoom_not_close();
+  void apply_zoom_profile(ZoomLevel zoom);
+  void enable_zoom_cursor(ViewPoint p);
+  void disable_zoom_cursor();
+  void handle_mouse_click_zoom_close(WorldPoint p);
+  static Surface create_zoom_box_cursor(int width, int height,
+                                        int border_width);
+  bool is_valid_zoom_box_location(ViewPoint p);
+
+  // Rendering
+  void render_districts(const RenderContext& ctx);
+  void render_control(const RenderContext& ctx);
+  void render_with_color(Surface& map,
+                         std::function<uint32_t(core::DistrictIndex)> color_fn);
+  void render_with_cell_color(Surface& map,
+                              std::function<uint8_t(int)> color_fn);
+  void render_map_data(const RenderContext& ctx);
+  void render_map_zoom_close(const RenderContext& ctx);
+  void render_map_zoom_medium(const RenderContext& ctx);
+  void render_map_zoom_far(const RenderContext& ctx);
+  void draw_cell_with_pattern(Surface& map, ViewRect cell, uint8_t color,
+                              WorldPoint cell_world_origin,
+                              ViewPoint cell_screen_origin);
+
+  // Translation
+  int index_at(WorldPoint p) const;
+  int index_by_x_y_offset(WorldPoint p, int x_offset, int y_offset) const;
+  bool index_is_in_view(int, int, int) const;
+  WorldPoint world_pos_of_index(int index) const;
+
+  // Tabs
+  void render_tabs(const RenderContext& ctx);
+  void update_tab_positions();
+  void set_active_tab(CityViewTabType type);
+
+  // One off initialisation methods
+  void create_dropdowns();
+  void create_buttons();
+  void register_map_interactions_viewport();
+  void register_tutorial_tile();
+  [[nodiscard]] ViewRect viewport_rect() const;
+  [[nodiscard]] ViewRect tile_view_rect(int index) const;
+
+  // Helper for coordinate conversions
+  ViewPoint local_to_viewport_coords(ViewPoint local_pos) const;
+
+  //  Highlights:
+  void highlight_if(std::function<HighlightType(int)> predicate);
+  void render_highlights(const RenderContext& ctx);
+  void clear_highlights();
+  void highlight_business_premises();
+  void highlight_building_type(BuildingType);
+  void highlight_player(core::PlayerId player_id, bool range);
+  void highlight_properties(PremiseStatus status);
+
+  // District
+  core::DistrictIndex district_at(WorldPoint p);
+
+  // State
+  void store_state_in_city(CityViewReentryMode entry_mode);
+  void zoom(ZoomLevel level);
+  void publish_view_state();
+  CityViewMapState capture_view_state(CityViewReentryMode mode) const;
+  void restore_view_state(const CityViewMapState& state);
+  void current_highlight(CityViewMapState);
+  void highlight_mode(const CityViewHighlight& highlight);
+  template <typename T, typename... Args>
+  void ui_push_store_position(CityViewReentryMode mode, Args&&... args);
+
+  // Animation
+  void update_water_palette(const RenderContext& ctx);
+  void setup_water_animation();
+  void move_cars();
+  void place_cars();
+
+  // Restaurant cycling
+  void glide_to_restaurant(const Restaurant& rest);
+
+  // Status display
+  void build_default_city_status_recipe();
+  void build_property_status_recipe(int clicked_index);
+
+  const Surface& tiles_medium_;
+  City* city_{nullptr};
+  ZoomLevel zoom_;
+  bool zoom_selector_;
+  bool show_cell_borders_;
+  bool show_cell_type_;
+  std::map<uint8_t, uint32_t> zoom_far_colors_;
+  int active_tab_;
+  // Current tabs with their positions and states.
+  std::vector<CityViewTab> tabs_;
+  // The currently active tab.
+  CityViewTabType active_tab_type_;
+  bool tabs_changed_ = true;
+  CityViewHighlight highlight_mode_{};
+  std::vector<HighlightType> highlighted_cells_;
+  // User has requested a highlight:
+  bool highlight_enabled_ = false;
+  // Highlight is active on this specific frame:
+  bool highlight_blink_visible_ = false;
+  std::unordered_map<core::DistrictIndex, uint8_t, core::DistrictIndex::Hasher>
+      bezid_to_color_map_;
+  bool color_map_initialized_ = false;
+  Bob& stanbobs_;
+  Surface zoom_box_far_;
+  Surface zoom_box_medium_;
+  std::optional<CarManager> car_mgr_;
+  std::optional<audio::SoundId> current_city_sound_;
+  DropdownManager<Dropdown> dropdowns_;
+  std::vector<uint8_t> water_indices_;
+  std::vector<std::vector<uint8_t>> water_cycles_;
+  PaletteCycleController water_animation_;
+  int property_display_timer_ = 0;
+  // Tracks the property index currently toggled to customer-info view.
+  // Clicking the same property again toggles back to property info.
+  // Clicking a different property resets to property info for the new one.
+  std::optional<int> property_info_toggle_;
+  PaletteHandle palette_;
+  std::vector<gfx::Color> season_palette_;
+  std::optional<Surface> far_map_cache_;
+  std::optional<Surface> medium_map_cache_;
+  std::optional<Surface> tabs_cache_;
+  StatusController status_controller_;
+  Camera camera_;
+  CameraController camctrl_;
+  ScrollEdges scroll_edges_{camctrl_, wood_edge_rects(panel_origin_)};
+  RmbDragScroller rmb_drag_scroller_;
+  gfx::PaletteOverride water_ovr_;
+  std::vector<gfx::Color> water_buf_;
+  bool should_save_map_state_on_exit_ = true;
+  // After a keyboard jump, district hover waits until the cursor moves
+  bool hold_district_hover_ = false;
+  std::optional<ViewPoint> held_hover_pos_;
+  input::ListenerToken listener_;
+};

@@ -1,0 +1,1523 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "core/state/TurnOrchestrator.h"
+
+#include <algorithm>
+#include <optional>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "core/Demographics.h"
+#include "core/character/Actor.h"
+#include "core/character/Player.h"
+#include "core/city/City.h"
+#include "core/city/District.h"
+#include "core/city/Property.h"
+#include "core/conversations/MayorConversation.h"
+#include "core/events/MilestoneId.h"
+#include "core/factories/CharacterFactory.h"
+#include "core/finance/TurnInvoices.h"
+#include "core/food/IngredientType.h"
+#include "core/inventory/Inventory.h"
+#include "core/item/Item.h"
+#include "core/restaurant/AIEconomy.h"
+#include "core/restaurant/Restaurant.h"
+#include "core/save/SaveGameManager.h"
+#include "core/state/FadePresenter.h"
+#include "core/state/GameOptions.h"
+#include "core/state/GameState.h"
+#include "core/state/Overloaded.h"
+#include "core/state/TurnPresenter.h"
+#include "core/state/UIState.h"
+#include "core/status/StatusHub.h"
+#include "core/time/GameDate.h"
+#include "core/time/TimeOfDay.h"
+#include "core/tutorial/Tutorial.h"
+#include "engine/Logger.h"
+#include "engine/Random.h"
+
+namespace {
+// Staff events only fire during business hours.
+constexpr core::time::TimeOfDay staff_events_open{10, 0};
+constexpr core::time::TimeOfDay staff_events_close{21, 0};
+
+constexpr core::time::TimeOfDay deferred_calls_open =
+    Restaurant::DEFAULT_OPENING_TIME;
+
+bool is_autosave_due(AutosaveFrequency frequency, bool is_end_of_week,
+                     bool is_end_of_month) {
+  switch (frequency) {
+  case AutosaveFrequency::Off:
+    return false;
+  case AutosaveFrequency::Daily:
+    return true;
+  case AutosaveFrequency::Weekly:
+    return is_end_of_week;
+  case AutosaveFrequency::Monthly:
+    return is_end_of_month;
+  }
+  return false;
+}
+
+bool all_human_players_away(const GameState& state) {
+  bool found_human = false;
+  for (const Player* player : state.players()) {
+    if (!player || !player->is_human_controlled()) {
+      continue;
+    }
+    found_human = true;
+    if (!player->is_away()) {
+      return false;
+    }
+  }
+  return found_human;
+}
+} // namespace
+
+int TurnOrchestrator::roll_inspection_block() {
+  constexpr int earliest_block = 54; // 9:00
+  constexpr int block_span = 30;     // through 13:50
+  return earliest_block + engine::random::rand_max_n(block_span);
+}
+
+void TurnOrchestrator::request_end_of_turn(EndOfDayCause cause) {
+  should_end_of_turn_ = true;
+  end_of_day_cause_ = cause;
+}
+
+void TurnOrchestrator::skip_to_next_player() {
+  suppress_end_of_turn_reports_ = true;
+  end_of_turn(EndOfDayCause::Away);
+}
+
+void TurnOrchestrator::run_pending_end_of_turn() {
+  if (should_end_of_turn_ && !processing_end_of_turn_) {
+    end_of_turn(end_of_day_cause_);
+  }
+  should_end_of_turn_ = false;
+}
+
+bool TurnOrchestrator::tick_pipeline_delay() {
+  if (pipeline_delay_frames_ <= 0) {
+    return false;
+  }
+  if (--pipeline_delay_frames_ == 0) {
+    advance_pipeline();
+  }
+  return true;
+}
+
+InterruptionRate TurnOrchestrator::interruption_rate() const {
+  if (gs_->tutorial().active()) {
+    return InterruptionRate::None;
+  }
+  return interruption_rate_;
+}
+
+bool TurnOrchestrator::may_auto_end_turn() const {
+  if (!interruptions_allowed()) {
+    return false;
+  }
+  // AI turns end when their turn card auto-dismisses, never by the clock.
+  auto* player = gs_->active_player();
+  if (!player || !player->is_human_controlled()) {
+    return false;
+  }
+  return gs_->is_past_player_end_of_day();
+}
+
+// The most staff event dialogs a day-end flush shows.
+constexpr int staff_events_per_day_end_flush = 2;
+
+void TurnOrchestrator::end_of_turn(EndOfDayCause cause) {
+  end_of_day_cause_ = cause;
+  gs_->suspend_clock();
+
+  // The day ends any pending screen charge.
+  (void)gs_->take_pending_screen_charge();
+
+  auto* current_player = gs_->active_player();
+
+  bool interactive = current_player->is_human_controlled() &&
+                     !current_player->is_away() &&
+                     !suppress_end_of_turn_reports_;
+
+  // Calls the player never received are dropped at the end of the day.
+  if (interactive) {
+    std::erase_if(deferred_calls_, [this](const DeferredCall& call) {
+      return takes_a_slot(call) && can_deliver_to_active_player(call);
+    });
+  }
+
+  // Ending the turn flushes the staff event dialogs that have not fired yet,
+  // through the same business-hours gate as the rest of the day. A day ending
+  // at 21:00 or later carries its events to the morning.
+  const bool day_ends_in_business_hours =
+      current_player->end_of_day_time() < staff_events_close;
+  if (interactive && day_ends_in_business_hours &&
+      !flush_staff_events_then_end_turn_ && !showing_deferred_staff_event_ &&
+      has_deliverable_staff_event()) {
+    flush_staff_events_then_end_turn_ = true;
+    flush_staff_events_remaining_ = staff_events_per_day_end_flush;
+    show_next_deferred_staff_event();
+    return;
+  }
+  flush_staff_events_then_end_turn_ = false;
+
+  suppress_end_of_turn_reports_ = false;
+  if (!interactive) {
+    gs_->status().suppress(true);
+  }
+
+  // The original's day-end flush loop passes the protection racket roll about
+  // twice, so ending the day early never fully escapes the mafia. A fired
+  // offer is delivered on this player's next turn.
+  if (interactive) {
+    for (int i = 0; i < 2; ++i) {
+      if (auto offer = gs_->roll_protection_racket()) {
+        deferred_racket_offers_.push_back(
+            {.player_id = current_player->id(),
+             .restaurant_id = offer->restaurant_id,
+             .first_contact = offer->first_contact});
+      }
+    }
+  }
+
+  // Player end of day accounting
+  current_player->end_of_day(*gs_, cause);
+
+  const bool electricity_invoice_due =
+      gs_->time().current_date().is_end_of_month() &&
+      !gs_->time().current_date().is_end_of_week();
+
+  // FinishTurn receives the full restaurant list for the weekly reports,
+  // but only in-scope restaurants are actually processed.
+  std::vector<core::RestaurantId> all_ids;
+  std::vector<core::RestaurantId> in_scope_ids;
+  for (auto* rest : gs_->restaurants_for(current_player->id())) {
+    if (!rest) {
+      continue;
+    }
+    all_ids.push_back(rest->id());
+    if (is_restaurant_in_processing_scope(*rest, current_player->id())) {
+      in_scope_ids.push_back(rest->id());
+    }
+  }
+
+  constexpr int delay_frames_between_restaurants = 2;
+
+  turn_pipeline_.clear();
+  pipeline_activity_ = {};
+  for (std::size_t i = 0; i < in_scope_ids.size(); ++i) {
+    turn_pipeline_.emplace_back(
+        turn::ProcessRestaurant{in_scope_ids[i], interactive});
+    turn_pipeline_.emplace_back(turn::DailySettlement{in_scope_ids[i]});
+    if (interactive && electricity_invoice_due) {
+      turn_pipeline_.emplace_back(
+          turn::MonthlyRestaurantInvoice{in_scope_ids[i]});
+    }
+    // Delay is so that humans can see the amount of cash they have change live,
+    // per restaurant that gets processed. With automatic reports on,
+    // the report screens already pace the pipeline.
+    if (interactive && !gs_->options().automatic_report &&
+        i + 1 < in_scope_ids.size()) {
+      turn_pipeline_.emplace_back(
+          turn::Delay{delay_frames_between_restaurants});
+    }
+  }
+  turn_pipeline_.emplace_back(
+      turn::FinishTurn{std::move(all_ids), interactive});
+
+  processing_end_of_turn_ = true;
+  advance_pipeline();
+}
+
+turn::StepResult
+TurnOrchestrator::process_restaurant_step(const turn::ProcessRestaurant& step) {
+  auto* restaurant = gs_->restaurant(step.id);
+  if (!restaurant) {
+    return turn::StepResult::Done;
+  }
+
+  restaurant->end_of_day(*gs_);
+  restaurant->property().calculate_demographics(restaurant);
+
+  gs_->status().refresh_header();
+
+  auto* owner = gs_->restaurant_owner(*restaurant);
+  if (owner && owner->is_human_controlled()) {
+    // Queue staff event dialogs for the next day: delivered at 10:00, or
+    // flushed by that day's End Turn if it comes first.
+    // Replace any existing queued event for the same staff member so that
+    // only the most recent event survives
+    for (auto& ev : restaurant->take_pending_staff_events()) {
+      auto it = std::ranges::find_if(
+          deferred_staff_events_, [&](const DeferredStaffEvent& d) {
+            return d.event.job_role == ev.job_role &&
+                   d.event.slot_index == ev.slot_index &&
+                   d.restaurant_id == restaurant->id();
+          });
+      if (it != deferred_staff_events_.end()) {
+        Logger::debug("[staff_event] replace queued event: rest={} role={} "
+                      "slot={} old_type={} new_type={}",
+                      restaurant->id().value, static_cast<int>(ev.job_role),
+                      ev.slot_index, static_cast<int>(it->event.type),
+                      static_cast<int>(ev.type));
+        it->event = ev;
+      }
+      else {
+        Logger::debug("[staff_event] enqueue: rest={} role={} slot={} "
+                      "type={} queue_size_after={}",
+                      restaurant->id().value, static_cast<int>(ev.job_role),
+                      ev.slot_index, static_cast<int>(ev.type),
+                      deferred_staff_events_.size() + 1);
+        deferred_staff_events_.push_back({ev, restaurant->id()});
+      }
+    }
+  }
+
+  if (step.interactive) {
+    // The daily report's dismiss button resumes the pipeline.
+    if (gs_->options().automatic_report && restaurant->wants_open() &&
+        !restaurant->is_force_closed()) {
+      gs_->ui().push<RestaurantStatsState>(restaurant->id(), std::nullopt,
+                                           true);
+      return turn::StepResult::Waiting;
+    }
+  }
+
+  return turn::StepResult::Done;
+}
+
+bool TurnOrchestrator::can_deliver_to_active_player(
+    core::RestaurantId rid) const {
+  auto* restaurant = gs_->restaurant(rid);
+  if (!restaurant) {
+    // An entry whose restaurant is gone counts as deliverable so the dequeue
+    // path can discard it.
+    return true;
+  }
+  auto* owner = gs_->restaurant_owner(*restaurant);
+  return owner && owner->id() == gs_->active_player()->id();
+}
+
+bool TurnOrchestrator::can_deliver_staff_event(core::RestaurantId rid) const {
+  if (!can_deliver_to_active_player(rid)) {
+    return false;
+  }
+  auto* restaurant = gs_->restaurant(rid);
+  if (!restaurant) {
+    return true;
+  }
+  auto* city = gs_->active_city();
+  return city && restaurant->property().city().id() == city->id();
+}
+
+bool TurnOrchestrator::has_deliverable_staff_event() const {
+  return std::ranges::any_of(deferred_staff_events_,
+                             [this](const DeferredStaffEvent& d) {
+                               return can_deliver_staff_event(d.restaurant_id);
+                             });
+}
+
+bool TurnOrchestrator::takes_a_slot(const DeferredCall& call) {
+  return call.kind != DeferredCall::Kind::MayorAward ||
+         !call.award.announces_winner;
+}
+
+bool TurnOrchestrator::queue_call(const DeferredCall& call) {
+  if (takes_a_slot(call)) {
+    auto taken = std::ranges::count_if(
+        deferred_calls_, [&call](const DeferredCall& queued) {
+          return queued.player_id == call.player_id && takes_a_slot(queued);
+        });
+    if (taken >= call_slots_per_player) {
+      return false;
+    }
+  }
+  deferred_calls_.push_back(call);
+  return true;
+}
+
+bool TurnOrchestrator::can_deliver_to_active_player(
+    const DeferredCall& call) const {
+  if (call.kind == DeferredCall::Kind::MayorInspection) {
+    return can_deliver_to_active_player(call.restaurant_id);
+  }
+  return call.player_id == gs_->active_player()->id();
+}
+
+bool TurnOrchestrator::is_call_due(const DeferredCall& call) const {
+  const auto& time = gs_->time();
+  switch (call.kind) {
+  case DeferredCall::Kind::MayorInspection:
+    return call.display_block <= time.current_block_of_day() &&
+           can_deliver_to_active_player(call);
+  case DeferredCall::Kind::MayorAward:
+    return can_deliver_to_active_player(call) &&
+           !gs_->ui().is_top<MayorState>() &&
+           time.is_past_time(deferred_calls_open);
+  case DeferredCall::Kind::DepotRaid:
+    return can_deliver_to_active_player(call) &&
+           !gs_->ui().is_top<PoliceState>() &&
+           time.is_past_time(deferred_calls_open);
+  }
+  return false;
+}
+
+void TurnOrchestrator::show_next_deferred_staff_event() {
+  auto next = std::ranges::find_if(
+      deferred_staff_events_, [this](const DeferredStaffEvent& d) {
+        return can_deliver_staff_event(d.restaurant_id);
+      });
+  const bool queue_empty = next == deferred_staff_events_.end();
+  if (flush_staff_events_then_end_turn_ &&
+      (flush_staff_events_remaining_ == 0 || queue_empty)) {
+    showing_deferred_staff_event_ = false;
+    end_of_turn(end_of_day_cause_);
+    return;
+  }
+  if (queue_empty) {
+    showing_deferred_staff_event_ = false;
+    if (may_auto_end_turn()) {
+      request_end_of_turn(EndOfDayCause::Clock);
+    }
+    return;
+  }
+  showing_deferred_staff_event_ = true;
+
+  auto deferred = *next;
+  deferred_staff_events_.erase(next);
+
+  Logger::debug(
+      "[staff_event] dequeue for display: rest={} role={} slot={} type={} "
+      "remaining={}",
+      deferred.restaurant_id.value, static_cast<int>(deferred.event.job_role),
+      deferred.event.slot_index, static_cast<int>(deferred.event.type),
+      deferred_staff_events_.size());
+
+  auto* restaurant = gs_->restaurant(deferred.restaurant_id);
+  if (!restaurant) {
+    Logger::debug("[staff_event] skip (restaurant gone): rest={}",
+                  deferred.restaurant_id.value);
+    // Restaurant gone, skip and try next.
+    show_next_deferred_staff_event();
+    return;
+  }
+
+  if (flush_staff_events_then_end_turn_) {
+    --flush_staff_events_remaining_;
+  }
+
+  gs_->show_staff_event_dialog(deferred.event, restaurant,
+                               [this]() { show_next_deferred_staff_event(); });
+}
+
+void TurnOrchestrator::queue_manager_alert(core::RestaurantId rid,
+                                           std::string message,
+                                           int display_block) {
+  deferred_manager_alerts_.push_back({rid, std::move(message), display_block});
+}
+
+void TurnOrchestrator::drop_city_local_events_outside(core::CityId city) {
+  // Only drop the events for the active player
+  auto is_elsewhere = [this, city](core::RestaurantId rid) {
+    if (!can_deliver_to_active_player(rid)) {
+      return false;
+    }
+    auto* restaurant = gs_->restaurant(rid);
+    return !restaurant || restaurant->property().city().id() != city;
+  };
+  std::erase_if(deferred_manager_alerts_,
+                [&](const DeferredManagerAlert& alert) {
+                  return is_elsewhere(alert.restaurant_id);
+                });
+  std::erase_if(deferred_calls_, [&](const DeferredCall& call) {
+    return call.kind == DeferredCall::Kind::MayorInspection &&
+           is_elsewhere(call.restaurant_id);
+  });
+}
+
+bool TurnOrchestrator::queue_mayor_award(const MayorAwardEvent& ev,
+                                         core::PlayerId player_id) {
+  return queue_call({.kind = DeferredCall::Kind::MayorAward,
+                     .player_id = player_id,
+                     .award = ev});
+}
+
+bool TurnOrchestrator::queue_depot_raid_call(core::PlayerId player_id) {
+  return queue_call(
+      {.kind = DeferredCall::Kind::DepotRaid, .player_id = player_id});
+}
+
+bool TurnOrchestrator::queue_mayor_inspection(core::PlayerId player_id,
+                                              core::RestaurantId rid,
+                                              bool is_first,
+                                              int display_block) {
+  return queue_call({.kind = DeferredCall::Kind::MayorInspection,
+                     .player_id = player_id,
+                     .restaurant_id = rid,
+                     .is_first = is_first,
+                     .display_block = display_block});
+}
+
+bool TurnOrchestrator::show_next_deferred_manager_alert() {
+  int block = gs_->time().current_block_of_day();
+  auto due = std::ranges::find_if(deferred_manager_alerts_,
+                                  [block](const DeferredManagerAlert& a) {
+                                    return a.display_block <= block;
+                                  });
+  if (due == deferred_manager_alerts_.end()) {
+    return false;
+  }
+
+  auto alert = *due;
+  deferred_manager_alerts_.erase(due);
+  showing_manager_alert_ = true;
+
+  auto* restaurant = gs_->restaurant(alert.restaurant_id);
+  const RawRenderable* manager_pic = nullptr;
+  if (restaurant) {
+    const auto& mgr = restaurant->manager();
+    if (mgr) {
+      manager_pic = CharacterFactory::create_character(mgr->character().id());
+    }
+  }
+
+  gs_->turn_presenter().show_manager_alert(
+      std::move(alert.message), manager_pic,
+      [this]() { showing_manager_alert_ = false; });
+  return true;
+}
+
+void TurnOrchestrator::trigger_mayor_inspection(core::RestaurantId rid,
+                                                bool is_first) {
+  auto* restaurant = gs_->restaurant(rid);
+  auto* owner = restaurant ? gs_->restaurant_owner(*restaurant) : nullptr;
+  queue_mayor_inspection(owner ? owner->id() : gs_->active_player()->id(), rid,
+                         is_first, gs_->time().current_block_of_day());
+  if (!showing_deferred_inspection_) {
+    show_next_deferred_inspection();
+  }
+}
+
+void TurnOrchestrator::show_next_deferred_inspection() {
+  auto is_due_inspection = [this](const DeferredCall& call) {
+    return call.kind == DeferredCall::Kind::MayorInspection &&
+           is_call_due(call);
+  };
+  auto drop_inspections = [this]() {
+    std::erase_if(deferred_calls_, [](const DeferredCall& call) {
+      return call.kind == DeferredCall::Kind::MayorInspection;
+    });
+  };
+
+  auto next = std::ranges::find_if(deferred_calls_, is_due_inspection);
+  if (next == deferred_calls_.end()) {
+    showing_deferred_inspection_ = false;
+    if (may_auto_end_turn()) {
+      request_end_of_turn(EndOfDayCause::Clock);
+    }
+    return;
+  }
+
+  auto* city = gs_->active_city();
+  if (!city) {
+    drop_inspections();
+    showing_deferred_inspection_ = false;
+    return;
+  }
+
+  auto mayor_actors = city->actors(ActorType::MAYOR);
+  if (mayor_actors.empty()) {
+    drop_inspections();
+    showing_deferred_inspection_ = false;
+    return;
+  }
+  core::ActorId mayor_id = mayor_actors[0]->id();
+
+  auto deferred = *next;
+  deferred_calls_.erase(next);
+  showing_deferred_inspection_ = true;
+
+  auto* restaurant = gs_->restaurant(deferred.restaurant_id);
+  if (!restaurant) {
+    // Restaurant gone since EOD, skip.
+    showing_deferred_inspection_ = false;
+    show_next_deferred_inspection();
+    return;
+  }
+
+  // Corruption check: if mayor favor score passes, award a star regardless of
+  // quality.
+  auto* player = gs_->active_player();
+  bool corruption_pass = false;
+  if (player) {
+    int favor = city->mayor_office().favor_score(player->id().value);
+    corruption_pass = engine::random::rand_percentage_chance(favor) &&
+                      restaurant->star_rating() < 5;
+  }
+
+  MayorConversation::InspectionOutcome outcome;
+  outcome.is_first = deferred.is_first;
+
+  if (corruption_pass) {
+    restaurant->star_rating(restaurant->star_rating() + 1);
+    outcome.star_gained = true;
+  }
+  else {
+    auto result = restaurant->update_star_rating();
+    if (result.has_value()) {
+      outcome.star_gained = *result;
+      outcome.star_lost = !*result;
+    }
+  }
+
+  // Force-close for 7 days on first inspection with star loss (original rule)
+  if (outcome.star_lost && outcome.is_first) {
+    restaurant->close_for_business();
+    restaurant->force_close(7);
+  }
+
+  std::optional<core::events::MilestoneId> milestone;
+  if (outcome.star_gained) {
+    using core::events::MilestoneId;
+    milestone = MilestoneId::AwardedFirstStar;
+    switch (restaurant->star_rating()) {
+    case 2:
+      milestone = MilestoneId::FirstTwoStarRestaurant;
+      break;
+    case 3:
+      milestone = MilestoneId::FirstThreeStarRestaurant;
+      break;
+    case 4:
+      milestone = MilestoneId::FirstFourStarRestaurant;
+      break;
+    case 5:
+      milestone = MilestoneId::FirstFiveStarRestaurant;
+      break;
+    default:
+      break;
+    }
+  }
+
+  auto on_complete = [this, milestone]() {
+    showing_deferred_inspection_ = false;
+    if (milestone) {
+      gs_->deliver_milestone(*milestone);
+    }
+  };
+
+  MayorConversationType conv_type =
+      deferred.is_first ? MayorConversationType::FirstQualityInspection
+                        : MayorConversationType::QualityInspection;
+  gs_->ui().push<MayorState>(
+      MayorState{.id = mayor_id,
+                 .type = conv_type,
+                 .restaurant_id = deferred.restaurant_id,
+                 .is_first_inspection = deferred.is_first,
+                 .award_winner_player_id = std::nullopt,
+                 .inspection_star_gained = outcome.star_gained,
+                 .inspection_star_lost = outcome.star_lost,
+                 .on_complete = std::move(on_complete)});
+}
+
+bool TurnOrchestrator::fire_queued_events() {
+  // Only reached on a human player's turn.
+  if (processing_end_of_turn_) {
+    return false;
+  }
+
+  // A manager reaches the player from the time their report is scheduled for.
+  if (!showing_manager_alert_ && show_next_deferred_manager_alert()) {
+    return true;
+  }
+
+  // Deliver protection racket offers rolled during this player's day-end
+  // flush.
+  if (!deferred_racket_offers_.empty()) {
+    auto it = std::ranges::find_if(
+        deferred_racket_offers_, [&](const DeferredRacketOffer& d) {
+          return d.player_id == gs_->active_player()->id();
+        });
+    if (it != deferred_racket_offers_.end()) {
+      GameState::RacketOffer offer{.restaurant_id = it->restaurant_id,
+                                   .first_contact = it->first_contact};
+      deferred_racket_offers_.erase(it);
+      gs_->push_protection_racket_offer(offer);
+      return true;
+    }
+  }
+
+  // One queued call goes out per pass.
+  if (!showing_deferred_staff_event_ && !showing_deferred_inspection_) {
+    auto due =
+        std::ranges::find_if(deferred_calls_, [this](const DeferredCall& call) {
+          return is_call_due(call);
+        });
+    if (due != deferred_calls_.end()) {
+      if (due->kind == DeferredCall::Kind::MayorInspection) {
+        show_next_deferred_inspection();
+        return true;
+      }
+      auto queued = *due;
+      deferred_calls_.erase(due);
+      if (queued.kind == DeferredCall::Kind::DepotRaid) {
+        gs_->initiate_arrest(ArrestReason::WarehouseWeapons);
+      }
+      else {
+        gs_->process_mayor_award_event(queued.award);
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool TurnOrchestrator::fire_staff_events() {
+  if (processing_end_of_turn_ || showing_deferred_staff_event_ ||
+      showing_deferred_inspection_) {
+    return false;
+  }
+
+  const auto& time = gs_->time();
+  if (time.is_past_time(staff_events_open) &&
+      !time.is_past_time(staff_events_close) && has_deliverable_staff_event()) {
+    show_next_deferred_staff_event();
+    return true;
+  }
+
+  return false;
+}
+
+bool TurnOrchestrator::is_restaurant_in_processing_scope(
+    const Restaurant& rest, core::PlayerId owner) const {
+  auto cities = gs_->simulated_cities_for(owner);
+  return std::ranges::find(cities, rest.property().city().id()) != cities.end();
+}
+
+void TurnOrchestrator::snapshot_weekly_profits(
+    const std::vector<core::RestaurantId>& restaurant_ids) {
+  const auto owner = gs_->active_player()->id();
+  for (auto rid : restaurant_ids) {
+    auto* rest = gs_->restaurant(rid);
+    if (!rest || !is_restaurant_in_processing_scope(*rest, owner)) {
+      continue;
+    }
+    Money weekly_total;
+    for (const auto& day :
+         rest->stats().current_week(gs_->time().current_date())) {
+      weekly_total = weekly_total + day.gross_profit;
+    }
+    rest->last_weekly_profit(weekly_total);
+  }
+}
+
+turn::StepResult
+TurnOrchestrator::finish_end_of_turn(const turn::FinishTurn& step) {
+  snapshot_weekly_profits(step.restaurant_ids);
+
+  auto* current_player = gs_->active_player();
+  if (current_player) {
+    if (current_player->is_human_controlled()) {
+      current_player->financials().close_profit_day(gs_->active_city_id());
+      bool is_eow = gs_->time().current_date().is_end_of_week();
+      gs_->milestones().check_milestone_events(*current_player, is_eow);
+    }
+    else {
+      current_player->ai_end_of_day(*gs_);
+    }
+  }
+
+  if (gs_->active_player()->is_human_controlled()) {
+    gs_->status().freeze_header(gs_->active_player()->id());
+  }
+
+  auto previous_player_id = gs_->active_player_;
+  next_player();
+
+  // AI players don't have an active city
+  if (gs_->active_player()->is_human_controlled()) {
+    if (auto next_city = gs_->player_city_[gs_->active_player_.value]) {
+      if (*next_city != gs_->active_city_) {
+        gs_->clear_city_selection();
+        gs_->active_city_ = *next_city;
+        gs_->ui().push<CityViewState>(*next_city);
+      }
+    }
+  }
+
+  bool wrapped =
+      (previous_player_id.value > 0 && gs_->active_player_.value == 0);
+
+  // The driver keeps draining into the freshly built boundary steps.
+  build_turn_pipeline(wrapped, previous_player_id, step.restaurant_ids,
+                      step.interactive);
+  return turn::StepResult::Done;
+}
+
+void TurnOrchestrator::advance_pipeline() {
+  pipeline_waiting_for_player_ = false;
+  while (!turn_pipeline_.empty()) {
+    turn::Step step = std::move(turn_pipeline_.front());
+    turn_pipeline_.pop_front();
+    Logger::debug("TurnPipeline: step {} ({} remaining)", turn::step_name(step),
+                  turn_pipeline_.size());
+    if (execute_pipeline_step(step) == turn::StepResult::Waiting) {
+      // Delay and FadeTransition wait on timers, every other waiting step
+      // waits on the player.
+      pipeline_waiting_for_player_ =
+          !std::holds_alternative<turn::Delay>(step) &&
+          !std::holds_alternative<turn::FadeTransition>(step);
+      return;
+    }
+  }
+}
+
+bool TurnOrchestrator::is_pipeline_blocking_input() const {
+  if (pipeline_waiting_for_player_) {
+    return false;
+  }
+  return processing_end_of_turn_ || !turn_pipeline_.empty() ||
+         pipeline_delay_frames_ > 0;
+}
+
+void TurnOrchestrator::next_player() {
+  if (++gs_->active_player_.value >= NUMBER_OF_PLAYERS) {
+    gs_->active_player_.value = 0;
+  }
+}
+
+void TurnOrchestrator::on_player_turn_card_finished() {
+  // Only release for human players - keep frozen for AI to hide their money
+  if (gs_->active_player()->is_human_controlled()) {
+    gs_->status().unfreeze_header();
+  }
+
+  if (pending_ai_auto_end_turn_) {
+    pending_ai_auto_end_turn_ = false;
+    end_of_turn(EndOfDayCause::Away);
+    return;
+  }
+
+  // Human player taking control: unsuppress
+  gs_->status().suppress(false);
+
+  auto* player = gs_->active_player();
+  if (player && player->is_away()) {
+    run_away_day();
+    return;
+  }
+  StatusMsg m{
+      .payload = "Please wait...",
+      .scope = StatusScope::Global,
+  };
+  gs_->status().post_direct(m);
+}
+
+void TurnOrchestrator::run_away_day() {
+  auto* player = gs_->active_player();
+
+  auto announcement =
+      std::ranges::find_if(deferred_calls_, [player](const DeferredCall& call) {
+        return call.kind == DeferredCall::Kind::MayorAward &&
+               call.award.announces_winner && call.player_id == player->id();
+      });
+  if (announcement != deferred_calls_.end()) {
+    const MayorAwardEvent award = announcement->award;
+    deferred_calls_.erase(announcement);
+    gs_->turn_presenter().show_winner_announcement(award,
+                                                   [this] { run_away_day(); });
+    return;
+  }
+
+  player->decrement_away_day();
+  if (player->is_away()) {
+    end_of_turn(EndOfDayCause::Away);
+  }
+  else {
+    skip_to_next_player();
+  }
+}
+
+void TurnOrchestrator::build_turn_pipeline(
+    bool wrapped, core::PlayerId prev_player_id,
+    std::vector<core::RestaurantId> prev_restaurant_ids, bool prev_is_human) {
+  auto* new_player = gs_->players_[gs_->active_player_.value].get();
+  // Clock only runs for human players, but AdvanceDate still needs a
+  // time-of-day for the new date so for AI players we just use the default
+  // opening time.
+  const bool new_player_is_human =
+      new_player && new_player->is_human_controlled();
+  auto start_time = new_player_is_human ? new_player->start_of_day_time()
+                                        : Restaurant::DEFAULT_OPENING_TIME;
+  // A custom start-of-day applies to a single day.
+  if (new_player_is_human) {
+    new_player->roll_early_start_drain();
+    new_player->determine_end_of_day();
+    new_player->start_of_day_hour(Player::default_start_of_day_hour);
+  }
+
+  bool is_end_of_week = gs_->time().current_date().is_end_of_week();
+  bool is_end_of_month = gs_->time().current_date().is_end_of_month();
+  bool is_end_of_year = gs_->time().current_date().is_end_of_year();
+
+  turn_pipeline_.clear();
+  pipeline_activity_ = {};
+
+  // Skip it on a day no human player could act, so a holiday, a jail
+  // sentence or the tutorial doesn't push a real save out of the rotation.
+  const bool autosave_due = wrapped &&
+                            is_autosave_due(gs_->options().autosave_frequency,
+                                            is_end_of_week, is_end_of_month) &&
+                            !all_human_players_away(*gs_) &&
+                            !gs_->tutorial().active();
+
+  // You get this even when you're in prison or on holiday
+  const bool one_year_played_reached =
+      wrapped && !floor_editing_bonus_shown_ &&
+      gs_->time().current_date().add_days(1) >= floor_editing_bonus_date;
+
+  if (wrapped) {
+    turn_pipeline_.emplace_back(turn::TickCities{});
+    if (is_end_of_week) {
+      turn_pipeline_.emplace_back(turn::EndOfWeekProcessing{});
+    }
+    if (is_end_of_year) {
+      turn_pipeline_.emplace_back(turn::EndOfYearProcessing{});
+    }
+    if (is_end_of_month) {
+      turn_pipeline_.emplace_back(turn::EndOfMonthProcessing{});
+    }
+    if (is_end_of_year) {
+      turn_pipeline_.emplace_back(turn::AnnualCompetition{});
+    }
+    if (is_end_of_month) {
+      turn_pipeline_.emplace_back(turn::MonthlyCompetition{});
+    }
+    if (autosave_due) {
+      // Captioned ahead of the fade so the label reaches a rendered frame
+      // before the save stalls the loop.
+      turn_pipeline_.emplace_back(turn::SetActivity{autosave_activity});
+    }
+    // Steps from here up to PlayerTurnCard run in one drain at the fade
+    // midpoint; a step that waits ends that drain early and the fade-in
+    // reveals whatever view is still on top.
+    turn_pipeline_.emplace_back(turn::FadeTransition{});
+    turn_pipeline_.emplace_back(turn::AdvanceDate{start_time});
+  }
+  else if (new_player_is_human) {
+    turn_pipeline_.emplace_back(turn::SetTimeOfDay{start_time});
+  }
+
+  turn_pipeline_.emplace_back(turn::PreparePlayerTurn{});
+  turn_pipeline_.emplace_back(turn::ResumeTime{});
+  turn_pipeline_.emplace_back(turn::CityStartOfDay{});
+  // Delay autosave until we're in a stable state where we expect a game to be
+  // saved.
+  if (autosave_due) {
+    turn_pipeline_.emplace_back(turn::Autosave{});
+  }
+  turn_pipeline_.emplace_back(turn::PlayerTurnCard{});
+  if (one_year_played_reached) {
+    turn_pipeline_.emplace_back(turn::FloorEditingBonus{});
+  }
+
+  if (prev_is_human) {
+    if (is_end_of_week) {
+      turn_pipeline_.emplace_back(
+          turn::WeeklyReports{.previous_player = prev_player_id,
+                              .restaurant_ids = std::move(prev_restaurant_ids),
+                              .interleave_electricity = is_end_of_month});
+    }
+    if (is_end_of_month) {
+      turn_pipeline_.emplace_back(turn::MonthlyInvoice{prev_player_id});
+    }
+  }
+
+  Logger::debug(
+      "TurnPipeline: built {} steps (wrapped={} week={} month={} year={})",
+      turn_pipeline_.size(), wrapped, is_end_of_week, is_end_of_month,
+      is_end_of_year);
+}
+
+turn::StepResult
+TurnOrchestrator::execute_pipeline_step(const turn::Step& step) {
+  using turn::StepResult;
+
+  return std::visit(
+      overloaded{
+          [&](const turn::ProcessRestaurant& s) {
+            return process_restaurant_step(s);
+          },
+
+          [&](const turn::DailySettlement& s) {
+            if (auto* rest = gs_->restaurant(s.id)) {
+              core::finance::apply_daily_sales(*gs_, *rest);
+            }
+            return StepResult::Done;
+          },
+
+          [&](const turn::Delay& s) {
+            pipeline_delay_frames_ = s.frames;
+            return StepResult::Waiting;
+          },
+
+          [&](const turn::FinishTurn& s) { return finish_end_of_turn(s); },
+
+          [&](const turn::FloorEditingBonus&) {
+            floor_editing_bonus_shown_ = true;
+            gs_->ui().push<MaestroMessageState>(MaestroMessageState{
+                .text =
+                    "You have now managed to survive in Pizza Tycoon for a "
+                    "whole year. You will now receive an (undocumented) extra "
+                    "feature: You can now edit the floor pattern in your "
+                    "restaurants to your taste by clicking on the tiles in "
+                    "your equipment book! Have fun trying it out! - El Maestro",
+                .on_dismiss = [this]() { advance_pipeline(); },
+            });
+            return StepResult::Waiting;
+          },
+
+          [&](const turn::TickCities&) {
+            end_of_day();
+            return StepResult::Done;
+          },
+
+          [&](const turn::EndOfWeekProcessing&) {
+            end_of_week_processing();
+            return StepResult::Done;
+          },
+
+          [&](const turn::EndOfYearProcessing&) {
+            end_of_year_processing();
+            return StepResult::Done;
+          },
+
+          [&](const turn::EndOfMonthProcessing&) {
+            end_of_month_processing();
+            return StepResult::Done;
+          },
+
+          [&](const turn::AnnualCompetition&) {
+            // Resumes from advance_annual_competition() once the winner
+            // announcement closes.
+            return gs_->competitions().run_annual_pizza_competition()
+                       ? StepResult::Waiting
+                       : StepResult::Done;
+          },
+
+          [&](const turn::MonthlyCompetition&) {
+            // Resumes via advance_pipeline() from the popup chain. When no
+            // human can participate the chain resumes synchronously inside
+            // this call, having already drained the pipeline; returning
+            // Waiting is then a no-op.
+            gs_->competitions().run_monthly_competition();
+            return StepResult::Waiting;
+          },
+
+          [&](const turn::FadeTransition& s) {
+            return gs_->fade_presenter().fade_through_black(
+                       s.frames,
+                       [this] {
+                         Logger::debug("TurnPipeline: fade midpoint reached, "
+                                       "advancing pipeline");
+                         advance_pipeline();
+                       })
+                       ? StepResult::Waiting
+                       : StepResult::Done;
+          },
+
+          [&](const turn::AdvanceDate& s) {
+            gs_->time_.time_on_next_day(s.start_time.hour, s.start_time.minute);
+            // Freeze again so the snapshot shows the new date rather than the
+            // one captured in finish_end_of_turn().
+            auto* ap = gs_->active_player();
+            gs_->status().freeze_header(ap ? std::optional{ap->id()}
+                                           : std::nullopt);
+            return StepResult::Done;
+          },
+
+          [&](const turn::SetTimeOfDay& s) {
+            gs_->time_.set_time_of_day(s.start_time.hour, s.start_time.minute);
+            return StepResult::Done;
+          },
+
+          [&](const turn::PreparePlayerTurn&) {
+            auto* player = gs_->active_player();
+            const bool is_human = player && player->is_human_controlled();
+            gs_->status().clear_queue();
+            gs_->status_queue_city_ = gs_->active_city_;
+            deferred_manager_alerts_.clear();
+            if (is_human) {
+              gs_->status().suppress(false);
+              if (gs_->time().current_date().week_day_index() == 0) {
+                player->financials().reset_days_present();
+              }
+            }
+            // Human restaurants that are in scope are all in the active city,
+            // so the per-city guard keeps the city-view-entry trigger from
+            // running the day twice. AI has this single trigger, so no guard
+            // needed.
+            const bool run_day =
+                !is_human ||
+                begin_restaurant_day(gs_->active_city_, gs_->active_player_);
+            for (auto* restaurant : gs_->restaurants_for(gs_->active_player_)) {
+              if (run_day && restaurant &&
+                  is_restaurant_in_processing_scope(*restaurant,
+                                                    gs_->active_player_)) {
+                restaurant->start_of_day(*gs_);
+                if (is_human) {
+                  if (auto insp = restaurant->take_pending_inspection()) {
+                    queue_mayor_inspection(gs_->active_player_,
+                                           restaurant->id(), *insp,
+                                           roll_inspection_block());
+                  }
+                }
+              }
+            }
+            if (run_day) {
+              raid_depots(gs_->active_player_);
+            }
+            deliver_depot_stock(gs_->active_player_);
+            pending_ai_auto_end_turn_ = !is_human;
+            if (!pending_ai_auto_end_turn_) {
+              for (auto& msg :
+                   gs_->active_player()->take_pending_notifications()) {
+                gs_->status().post(std::move(msg));
+              }
+            }
+            return StepResult::Done;
+          },
+
+          [&](const turn::ResumeTime&) {
+            processing_end_of_turn_ = false;
+            if (gs_->players_[gs_->active_player_.value]
+                    ->is_human_controlled()) {
+              gs_->resume_clock();
+            }
+            return StepResult::Done;
+          },
+
+          [&](const turn::CityStartOfDay&) {
+            if (auto* city = gs_->active_city()) {
+              run_city_start_of_day(*city);
+            }
+            return StepResult::Done;
+          },
+
+          [&](const turn::PlayerTurnCard&) {
+            gs_->turn_presenter().show_player_turn_card(
+                gs_->active_player_, gs_->time().current_date(),
+                [this] { on_player_turn_card_finished(); });
+            return StepResult::Done;
+          },
+
+          [&](const turn::WeeklyReports& s) {
+            std::vector<Restaurant*> restaurants;
+            for (auto rid : s.restaurant_ids) {
+              if (auto* r = gs_->restaurant(rid)) {
+                restaurants.push_back(r);
+              }
+            }
+            if (s.interleave_electricity) {
+              // Defer resumption via on_done so MonthlyInvoice only runs after
+              // all restaurant invoices and the city invoice are dismissed.
+              gs_->turn_presenter().show_weekly_reports(
+                  restaurants, s.previous_player,
+                  [this]() { advance_pipeline(); }, true);
+              return StepResult::Waiting;
+            }
+            gs_->turn_presenter().show_weekly_reports(
+                restaurants, s.previous_player, {}, false);
+            return StepResult::Done;
+          },
+
+          [&](const turn::MonthlyRestaurantInvoice& s) {
+            auto* rest = gs_->restaurant(s.id);
+            if (!rest) {
+              return StepResult::Done;
+            }
+            auto owner = rest->property().owner_or_tenant();
+            if (!owner) {
+              return StepResult::Done;
+            }
+            auto invoice =
+                core::finance::collect_electricity_slot_invoice(*rest);
+            gs_->turn_presenter().show_electricity_slot_invoice(
+                invoice, [this, invoice, owner = *owner]() {
+                  if (auto* player = gs_->player(owner)) {
+                    core::finance::apply_electricity_slot_invoice(*gs_, *player,
+                                                                  invoice);
+                  }
+                  advance_pipeline();
+                });
+            return StepResult::Waiting;
+          },
+
+          [&](const turn::MonthlyInvoice& s) {
+            auto* player = gs_->player(s.previous_player);
+            if (!player) {
+              return StepResult::Done;
+            }
+            auto costs = core::finance::collect_monthly_costs(*gs_, *player);
+            gs_->turn_presenter().show_monthly_invoice(
+                s.previous_player, costs,
+                [this, costs, id = s.previous_player]() {
+                  if (auto* p = gs_->player(id)) {
+                    core::finance::apply_monthly_costs(*gs_, *p, costs);
+                  }
+                  advance_pipeline();
+                });
+            return StepResult::Waiting;
+          },
+
+          [&](const turn::Autosave&) {
+            if (gs_->context_) {
+              save::SaveGameManager::autosave(*gs_, *gs_->context_);
+            }
+            return StepResult::Done;
+          },
+
+          [&](const turn::SetActivity& s) {
+            pipeline_activity_ = s.label;
+            return StepResult::Done;
+          },
+      },
+      step);
+}
+
+void TurnOrchestrator::deliver_depot_stock(core::PlayerId player_id) {
+  auto* city_ptr = gs_->active_city();
+  if (!city_ptr) {
+    return;
+  }
+
+  City& city = *city_ptr;
+
+  auto* player = gs_->players_[player_id.value].get();
+  if (!player) {
+    return;
+  }
+
+  std::vector<core::RestaurantId> city_rest_ids;
+  for (auto* r : gs_->restaurants_in_city(player_id, city.id())) {
+    if (r) {
+      city_rest_ids.push_back(r->id());
+    }
+  }
+
+  if (city_rest_ids.empty()) {
+    return;
+  }
+
+  auto& depot = city.central_depot(player_id);
+  depot.sync_delivery_priorities(city_rest_ids);
+
+  for (auto rest_id : depot.delivery_priorities()) {
+    auto* rest = gs_->restaurant(rest_id);
+    if (!rest || !rest->wants_open() || rest->is_force_closed()) {
+      continue;
+    }
+
+    const auto& demand = rest->daily_ingredient_demand_cache();
+
+    // The whole sweep runs four times, each pass re-testing days of supply and
+    // shipping another half day. From empty that converges on two days' stock.
+    constexpr int delivery_passes = 4;
+    constexpr int min_days_of_supply = 2;
+    constexpr int grams_per_kg = 1000;
+
+    for (int pass = 0; pass < delivery_passes; ++pass) {
+      for (int i = 0; i < max_ingredient_count; ++i) {
+        int demand_grams = demand[i];
+        if (demand_grams <= 0) {
+          continue;
+        }
+
+        auto ing_type = static_cast<core::food::IngredientType>(i);
+        auto& depot_stock = depot.get_stock(ing_type);
+        if (depot_stock.quantity <= 0) {
+          continue;
+        }
+
+        int current = rest->inventory().get_stock(ing_type).quantity;
+        if (current / demand_grams >= min_days_of_supply) {
+          continue;
+        }
+
+        int ship =
+            std::max((demand_grams / grams_per_kg) / 2, 1) * grams_per_kg;
+        int transfer = std::min(ship, depot_stock.quantity);
+        int quality = depot_stock.weighted_avg_quality;
+        Money cost = depot_stock.weighted_avg_cost;
+
+        depot_stock.consume(transfer);
+        rest->inventory().add_ingredient(ing_type, transfer, quality, cost);
+      }
+    }
+  }
+
+  auto& central_depot = city.central_depot(player_id);
+  if (central_depot.capacity() > 0 &&
+      central_depot.used() >= central_depot.capacity()) {
+    gs_->record_milestone(core::events::MilestoneId::CentralDepotFull,
+                          player_id);
+  }
+}
+
+void TurnOrchestrator::tick_active_cities() {
+  // Cities without a human stay dormant, matching the original. Each city
+  // ticks exactly once regardless of how many players share it.
+  const bool end_of_week = gs_->time().current_date().is_end_of_week();
+  for (auto city_id : gs_->simulated_cities()) {
+    if (gs_->cities_[city_id.value]) {
+      gs_->cities_[city_id.value]->end_of_day(
+          gs_->difficulty_level_, gs_->next_price_update_category(),
+          end_of_week, gs_->human_player_count());
+    }
+  }
+}
+
+void TurnOrchestrator::end_of_week_processing() {
+  for (auto& city : gs_->cities_) {
+    if (city) {
+      city->reset_weekly_vendor_spending();
+    }
+  }
+
+  // Pay weekly staff salaries
+  for (auto& player : gs_->players_) {
+    if (player) {
+      player->end_of_week(*gs_);
+      player->financials().record_liquidity(player->cash_balance());
+    }
+  }
+
+  // 30% chance to re-randomize one demographic's taste profile
+  if (engine::random::rand_percentage_chance(30)) {
+    auto demo = static_cast<ConsumerType>(engine::random::rand_max_n(6));
+    auto& tp = gs_->customer_taste_profiles_[demo];
+    tp.fat = engine::random::rand_max_n(10);
+    tp.sweet = engine::random::rand_max_n(10);
+    tp.salty = engine::random::rand_max_n(10);
+    tp.hot = engine::random::rand_max_n(10);
+    tp.spicy = engine::random::rand_max_n(10);
+    gs_->recalculate_all_pizza_demographics();
+  }
+}
+
+void TurnOrchestrator::end_of_year_processing() {
+  for (auto& player : gs_->players_) {
+    if (player) {
+      auto& ch = player->character();
+      ch.age(static_cast<uint8_t>(std::min(255, (int)ch.age() + 1)));
+      player->financials().close_year(gs_->time().current_date());
+      player->financials().start_liquidity_year(gs_->rules().fix_legacy_bugs);
+    }
+  }
+}
+
+void TurnOrchestrator::end_of_month_processing() {
+  for (auto& city : gs_->cities_) {
+    if (city) {
+      city->end_of_month();
+    }
+  }
+}
+
+void TurnOrchestrator::process_depot_theft() {
+  // 1% chance (10% x 10%) per player per day for the active city's depot.
+  auto* city = gs_->active_city();
+  if (!city) {
+    return;
+  }
+  using engine::random::rand_max_n;
+  using engine::random::rand_percentage_chance;
+  for (auto& player : gs_->players_) {
+    if (!player) {
+      continue;
+    }
+    auto& depot = city->central_depot(player->id());
+    if (depot.capacity() <= 0) {
+      continue;
+    }
+    // Two independent 10% rolls = 1% combined chance
+    bool first_roll = rand_percentage_chance(10);
+    bool second_roll = rand_percentage_chance(10);
+    if (!first_roll || !second_roll) {
+      continue;
+    }
+    auto category = static_cast<IngredientCategory>(rand_max_n(4));
+    depot.steal_stock(category);
+    Logger::debug("Stock of category {} stolen.", to_string(category));
+    player->make_insurance_claim(InsuranceType::WAREHOUSE);
+  }
+}
+
+// Called only after all players have finished their turns.
+void TurnOrchestrator::end_of_day() {
+
+  city_start_of_day_ran_.fill(false);
+  city_ai_action_taken_.fill(false);
+  for (auto& per_player : restaurant_day_ran_) {
+    per_player.fill(false);
+  }
+
+  tick_active_cities();
+
+  // Every city drifts, including ones no player has entered.
+  gs_->weapon_market().daily_update();
+
+  gs_->milestones().check_world_domination();
+
+  process_depot_theft();
+
+  for (auto& player : gs_->players_) {
+    if (player && !player->is_human_controlled()) {
+      player->decay_competition_willingness();
+    }
+  }
+}
+
+bool TurnOrchestrator::begin_restaurant_day(core::CityId city,
+                                            core::PlayerId player) {
+  bool& ran = restaurant_day_ran_[city.value][player.value];
+  if (ran) {
+    return false;
+  }
+  ran = true;
+  return true;
+}
+
+// Chance each day before district_investigation_draw_day that the police
+// searches the depots in the district it picked.
+constexpr int depot_raid_chance_percent = 5;
+
+void TurnOrchestrator::raid_depots(core::PlayerId player_id) {
+  auto* city = gs_->active_city();
+  auto* player = gs_->player(player_id);
+  if (!city || !player || !player->is_human_controlled()) {
+    return;
+  }
+  if (static_cast<int>(gs_->time().current_date().day()) >=
+      GameState::district_investigation_draw_day) {
+    return;
+  }
+  auto drawn = gs_->district_under_investigation();
+  if (!drawn) {
+    return;
+  }
+  if (!engine::random::rand_percentage_chance(depot_raid_chance_percent)) {
+    return;
+  }
+
+  for (auto* property : city->properties()) {
+    if (property->type() != PropertyType::DEPOT) {
+      continue;
+    }
+    auto owner = property->owner_or_tenant();
+    auto* weapons = property->weapons();
+    if (!owner || *owner != player_id || !weapons ||
+        property->district().id() != *drawn) {
+      continue;
+    }
+
+    Money seized{0};
+    Money bomb_value{0};
+    for (auto item : core::item::attack_weapon_list) {
+      int held = weapons->count(item);
+      if (held <= 0) {
+        continue;
+      }
+      Money value = player->weapon_unit_cost(item) * held;
+      weapons->remove(item, held);
+      seized = seized + value;
+      if (item == core::item::Item::Bomb) {
+        bomb_value = value;
+      }
+    }
+
+    // The original does not write the seized weapons off.
+    if (seized.cents > 0 && gs_->rules().fix_legacy_bugs) {
+      player->financials().transfer(gs_->time().current_date(),
+                                    Account::Weapons, Account::ProfitAndLoss,
+                                    seized, balance_sheet_only);
+    }
+
+    // The original stops investigating a district only when it finds a bomb,
+    // emptying every other weapon out of the depots it visits on the way.
+    const bool raid_satisfied =
+        gs_->rules().fix_legacy_bugs ? seized.cents > 0 : bomb_value.cents > 0;
+    if (raid_satisfied) {
+      queue_depot_raid_call(player_id);
+      gs_->district_under_investigation(std::nullopt);
+      return;
+    }
+  }
+}
+
+void TurnOrchestrator::run_city_start_of_day(City& city) {
+  int idx = city.id().value;
+  if (city_start_of_day_ran_[idx]) {
+    return;
+  }
+  const bool first_city_today = std::ranges::none_of(
+      city_start_of_day_ran_, [](bool ran) { return ran; });
+  city_start_of_day_ran_[idx] = true;
+
+  // The weekly trend step. Arriving from the map runs this pass, so a city
+  // entered on the first day of a week ticks on arrival.
+  if (gs_->time().current_date().week_day_index() == 0) {
+    city.economy_trend().tick(gs_->rules().fix_legacy_bugs);
+    city.ingredient_trend_system().weekly_seed();
+  }
+
+  // Update AI menus for pizza charts
+  for (auto& player : gs_->players_) {
+    if (!player || player->is_human_controlled()) {
+      continue;
+    }
+    auto here = gs_->restaurants_in_city(player->id(), city.id());
+    ai::update_ai_menu(*player, static_cast<int>(here.size()));
+  }
+  city.pizza_charts().build(*gs_);
+  const auto& chart_entries = city.pizza_charts().entries();
+  if (!chart_entries.empty()) {
+    gs_->record_milestone(core::events::MilestoneId::PizzaReachedNo1InCharts,
+                          chart_entries[0].player_id);
+  }
+  city.control_map().build(*gs_, city);
+  gs_->milestones().check_market_share_milestones(city);
+
+  // The police pick the district whose depots they will raid next month, once
+  // a day, in whichever city the player is in. The original's draw is off by
+  // one against the district ids, so the last district is never picked and a
+  // draw of zero matches nothing.
+  if (first_city_today &&
+      gs_->time().current_date().day() ==
+          GameState::district_investigation_draw_day &&
+      !city.districts().empty()) {
+    int drawn =
+        engine::random::rand_max_n(static_cast<int>(city.districts().size()));
+    gs_->district_under_investigation(gs_->rules().fix_legacy_bugs
+                                          ? city.districts().at(drawn)->id()
+                                          : drawn);
+  }
+
+  city.newspaper_event_system().daily_update(*gs_, city);
+  city.mayor_office().start_of_day(gs_->time_.current_date());
+  auto awards = city.mayor_office().process_daily_scheduling(
+      gs_->time_.current_date(), gs_->human_player_count(), first_city_today,
+      gs_->rules().fix_legacy_bugs);
+  for (auto& ev : awards) {
+    gs_->score_and_grant_mayor_award(ev, city);
+    queue_mayor_award(ev, gs_->active_player_);
+  }
+}

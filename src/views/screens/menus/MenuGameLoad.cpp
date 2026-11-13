@@ -1,0 +1,240 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "views/screens/menus/MenuGameLoad.h"
+
+#include <cassert>
+#include <filesystem>
+#include "core/save/SaveGameManager.h"
+#include "core/state/GameState.h"
+#include "core/state/UIState.h"
+#include "core/util/ConfigManager.h"
+#include "engine/Logger.h"
+#include "engine/PlatformPaths.h"
+#include "resources/FontTypes.h"
+#include "resources/util/FileUtils.h"
+#include "views/screens/menus/MenuTheme.h"
+#include "views/ui/PopupManager.h"
+#include "views/ui/popups/AlertPopup.h"
+#include "views/ui/popups/ConfirmPopup.h"
+#include "views/ui/widgets/ArrowMenuItem.h"
+#include "views/ui/widgets/CheckboxMenuItem.h"
+#include "views/ui/widgets/PositionMarkerMenuItem.h"
+#include "views/ui/widgets/SaveFileInfoBox.h"
+#include "views/ui/widgets/SaveFileListBox.h"
+#include "views/ui/widgets/TextMenuItem.h"
+
+using namespace views::ui::menu;
+
+#define SAVE_BOX_OFFSET_X 35
+#define SAVE_BOX_OFFSET_Y 125
+#define SAVE_BOX_W 224
+#define SAVE_BOX_H 216
+#define SAVE_BOX_ARROW_H 24
+
+MenuGameLoad::MenuGameLoad(GameContext& context, GameState& state)
+    : Menu(context, state, ViewPoint{SAVE_BOX_OFFSET_X, SAVE_BOX_OFFSET_Y}, 0),
+      busy_cursor_(context) {
+
+  load_save_files();
+
+  // Up arrow to scroll up in the list
+  add_menu_item(std::make_unique<ArrowMenuItem>(context, ArrowType::Up, [this] {
+    if (scroll_offset_ > 0) {
+      scroll_offset_--;
+      mark_dirty();
+    }
+  }));
+
+  // Save file list box - click selects, double-click loads directly
+  auto list = std::make_unique<SaveFileListBox>(
+      context, save_files_, &scroll_offset_,
+      [this](const std::string& filename) { select_file(filename); },
+      [this](const std::string& filename) {
+        select_file(filename);
+        load_selected_file();
+      });
+  const auto* list_box = list.get();
+  add_menu_item(std::move(list));
+
+  // Down arrow to scroll down in the list
+  add_menu_item(std::make_unique<ArrowMenuItem>(
+      context, ArrowType::Down, [this, list_box] {
+        if (scroll_offset_ < list_box->max_scroll()) {
+          scroll_offset_++;
+          mark_dirty();
+        }
+      }));
+
+  // Position marker for info box column
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 230, 0));
+
+  auto info = std::make_unique<SaveFileInfoBox>(context);
+  info_box_ = info.get();
+  add_menu_item(std::move(info));
+
+  constexpr TextStyle button_style{
+      .color = 1,
+      .align = TextAnchor::Start,
+      .shadow = std::nullopt,
+  };
+  constexpr TextStyle sel_button_style{
+      .color = 29,
+      .align = TextAnchor::Start,
+      .shadow = std::nullopt,
+  };
+
+  // Load button
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 260, 160));
+  add_menu_item(std::make_unique<TextMenuItem>(
+      context, "Load", [this] { load_selected_file(); }, face, button_style,
+      sel_button_style));
+
+  // Delete button
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 440, 160));
+  add_menu_item(std::make_unique<TextMenuItem>(
+      context, "Delete", [this] { delete_selected_file(); }, face, button_style,
+      sel_button_style));
+
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 244, 230));
+  add_menu_item(std::make_unique<CheckboxMenuItem>(
+      context, "Sort by date", state.options().load_list_sort_by_date, [this] {
+        bool& sort_by_date = state_.options().load_list_sort_by_date;
+        sort_by_date = !sort_by_date;
+        remember_list_options();
+        reload_file_list();
+      }));
+
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 244, 252));
+  add_menu_item(std::make_unique<CheckboxMenuItem>(
+      context, "Show auto saves", state.options().load_list_show_autosaves,
+      [this] {
+        bool& show_autosaves = state_.options().load_list_show_autosaves;
+        show_autosaves = !show_autosaves;
+        remember_list_options();
+        reload_file_list();
+      }));
+
+  // Back button
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 510, 244));
+  add_menu_item(std::make_unique<TextMenuItem>(
+      context, "Back", [this] { state_.ui().pop(); }, FontFace::RUBY, style,
+      sel_style));
+}
+
+void MenuGameLoad::tick() {
+  Menu::tick();
+  busy_cursor_.tick();
+}
+
+void MenuGameLoad::load_save_files() {
+  auto sort = state_.options().load_list_sort_by_date
+                  ? fileutils::FileSortOrder::LastModified
+                  : fileutils::FileSortOrder::Alphabetical;
+  save_files_ = fileutils::list_files("saves", ".plsave", sort);
+  if (!state_.options().load_list_show_autosaves) {
+    std::erase_if(save_files_, [](const fileutils::FileEntry& entry) {
+      return save::SaveGameManager::is_autosave_filename(entry.filename);
+    });
+  }
+}
+
+// Update options on disk as soon as a setting changes.
+void MenuGameLoad::remember_list_options() {
+  context_.config->save_options(state_.options());
+}
+
+// Rebuild the list after a change to what it shows, and reset scroll position
+// and selection since they may no longer point at anything in the new list.
+void MenuGameLoad::reload_file_list() {
+  load_save_files();
+  scroll_offset_ = 0;
+  selected_file_.clear();
+  if (info_box_) {
+    info_box_->clear();
+  }
+  mark_dirty();
+}
+
+void MenuGameLoad::select_file(const std::string& filename) {
+  selected_file_ = filename;
+  if (info_box_) {
+    info_box_->set_file(filename);
+  }
+  mark_dirty();
+}
+
+void MenuGameLoad::load_selected_file() {
+  if (selected_file_.empty()) {
+    return;
+  }
+
+  busy_cursor_.run(
+      [this] {
+        Logger::info("Loading save file: {}", selected_file_);
+
+        if (save::SaveGameManager::load(state_, context_, selected_file_)) {
+          Logger::info("Successfully loaded: {}", selected_file_);
+        }
+        else {
+          Logger::warn("Failed to load: {}", selected_file_);
+          context_.popup->create<AlertPopup>("Failed to load save file.");
+        }
+      },
+      "Loading...");
+  mark_dirty();
+}
+
+void MenuGameLoad::render(const RenderContext& ctx) {
+  Menu::render(ctx);
+  busy_cursor_.render_onto(*ctx.surface);
+}
+
+void MenuGameLoad::delete_selected_file() {
+  if (selected_file_.empty()) {
+    return;
+  }
+
+  std::string file_to_delete = selected_file_;
+  context_.popup->create<ConfirmPopup>(
+      "Do you want to delete this file?", [this, file_to_delete](bool agree) {
+        if (!agree) {
+          return;
+        }
+
+        namespace fs = std::filesystem;
+        auto full_path = fs::path(platform_paths::saves_dir()) / file_to_delete;
+
+        try {
+          if (fs::remove(full_path)) {
+            Logger::info("Deleted save file: {}", file_to_delete);
+          }
+          else {
+            Logger::warn("File not found: {}", file_to_delete);
+          }
+        }
+        catch (const std::exception& e) {
+          Logger::warn("Failed to delete: {}", e.what());
+        }
+
+        reload_file_list();
+      });
+}
+
+Surface MenuGameLoad::background() const {
+  auto background = default_background("Game load");
+
+  // Gray shadow box (same as CharacterSelection)
+  ViewRect save_box(SAVE_BOX_OFFSET_X - 2, SAVE_BOX_OFFSET_Y + 4, SAVE_BOX_W,
+                    SAVE_BOX_H + (SAVE_BOX_ARROW_H * 2) + 2);
+  background.fill_rect(save_box, 14);
+
+  ViewRect save_box2(SAVE_BOX_OFFSET_X, SAVE_BOX_OFFSET_Y, SAVE_BOX_W + 2,
+                     SAVE_BOX_H + (SAVE_BOX_ARROW_H * 2));
+  background.fill_rect(save_box2, 13);
+
+  return background;
+}
