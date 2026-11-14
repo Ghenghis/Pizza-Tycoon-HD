@@ -21,9 +21,10 @@ json topping_to_json(const core::food::Topping& topping) {
 }
 
 std::unique_ptr<core::food::Topping> json_to_topping(const json& j) {
-  int ingredient_id = j["ingredient_id"].get<int>();
-  int state = j["state"].get<int>();
-  WorldPoint origin{j["origin"]["x"].get<int>(), j["origin"]["y"].get<int>()};
+  int ingredient_id = j.at("ingredient_id").get<int>();
+  int state = j.at("state").get<int>();
+  WorldPoint origin{j.at("origin").at("x").get<int>(),
+                    j.at("origin").at("y").get<int>()};
 
   return std::make_unique<core::food::Topping>(ingredient_id, state, origin);
 }
@@ -76,21 +77,21 @@ json_to_pizza(const json& j,
               const core::food::CustomerTasteProfiles& taste_profiles) {
   using namespace core::food;
 
-  std::string name = j["name"].get<std::string>();
+  std::string name = j.at("name").get<std::string>();
   auto pizza = Pizza(name);
 
   // Restore origin
-  pizza.set_origin(static_cast<Origin>(j["origin"].get<int>()));
+  pizza.set_origin(static_cast<Origin>(j.at("origin").get<int>()));
 
   // Restore toppings
   if (j.contains("toppings")) {
-    for (const auto& topping_json : j["toppings"]) {
+    for (const auto& topping_json : j.at("toppings")) {
       pizza.add_topping(json_to_topping(topping_json));
     }
   }
 
   // Finalize if it was finalized when saved
-  if (j["finalized"].get<bool>()) {
+  if (j.at("finalized").get<bool>()) {
     pizza.finalize(taste_profiles, name);
   }
 
@@ -98,14 +99,14 @@ json_to_pizza(const json& j,
   // afterwards.
   if (j.contains("flavors")) {
     Flavors flavors;
-    flavors.fat = j["flavors"]["fat"].get<int>();
-    flavors.sweet = j["flavors"]["sweet"].get<int>();
-    flavors.salty = j["flavors"]["salty"].get<int>();
-    flavors.hot = j["flavors"]["hot"].get<int>();
+    flavors.fat = j.at("flavors").at("fat").get<int>();
+    flavors.sweet = j.at("flavors").at("sweet").get<int>();
+    flavors.salty = j.at("flavors").at("salty").get<int>();
+    flavors.hot = j.at("flavors").at("hot").get<int>();
 
-    int appearance = j["appearance"].get<int>();
-    int refinement = j["refinement"].get<int>();
-    int normality = j["normality"].get<int>();
+    int appearance = j.at("appearance").get<int>();
+    int refinement = j.at("refinement").get<int>();
+    int normality = j.at("normality").get<int>();
     int imitation = j.value("imitation", Pizza::full_imitation);
 
     pizza.set_disk_stats(flavors, appearance, refinement, normality, imitation,
@@ -143,13 +144,13 @@ json_to_recipe(const json& j,
                const core::food::CustomerTasteProfiles& taste_profiles) {
   using namespace core::food;
 
-  core::RecipeId id{j["id"].get<int>()};
-  std::string display_name = j["display_name"].get<std::string>();
-  Pizza pizza = json_to_pizza(j["pizza"], taste_profiles);
+  core::RecipeId id{j.at("id").get<int>()};
+  std::string display_name = j.at("display_name").get<std::string>();
+  Pizza pizza = json_to_pizza(j.at("pizza"), taste_profiles);
 
   auto recipe = [&] {
-    const json& reference =
-        j.contains("reference_id") ? j["reference_id"] : j["canonical_id"];
+    const json& reference = j.contains("reference_id") ? j.at("reference_id")
+                                                       : j.at("canonical_id");
     if (!reference.is_null()) {
       auto reference_id = static_cast<StandardPizza>(reference.get<int>());
       return Recipe::standard(id, reference_id, std::move(display_name),
@@ -159,7 +160,7 @@ json_to_recipe(const json& j,
   }();
 
   if (j.contains("daily_sales")) {
-    recipe.daily_sales(j["daily_sales"].get<Recipe::DailySales>());
+    recipe.daily_sales(j.at("daily_sales").get<Recipe::DailySales>());
   }
   return recipe;
 }

@@ -11,10 +11,13 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
+#include "core/util/AtomicFile.h"
 #include "engine/Logger.h"
 #include "engine/StringUtil.h"
 #include "engine/input/Action.h"
@@ -151,19 +154,18 @@ bool same_bindings(std::vector<std::string> a, std::vector<std::string> b) {
 } // namespace
 
 void write_bindings_template(const InputManager& in, const std::string& path) {
-  if (std::filesystem::exists(path)) {
+  // If we can't tell whether the file is there, leave it alone.
+  std::error_code ec;
+  if (std::filesystem::exists(path, ec) || ec) {
     return;
   }
   save_bindings_file(in, path);
 }
 
-void save_bindings_file(const InputManager& in, const std::string& path) {
-  std::ofstream file(path);
-  if (!file) {
-    Logger::warn("Could not write bindings to {}", path);
-    return;
-  }
-
+bool save_bindings_file(const InputManager& in, const std::string& path) {
+  // Built in memory and written in one step, so a failed write leaves the old
+  // bindings file as it was.
+  std::ostringstream file;
   file << R"(# Pizza Legacy key bindings
 #
 # Each uncommented line binds one action, replacing its defaults:
@@ -207,6 +209,14 @@ void save_bindings_file(const InputManager& in, const std::string& path) {
     file << '#' << magic_enum::enum_name(actions[i]) << '='
          << join(default_tokens) << '\n';
   }
+
+  const util::AtomicWriteResult result =
+      util::write_file_atomically(path, file.str());
+  if (!result) {
+    Logger::warn("Bindings not saved: {}", result.error);
+    return false;
+  }
+  return true;
 }
 
 } // namespace input

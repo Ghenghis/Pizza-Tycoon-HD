@@ -57,66 +57,66 @@ json character_to_json(const core::character::Character& character) {
 }
 
 core::character::Character json_to_character(const json& j) {
-  uint8_t char_id = j["id"].get<uint8_t>();
+  uint8_t char_id = j.at("id").get<uint8_t>();
   auto* char_data = CharacterFactory::create_character(char_id);
   core::character::Character character(char_data);
 
   if (j.contains("first_name")) {
-    character.name(j["first_name"].get<std::string>(),
+    character.name(j.at("first_name").get<std::string>(),
                    j.value("last_name", std::string{}));
   }
 
   // Restore dynamic values
   if (j.contains("age")) {
-    character.age(j["age"].get<uint8_t>());
+    character.age(j.at("age").get<uint8_t>());
   }
   if (j.contains("popularity")) {
-    character.popularity(j["popularity"].get<uint8_t>());
+    character.popularity(j.at("popularity").get<uint8_t>());
   }
   if (j.contains("health")) {
-    character.health(j["health"].get<uint8_t>());
+    character.health(j.at("health").get<uint8_t>());
   }
   if (j.contains("energy")) {
-    character.energy(j["energy"].get<uint8_t>());
+    character.energy(j.at("energy").get<uint8_t>());
   }
   if (j.contains("intelligence")) {
-    character.intelligence(j["intelligence"].get<uint8_t>());
+    character.intelligence(j.at("intelligence").get<uint8_t>());
   }
   if (j.contains("charisma")) {
-    character.charisma(j["charisma"].get<uint8_t>());
+    character.charisma(j.at("charisma").get<uint8_t>());
   }
   if (j.contains("dexterity")) {
-    character.dexterity(j["dexterity"].get<uint8_t>());
+    character.dexterity(j.at("dexterity").get<uint8_t>());
   }
   if (j.contains("personality")) {
-    character.personality(j["personality"].get<uint8_t>());
+    character.personality(j.at("personality").get<uint8_t>());
   }
   if (j.contains("courage")) {
-    character.courage(j["courage"].get<uint8_t>());
+    character.courage(j.at("courage").get<uint8_t>());
   }
   if (j.contains("experience")) {
-    character.experience(j["experience"].get<uint8_t>());
+    character.experience(j.at("experience").get<uint8_t>());
   }
   if (j.contains("trustworthiness")) {
-    character.trustworthiness(j["trustworthiness"].get<uint8_t>());
+    character.trustworthiness(j.at("trustworthiness").get<uint8_t>());
   }
   if (j.contains("honesty")) {
-    character.honesty(j["honesty"].get<uint8_t>());
+    character.honesty(j.at("honesty").get<uint8_t>());
   }
   if (j.contains("cooking")) {
-    character.cooking(j["cooking"].get<uint8_t>());
+    character.cooking(j.at("cooking").get<uint8_t>());
   }
   if (j.contains("serving")) {
-    character.serving(j["serving"].get<uint8_t>());
+    character.serving(j.at("serving").get<uint8_t>());
   }
   if (j.contains("management")) {
-    character.management(j["management"].get<uint8_t>());
+    character.management(j.at("management").get<uint8_t>());
   }
   if (j.contains("motivation")) {
-    character.motivation(j["motivation"].get<uint8_t>());
+    character.motivation(j.at("motivation").get<uint8_t>());
   }
   if (j.contains("pizzas_per_day")) {
-    character.pizzas_per_day(j["pizzas_per_day"].get<int>());
+    character.pizzas_per_day(j.at("pizzas_per_day").get<int>());
   }
 
   return character;
@@ -144,7 +144,7 @@ static InsurancePlayerState json_to_insurance_state(const json& j) {
   InsurancePlayerState state;
   if (j.contains("policies")) {
     int i = 0;
-    for (const auto& p : j["policies"]) {
+    for (const auto& p : j.at("policies")) {
       if (i >= static_cast<int>(state.policies.size())) {
         break;
       }
@@ -157,9 +157,9 @@ static InsurancePlayerState json_to_insurance_state(const json& j) {
       ++i;
     }
   }
-  if (j.contains("pending_claim") && !j["pending_claim"].is_null()) {
+  if (j.contains("pending_claim") && !j.at("pending_claim").is_null()) {
     state.pending_claim =
-        static_cast<InsuranceType>(j["pending_claim"].get<int>());
+        static_cast<InsuranceType>(j.at("pending_claim").get<int>());
   }
   return state;
 }
@@ -355,53 +355,53 @@ json player_to_json(const Player& player) {
 }
 
 std::unique_ptr<Player>
-json_to_player(const json& j, GameContext& context,
+json_to_player(const json& j, GameContext& /*context*/,
                const core::food::CustomerTasteProfiles& taste_profiles) {
-  core::PlayerId pid{j["id"].get<int>()};
-  bool human{j["human_controlled"].get<bool>()};
-  auto character = json_to_character(j["character"]);
+  core::PlayerId pid{j.at("id").get<int>()};
+  bool human{j.at("human_controlled").get<bool>()};
+  auto character = json_to_character(j.at("character"));
 
   auto player = std::make_unique<Player>(pid, character, human);
-  player->name(j["name"].get<std::string>());
+  player->name(j.at("name").get<std::string>());
 
   // Restore recipes
   if (j.contains("recipes")) {
-    player->recipes() = json_to_player_recipes(j["recipes"], taste_profiles);
+    player->recipes() = json_to_player_recipes(j.at("recipes"), taste_profiles);
   }
 
   // Restore financials (including ledger)
   if (j.contains("financials")) {
-    player->financials() = json_to_player_financials(j["financials"]);
+    player->financials() = json_to_player_financials(j.at("financials"));
   }
 
   if (j.contains("ai_expansion_cooldown")) {
-    player->ai_expansion_cooldown(j["ai_expansion_cooldown"].get<int>());
+    player->ai_expansion_cooldown(j.at("ai_expansion_cooldown").get<int>());
   }
   if (j.contains("start_of_day_hour")) {
-    player->start_of_day_hour(j["start_of_day_hour"].get<uint8_t>());
+    player->start_of_day_hour(j.at("start_of_day_hour").get<uint8_t>());
   }
   if (j.contains("end_of_day_block")) {
-    player->end_of_day_block(j["end_of_day_block"].get<int>());
+    player->end_of_day_block(j.at("end_of_day_block").get<int>());
   }
   if (j.contains("holiday_days_left")) {
-    player->holiday(j["holiday_days_left"].get<int>());
+    player->holiday(j.at("holiday_days_left").get<int>());
   }
   if (j.contains("criminal_record")) {
-    player->criminal_record(j["criminal_record"].get<int>());
+    player->criminal_record(j.at("criminal_record").get<int>());
   }
-  if (j.contains("eliminated") && j["eliminated"].get<bool>()) {
+  if (j.contains("eliminated") && j.at("eliminated").get<bool>()) {
     player->eliminate();
   }
   if (j.contains("jail_days_left")) {
-    player->jail(j["jail_days_left"].get<int>());
+    player->jail(j.at("jail_days_left").get<int>());
   }
-  player->jail_time(j["jail_time"].get<uint8_t>());
+  player->jail_time(j.at("jail_time").get<uint8_t>());
 
   // Restore AI menu slots
   if (j.contains("ai_menu_slots")) {
     auto& slots = player->ai_menu_slots();
     int i = 0;
-    for (const auto& slot_j : j["ai_menu_slots"]) {
+    for (const auto& slot_j : j.at("ai_menu_slots")) {
       if (i >= static_cast<int>(slots.size())) {
         break;
       }
@@ -410,7 +410,7 @@ json_to_player(const json& j, GameContext& context,
       slots[i].max_production = slot_j.value("max_production", 0);
       if (slot_j.contains("history")) {
         int hi = 0;
-        for (const auto& val_j : slot_j["history"]) {
+        for (const auto& val_j : slot_j.at("history")) {
           if (hi >= static_cast<int>(slots[i].history.size())) {
             break;
           }
@@ -423,7 +423,7 @@ json_to_player(const json& j, GameContext& context,
 
   // Restore loans
   if (j.contains("loans")) {
-    for (auto it = j["loans"].begin(); it != j["loans"].end(); ++it) {
+    for (auto it = j.at("loans").begin(); it != j.at("loans").end(); ++it) {
       core::CityId city_id{std::stoi(it.key())};
       for (const auto& loan_j : it.value()) {
         Loan loan = json_to_loan(loan_j);
@@ -434,30 +434,30 @@ json_to_player(const json& j, GameContext& context,
 
   // Restore investments
   if (j.contains("investments")) {
-    for (const auto& inv_j : j["investments"]) {
+    for (const auto& inv_j : j.at("investments")) {
       player->add_investment(json_to_investment(inv_j));
     }
   }
 
   // Restore inventory into existing object (Inventory is not copy-assignable)
   if (j.contains("inventory")) {
-    load_inventory(j["inventory"], player->inventory());
+    load_inventory(j.at("inventory"), player->inventory());
   }
   if (j.contains("social_score")) {
-    player->social_status().social_score(j["social_score"]);
+    player->social_status().social_score(j.at("social_score"));
   }
   if (j.contains("underworld_score")) {
-    player->social_status().underworld_score(j["underworld_score"]);
+    player->social_status().underworld_score(j.at("underworld_score"));
   }
   player->weapon_dealing_profit(
       Money{j.value("weapon_dealing_profit", int64_t{0})});
   player->trade_activity(j.value("trade_activity", int64_t{0}));
   if (j.contains("weapon_unit_costs")) {
-    const auto& costs = j["weapon_unit_costs"];
+    const auto& costs = j.at("weapon_unit_costs");
     for (auto item : core::item::weapon_list) {
       auto key = std::string(core::item::to_string(item));
       if (costs.contains(key)) {
-        player->weapon_unit_cost(item, Money{costs[key].get<int64_t>()});
+        player->weapon_unit_cost(item, Money{costs.at(key).get<int64_t>()});
       }
     }
   }
@@ -465,21 +465,22 @@ json_to_player(const json& j, GameContext& context,
       j.value("competition_willingness", uint8_t{0}));
 
   if (j.contains("ad_effectiveness")) {
-    for (const auto& entry : j["ad_effectiveness"]) {
+    for (const auto& entry : j.at("ad_effectiveness")) {
       if (!entry.contains("city_id") || !entry.contains("channels")) {
         continue;
       }
-      player->ad_effectiveness(core::CityId{entry["city_id"].get<int>()},
-                               entry["channels"].get<std::array<uint8_t, 4>>());
+      player->ad_effectiveness(
+          core::CityId{entry.at("city_id").get<int>()},
+          entry.at("channels").get<std::array<uint8_t, 4>>());
     }
   }
 
   if (j.contains("score")) {
-    player->add_score(j["score"].get<int>());
+    player->add_score(j.at("score").get<int>());
   }
   if (j.contains("awards")) {
     int category = 0;
-    for (const auto& level : j["awards"]) {
+    for (const auto& level : j.at("awards")) {
       if (category >= static_cast<int>(AwardCategory::Count)) {
         break;
       }
@@ -489,21 +490,22 @@ json_to_player(const json& j, GameContext& context,
     }
   }
   if (j.contains("mafia_state")) {
-    player->mafia_state() = json_to_mafia_state(j["mafia_state"]);
+    player->mafia_state() = json_to_mafia_state(j.at("mafia_state"));
   }
   if (j.contains("insurance_state")) {
-    player->insurance_state() = json_to_insurance_state(j["insurance_state"]);
+    player->insurance_state() =
+        json_to_insurance_state(j.at("insurance_state"));
   }
 
   if (j.contains("visited_city_ids")) {
-    for (const auto& val : j["visited_city_ids"]) {
+    for (const auto& val : j.at("visited_city_ids")) {
       player->mark_city_visited(core::CityId{val.get<int>()});
     }
   }
 
   // Restore active supplier contracts
   if (j.contains("contracts")) {
-    for (const auto& cj : j["contracts"]) {
+    for (const auto& cj : j.at("contracts")) {
       ActiveContract c;
       c.supplier_id = cj.value("supplier_id", uint8_t{0});
       c.category = static_cast<IngredientCategory>(cj.value("category", 0));
@@ -518,7 +520,7 @@ json_to_player(const json& j, GameContext& context,
           Money{cj.value("cancellation_penalty", int64_t{0})};
       c.deliver_as_required = cj.value("deliver_as_required", false);
       if (cj.contains("items")) {
-        for (const auto& ij : cj["items"]) {
+        for (const auto& ij : cj.at("items")) {
           c.items.push_back(
               {static_cast<core::food::IngredientType>(ij.value("type", 0)),
                ij.value("kg_per_day", 0)});
@@ -531,7 +533,7 @@ json_to_player(const json& j, GameContext& context,
   }
 
   if (j.contains("pending_notifications")) {
-    for (const auto& mj : j["pending_notifications"]) {
+    for (const auto& mj : j.at("pending_notifications")) {
       StatusMsg msg;
       msg.payload = mj.value("text", std::string{});
       msg.severity = static_cast<StatusSeverity>(mj.value("severity", 0));
@@ -542,7 +544,7 @@ json_to_player(const json& j, GameContext& context,
 
   // Restore active advertising campaigns
   if (j.contains("campaigns")) {
-    for (const auto& cj : j["campaigns"]) {
+    for (const auto& cj : j.at("campaigns")) {
       AdvertisingCampaign c;
       c.channel = static_cast<AdvertisingChannel>(cj.value("channel", 0));
       c.city_id = core::CityId{cj.value("city_id", -1)};
@@ -550,28 +552,28 @@ json_to_player(const json& j, GameContext& context,
       c.rate.effectiveness = cj.value("effectiveness", 0);
       c.rate.cost = Money{cj.value("cost", int64_t{0})};
       if (cj.contains("flyer_count")) {
-        c.flyer_count = cj["flyer_count"].get<int>();
+        c.flyer_count = cj.at("flyer_count").get<int>();
       }
       if (cj.contains("poster_id")) {
-        c.poster_id = cj["poster_id"].get<int>();
+        c.poster_id = cj.at("poster_id").get<int>();
       }
       if (cj.contains("newspaper_ad_format")) {
         c.newspaper_ad_format = static_cast<NewspaperAdFormat>(
-            cj["newspaper_ad_format"].get<int>());
+            cj.at("newspaper_ad_format").get<int>());
       }
       if (cj.contains("newspaper_lines")) {
         c.newspaper_lines =
-            cj["newspaper_lines"].get<std::vector<std::string>>();
+            cj.at("newspaper_lines").get<std::vector<std::string>>();
       }
       if (cj.contains("tv_ad_id")) {
-        c.tv_ad_id = cj["tv_ad_id"].get<int>();
+        c.tv_ad_id = cj.at("tv_ad_id").get<int>();
       }
       player->add_campaign(c);
     }
   }
 
   if (j.contains("turnover_by_city")) {
-    const auto& arr = j["turnover_by_city"];
+    const auto& arr = j.at("turnover_by_city");
     for (int c = 0; c < NUMBER_OF_CITIES && c < static_cast<int>(arr.size());
          ++c) {
       player->set_turnover_in_city(core::CityId{c},
@@ -597,7 +599,7 @@ static MissionLocation json_to_mission_location(const json& j) {
   loc.description = j.value("description", "");
   loc.tile_index = j.value("tile_index", -1);
   if (j.contains("date")) {
-    loc.date = json_to_date(j["date"]);
+    loc.date = json_to_date(j.at("date"));
   }
   loc.hour = j.value("hour", 0);
   loc.minute = j.value("minute", 0);
@@ -643,7 +645,7 @@ static MafiaMission json_to_mission(const json& j) {
   m.risk_pct = j.value("risk_pct", 0);
   m.reward = Money{j.value("reward", int64_t{0})};
   if (j.contains("deadline")) {
-    m.deadline = json_to_date(j["deadline"]);
+    m.deadline = json_to_date(j.at("deadline"));
   }
   m.deadline_hour = j.value("deadline_hour", 0);
   m.deadline_minute = j.value("deadline_minute", 0);
@@ -655,21 +657,21 @@ static MafiaMission json_to_mission(const json& j) {
   m.city = core::CityId{j.value("city", 0)};
   m.cash_amount = Money{j.value("cash_amount", int64_t{0})};
   if (j.contains("pickup")) {
-    m.pickup = json_to_mission_location(j["pickup"]);
+    m.pickup = json_to_mission_location(j.at("pickup"));
   }
   if (j.contains("dropoff")) {
-    m.dropoff = json_to_mission_location(j["dropoff"]);
+    m.dropoff = json_to_mission_location(j.at("dropoff"));
   }
   if (j.contains("bank_accounts")) {
-    for (int i = 0; i < 4 && i < static_cast<int>(j["bank_accounts"].size());
+    for (int i = 0; i < 4 && i < static_cast<int>(j.at("bank_accounts").size());
          ++i) {
-      m.bank_accounts[i] = j["bank_accounts"][i].get<int>();
+      m.bank_accounts[i] = j.at("bank_accounts").at(i).get<int>();
     }
   }
   if (j.contains("launder_done")) {
-    for (int i = 0; i < 4 && i < static_cast<int>(j["launder_done"].size());
+    for (int i = 0; i < 4 && i < static_cast<int>(j.at("launder_done").size());
          ++i) {
-      m.launder_done[i] = j["launder_done"][i].get<bool>();
+      m.launder_done[i] = j.at("launder_done").at(i).get<bool>();
     }
   }
   m.contamination_pct = j.value("contamination_pct", 0);
@@ -689,7 +691,7 @@ static MafiaLoan json_to_mafia_loan(const json& j) {
   MafiaLoan loan;
   loan.amount = Money{j.value("amount", int64_t{0})};
   if (j.contains("due_date")) {
-    loan.due_date = json_to_date(j["due_date"]);
+    loan.due_date = json_to_date(j.at("due_date"));
   }
   loan.clan = j.value("clan", 0);
   return loan;
@@ -708,11 +710,11 @@ json mafia_state_to_json(const MafiaPlayerState& state) {
 
 MafiaPlayerState json_to_mafia_state(const json& j) {
   MafiaPlayerState state;
-  if (j.contains("active_mission") && !j["active_mission"].is_null()) {
-    state.active_mission = json_to_mission(j["active_mission"]);
+  if (j.contains("active_mission") && !j.at("active_mission").is_null()) {
+    state.active_mission = json_to_mission(j.at("active_mission"));
   }
-  if (j.contains("loan") && !j["loan"].is_null()) {
-    state.loan = json_to_mafia_loan(j["loan"]);
+  if (j.contains("loan") && !j.at("loan").is_null()) {
+    state.loan = json_to_mafia_loan(j.at("loan"));
   }
   return state;
 }
@@ -751,12 +753,12 @@ core::food::PlayerRecipes json_to_player_recipes(
   using namespace core::food;
 
   PlayerRecipes recipes;
-  recipes.next_id = core::RecipeId{j["next_id"].get<int>()};
+  recipes.next_id = core::RecipeId{j.at("next_id").get<int>()};
 
   // Saves from v1.0.0-beta.2 or earlier used 'canonical' as key.
   const char* standard_key = j.contains("standard") ? "standard" : "canonical";
   if (j.contains(standard_key)) {
-    const json& slots = j[standard_key];
+    const json& slots = j.at(standard_key);
     for (size_t i = 0; i < slots.size() && i < recipes.standard.size(); ++i) {
       if (!slots[i].is_null()) {
         recipes.standard[i] =
@@ -767,7 +769,7 @@ core::food::PlayerRecipes json_to_player_recipes(
 
   // Restore user recipes
   if (j.contains("user")) {
-    for (const auto& recipe_json : j["user"]) {
+    for (const auto& recipe_json : j.at("user")) {
       recipes.user.push_back(json_to_recipe(recipe_json, taste_profiles));
     }
   }
@@ -794,7 +796,7 @@ void load_inventory(const json& j, core::inventory::Inventory& inventory) {
     if (!j.contains(key)) {
       continue;
     }
-    const auto& entry = j[key];
+    const auto& entry = j.at(key);
     // Save format version 3 wrote a per-item cost beside the count; the player
     // owns the price now, so only the count is read.
     inventory[item] =
@@ -815,12 +817,13 @@ json loan_to_json(const Loan& loan) {
 }
 
 Loan json_to_loan(const json& j) {
-  return Loan::from_save(
-      core::BankId{j["bank_id"].get<int32_t>()},
-      Money{j["start_amount"].get<int64_t>()},
-      j["interest_percentage"].get<uint8_t>(), j["start_months"].get<int>(),
-      j["months_left"].get<int>(), Money{j["monthly_principal"].get<int64_t>()},
-      Money{j["monthly_interest"].get<int64_t>()});
+  return Loan::from_save(core::BankId{j.at("bank_id").get<int32_t>()},
+                         Money{j.at("start_amount").get<int64_t>()},
+                         j.at("interest_percentage").get<uint8_t>(),
+                         j.at("start_months").get<int>(),
+                         j.at("months_left").get<int>(),
+                         Money{j.at("monthly_principal").get<int64_t>()},
+                         Money{j.at("monthly_interest").get<int64_t>()});
 }
 
 json investment_to_json(const Investment& inv) {
@@ -837,11 +840,11 @@ json investment_to_json(const Investment& inv) {
 
 Investment json_to_investment(const json& j) {
   return Investment::from_save(
-      core::BankId{j["bank_id"].get<int32_t>()},
-      core::CityId{j["city_id"].get<int32_t>()},
-      Money{j["amount"].get<int64_t>()}, j["return_rate"].get<int>(),
-      j["start_months"].get<int>(), j["months_left"].get<int>(),
-      Money{j["monthly_return"].get<int64_t>()});
+      core::BankId{j.at("bank_id").get<int32_t>()},
+      core::CityId{j.at("city_id").get<int32_t>()},
+      Money{j.at("amount").get<int64_t>()}, j.at("return_rate").get<int>(),
+      j.at("start_months").get<int>(), j.at("months_left").get<int>(),
+      Money{j.at("monthly_return").get<int64_t>()});
 }
 
 // Only for loading saves from before the running balances. Their journal
@@ -902,12 +905,12 @@ Account account_from_saved_id(int id) {
 }
 
 Posting json_to_posting(const json& j) {
-  const int account_id = j["account"].get<int>();
-  Money amount{j["amount"].get<int64_t>()};
+  const int account_id = j.at("account").get<int>();
+  Money amount{j.at("amount").get<int64_t>()};
   std::optional<core::RestaurantId> restaurant_id = std::nullopt;
 
-  if (j.contains("restaurant_id") && !j["restaurant_id"].is_null()) {
-    restaurant_id = core::RestaurantId{j["restaurant_id"].get<int32_t>()};
+  if (j.contains("restaurant_id") && !j.at("restaurant_id").is_null()) {
+    restaurant_id = core::RestaurantId{j.at("restaurant_id").get<int32_t>()};
   }
 
   std::optional<MonthlyCategory> monthly;
@@ -926,17 +929,14 @@ JournalEntry json_to_journal_entry(const json& j) {
 
   // Restore date
   if (j.contains("date")) {
-    int year = j["date"]["year"].get<int>();
-    unsigned month = j["date"]["month"].get<unsigned>();
-    unsigned day = j["date"]["day"].get<unsigned>();
-    date = GameDate{year, static_cast<int>(month), static_cast<int>(day)};
+    date = json_to_date(j.at("date"));
   }
 
   JournalEntry entry{date, {}};
 
   // Restore postings
   if (j.contains("lines")) {
-    for (const auto& posting_json : j["lines"]) {
+    for (const auto& posting_json : j.at("lines")) {
       entry.lines.push_back(json_to_posting(posting_json));
     }
   }
@@ -967,8 +967,8 @@ MonthlyFigures json_to_month(const json& j) {
     return figures;
   };
   MonthlyFigures figures;
-  figures.set(j["month"].get<int>(), figures_from(j["this"]),
-              figures_from(j["last"]));
+  figures.set(j.at("month").get<int>(), figures_from(j.at("this")),
+              figures_from(j.at("last")));
   return figures;
 }
 
@@ -993,13 +993,14 @@ void json_to_ledger(const json& j, Ledger& ledger) {
   for (std::size_t a = 0; a < account_count; ++a) {
     const auto account = static_cast<Account>(a);
     ledger.set_balance(
-        account, Money{j["balances"].value(std::string(to_string(account)),
-                                           int64_t{0})});
+        account,
+        Money{j.at("balances")
+                  .value(std::string(to_string(account)), int64_t{0})});
   }
-  ledger.set_month(json_to_month(j["month"]));
-  for (const auto& r : j["restaurant_months"]) {
+  ledger.set_month(json_to_month(j.at("month")));
+  for (const auto& r : j.at("restaurant_months")) {
     ledger.set_restaurant_month(
-        core::RestaurantId{r["restaurant_id"].get<int32_t>()},
+        core::RestaurantId{r.at("restaurant_id").get<int32_t>()},
         json_to_month(r));
   }
 }
@@ -1033,15 +1034,15 @@ PlayerFinancials json_to_player_financials(const json& j) {
   PlayerFinancials financials;
 
   if (j.contains("books")) {
-    json_to_ledger(j["books"], financials.ledger());
+    json_to_ledger(j.at("books"), financials.ledger());
   }
   else if (j.contains("journal")) {
-    replay_journal(j["journal"], financials);
+    replay_journal(j.at("journal"), financials);
   }
 
   if (j.contains("daily_profit_history")) {
     std::array<int64_t, PlayerFinancials::daily_profit_days_max> history{};
-    const auto& arr = j["daily_profit_history"];
+    const auto& arr = j.at("daily_profit_history");
     for (int i = 0; i < PlayerFinancials::daily_profit_days_max &&
                     i < static_cast<int>(arr.size());
          ++i) {
@@ -1053,13 +1054,13 @@ PlayerFinancials json_to_player_financials(const json& j) {
 
   if (j.contains("weekly_city_profit")) {
     financials.set_weekly_city_profits(
-        j["weekly_city_profit"].get<std::array<int64_t, NUMBER_OF_CITIES>>(),
+        j.at("weekly_city_profit").get<std::array<int64_t, NUMBER_OF_CITIES>>(),
         j.value("days_present", std::array<int, NUMBER_OF_CITIES>{}));
   }
 
   if (j.contains("liquidity")) {
     std::array<int64_t, PlayerFinancials::liquidity_weeks_max> weeks{};
-    const auto& arr = j["liquidity"];
+    const auto& arr = j.at("liquidity");
     for (int i = 0; i < PlayerFinancials::liquidity_weeks_max &&
                     i < static_cast<int>(arr.size());
          ++i) {

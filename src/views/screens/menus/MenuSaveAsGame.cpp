@@ -12,6 +12,7 @@
 #include "resources/util/FileUtils.h"
 #include "views/screens/menus/MenuTheme.h"
 #include "views/ui/PopupManager.h"
+#include "views/ui/popups/AlertPopup.h"
 #include "views/ui/popups/ConfirmPopup.h"
 #include "views/ui/widgets/ArrowMenuItem.h"
 #include "views/ui/widgets/PositionMarkerMenuItem.h"
@@ -114,7 +115,8 @@ void MenuSaveAsGame::save_to_existing_file(const std::string& filename) {
 void MenuSaveAsGame::perform_save(const std::string& filename) {
   busy_cursor_.run(
       [this, filename] {
-        if (save::SaveGameManager::save(state_, context_, filename)) {
+        std::string error;
+        if (save::SaveGameManager::save(state_, context_, filename, &error)) {
           Logger::info("Successfully saved: {}", filename);
           // Pop twice to get back to DiskMenu (not just to the save menu)
           state_.ui().pop();
@@ -122,7 +124,8 @@ void MenuSaveAsGame::perform_save(const std::string& filename) {
         }
         else {
           Logger::warn("Failed to save: {}", filename);
-          // TODO: Show error popup to user
+          // Stay on the save screen so the player can try another name.
+          context_.popup->create<AlertPopup>(error);
         }
       },
       "Saving...");

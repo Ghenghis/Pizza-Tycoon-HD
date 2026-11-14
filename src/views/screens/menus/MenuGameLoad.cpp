@@ -176,12 +176,14 @@ void MenuGameLoad::load_selected_file() {
       [this] {
         Logger::info("Loading save file: {}", selected_file_);
 
-        if (save::SaveGameManager::load(state_, context_, selected_file_)) {
+        std::string error;
+        if (save::SaveGameManager::load(state_, context_, selected_file_,
+                                        &error)) {
           Logger::info("Successfully loaded: {}", selected_file_);
         }
         else {
           Logger::warn("Failed to load: {}", selected_file_);
-          context_.popup->create<AlertPopup>("Failed to load save file.");
+          context_.popup->create<AlertPopup>(error);
         }
       },
       "Loading...");

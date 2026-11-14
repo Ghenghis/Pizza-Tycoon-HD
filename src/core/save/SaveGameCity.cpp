@@ -69,46 +69,48 @@ json property_to_json(const Property& property) {
 void json_to_property(const json& j, Property& property) {
   // Restore size
   if (j.contains("size")) {
-    property.size(Size{j["size"]["w"].get<int>(), j["size"]["h"].get<int>()});
+    property.size(
+        Size{j.at("size").at("w").get<int>(), j.at("size").at("h").get<int>()});
   }
 
   if (j.contains("kitchen_size")) {
-    property.kitchen_size(Size{j["kitchen_size"]["w"].get<int>(),
-                               j["kitchen_size"]["h"].get<int>()});
+    property.kitchen_size(Size{j.at("kitchen_size").at("w").get<int>(),
+                               j.at("kitchen_size").at("h").get<int>()});
   }
   if (j.contains("entrance_offset")) {
-    property.entrance_offset(j["entrance_offset"].get<int>());
+    property.entrance_offset(j.at("entrance_offset").get<int>());
   }
   if (j.contains("kitchen_entry_offset")) {
-    property.kitchen_entry_offset(j["kitchen_entry_offset"].get<int>());
+    property.kitchen_entry_offset(j.at("kitchen_entry_offset").get<int>());
   }
 
   // Restore realtor_id (important to preserve randomly assigned realtors)
   if (j.contains("realtor_id")) {
-    property.realtor_id(core::ActorId{j["realtor_id"].get<int>()});
+    property.realtor_id(core::ActorId{j.at("realtor_id").get<int>()});
   }
 
   if (j.contains("purchase_price")) {
-    property.purchase_price(Money{j["purchase_price"].get<int64_t>()});
+    property.purchase_price(Money{j.at("purchase_price").get<int64_t>()});
   }
 
   // Restore status
   if (j.contains("status")) {
-    property.status(static_cast<PremiseStatus>(j["status"].get<int>()));
+    property.status(static_cast<PremiseStatus>(j.at("status").get<int>()));
   }
 
   // Restore potential customers per demographic
   if (j.contains("potential_customers")) {
     auto& pc = property.potential_customers();
-    for (size_t i = 0; i < 6 && i < j["potential_customers"].size(); ++i) {
-      pc.data()[i] = j["potential_customers"][i].get<int>();
+    for (size_t i = 0; i < 6 && i < j.at("potential_customers").size(); ++i) {
+      pc.data()[i] = j.at("potential_customers").at(i).get<int>();
     }
   }
 
   // Restore owner/tenant (must explicitly clear if null)
   if (j.contains("owner_or_tenant")) {
-    if (!j["owner_or_tenant"].is_null()) {
-      property.owner_or_tenant(core::PlayerId{j["owner_or_tenant"].get<int>()});
+    if (!j.at("owner_or_tenant").is_null()) {
+      property.owner_or_tenant(
+          core::PlayerId{j.at("owner_or_tenant").get<int>()});
     }
     else {
       // Clear owner/tenant if the save has null
@@ -118,8 +120,9 @@ void json_to_property(const json& j, Property& property) {
 
   // Restore restaurant link (must explicitly clear if null)
   if (j.contains("restaurant_id")) {
-    if (!j["restaurant_id"].is_null()) {
-      property.restaurant_id(core::RestaurantId{j["restaurant_id"].get<int>()});
+    if (!j.at("restaurant_id").is_null()) {
+      property.restaurant_id(
+          core::RestaurantId{j.at("restaurant_id").get<int>()});
     }
     else {
       // Clear restaurant link if the save has null
@@ -130,7 +133,7 @@ void json_to_property(const json& j, Property& property) {
   // Make sure to restore the owner before this
   if (j.contains("weapons")) {
     if (auto* weapons = property.weapons()) {
-      load_inventory(j["weapons"], *weapons);
+      load_inventory(j.at("weapons"), *weapons);
     }
   }
 }
@@ -178,8 +181,8 @@ json supplier_to_json(const FoodSupplier& supplier) {
 
 void json_to_supplier(const json& j, FoodSupplier& supplier) {
   if (j.contains("price_levels")) {
-    for (int i = 0; i < static_cast<int>(j["price_levels"].size()); ++i) {
-      supplier.price_level(i, j["price_levels"][i].get<uint8_t>());
+    for (int i = 0; i < static_cast<int>(j.at("price_levels").size()); ++i) {
+      supplier.price_level(i, j.at("price_levels").at(i).get<uint8_t>());
     }
   }
 
@@ -188,8 +191,8 @@ void json_to_supplier(const json& j, FoodSupplier& supplier) {
     int idx = 0;
     for (auto ing_type :
          core::food::CategoryRegistry::range(supplier.category())) {
-      if (idx < static_cast<int>(j["stock"].size())) {
-        supplier.set_stock(ing_type, j["stock"][idx].get<int>());
+      if (idx < static_cast<int>(j.at("stock").size())) {
+        supplier.set_stock(ing_type, j.at("stock").at(idx).get<int>());
         idx++;
       }
     }
@@ -198,45 +201,48 @@ void json_to_supplier(const json& j, FoodSupplier& supplier) {
   // Restore per-player relationships
   if (j.contains("relationships")) {
     int idx = 0;
-    for (const auto& rel_json : j["relationships"]) {
+    for (const auto& rel_json : j.at("relationships")) {
       if (idx >= NUMBER_OF_PLAYERS) {
         break;
       }
       core::PlayerId pid{idx};
       auto& rel = supplier.relationship(pid);
       if (rel_json.contains("total_spent")) {
-        rel.total_spent = Money{rel_json["total_spent"].get<int64_t>()};
+        rel.total_spent = Money{rel_json.at("total_spent").get<int64_t>()};
       }
       if (rel_json.contains("contract_count")) {
-        rel.contract_count = rel_json["contract_count"].get<int>();
+        rel.contract_count = rel_json.at("contract_count").get<int>();
       }
       if (rel_json.contains("relationship_score")) {
-        rel.relationship_score = rel_json["relationship_score"].get<uint8_t>();
+        rel.relationship_score =
+            rel_json.at("relationship_score").get<uint8_t>();
       }
       if (rel_json.contains("frustration")) {
-        rel.frustration = rel_json["frustration"].get<uint8_t>();
+        rel.frustration = rel_json.at("frustration").get<uint8_t>();
       }
       if (rel_json.contains("last_delivery_days")) {
-        rel.last_delivery_days = rel_json["last_delivery_days"].get<uint8_t>();
+        rel.last_delivery_days =
+            rel_json.at("last_delivery_days").get<uint8_t>();
       }
       if (rel_json.contains("last_payment_freq")) {
-        rel.last_payment_freq = rel_json["last_payment_freq"].get<uint16_t>();
+        rel.last_payment_freq =
+            rel_json.at("last_payment_freq").get<uint16_t>();
       }
       if (rel_json.contains("delivery_issues_flag")) {
         rel.delivery_issues_flag =
-            rel_json["delivery_issues_flag"].get<uint8_t>();
+            rel_json.at("delivery_issues_flag").get<uint8_t>();
       }
       if (rel_json.contains("outstanding_debt")) {
         rel.outstanding_debt =
-            Money{rel_json["outstanding_debt"].get<int64_t>()};
+            Money{rel_json.at("outstanding_debt").get<int64_t>()};
       }
       if (rel_json.contains("last_contract_sum")) {
         rel.last_contract_sum =
-            Money{rel_json["last_contract_sum"].get<int64_t>()};
+            Money{rel_json.at("last_contract_sum").get<int64_t>()};
       }
       if (rel_json.contains("missed_payment_penalty")) {
         rel.missed_payment_penalty =
-            rel_json["missed_payment_penalty"].get<uint8_t>();
+            rel_json.at("missed_payment_penalty").get<uint8_t>();
       }
       idx++;
     }
@@ -276,7 +282,7 @@ json pizza_charts_to_json(const PizzaCharts& charts) {
 void json_to_pizza_charts(const json& j, PizzaCharts& charts) {
   if (j.contains("entries")) {
     std::vector<PizzaChartEntry> entries;
-    for (const auto& e : j["entries"]) {
+    for (const auto& e : j.at("entries")) {
       entries.push_back(json_to_pizza_chart_entry(e));
     }
     charts.set_entries(std::move(entries));
@@ -299,7 +305,7 @@ void json_to_control_map(const json& j, ControlMap& cm) {
   if (j.contains("cell_owners")) {
     std::array<std::optional<core::PlayerId>, CONTROL_MAP_CELLS> owners{};
     int i = 0;
-    for (const auto& val : j["cell_owners"]) {
+    for (const auto& val : j.at("cell_owners")) {
       int v = val.get<int>();
       if (v >= 0) {
         owners[i] = core::PlayerId{v};
@@ -312,7 +318,7 @@ void json_to_control_map(const json& j, ControlMap& cm) {
   }
   if (j.contains("player_percentages")) {
     std::array<float, NUMBER_OF_PLAYERS> pcts{};
-    const auto& arr = j["player_percentages"];
+    const auto& arr = j.at("player_percentages");
     for (int i = 0; i < NUMBER_OF_PLAYERS && i < static_cast<int>(arr.size());
          ++i) {
       pcts[i] = arr[i].get<float>();
@@ -333,20 +339,20 @@ json economy_trend_to_json(const EconomyTrend& et) {
 
 void json_to_economy_trend(const json& j, EconomyTrend& et) {
   if (j.contains("current")) {
-    et.current(j["current"].get<int>());
+    et.current(j.at("current").get<int>());
   }
   if (j.contains("target")) {
-    et.target(j["target"].get<int>());
+    et.target(j.at("target").get<int>());
   }
   if (j.contains("counter")) {
-    et.counter(j["counter"].get<int>());
+    et.counter(j.at("counter").get<int>());
   }
   if (j.contains("history_count")) {
-    et.history_count(j["history_count"].get<int>());
+    et.history_count(j.at("history_count").get<int>());
   }
   if (j.contains("history")) {
     std::array<int, 60> history{};
-    const auto& arr = j["history"];
+    const auto& arr = j.at("history");
     for (int i = 0; i < 60 && i < static_cast<int>(arr.size()); ++i) {
       history[i] = arr[i].get<int>();
     }
@@ -388,54 +394,56 @@ json mayor_office_to_json(const MayorOffice& mo) {
 
 void json_to_mayor_office(const json& j, MayorOffice& mo) {
   if (j.contains("favor_score")) {
-    for (int i = 0;
-         i < NUMBER_OF_PLAYERS && i < static_cast<int>(j["favor_score"].size());
+    for (int i = 0; i < NUMBER_OF_PLAYERS &&
+                    i < static_cast<int>(j.at("favor_score").size());
          ++i) {
-      mo.favor(i, j["favor_score"][i].get<int>());
+      mo.favor(i, j.at("favor_score").at(i).get<int>());
     }
   }
   if (j.contains("investment_activity")) {
     for (int i = 0; i < NUMBER_OF_PLAYERS &&
-                    i < static_cast<int>(j["investment_activity"].size());
+                    i < static_cast<int>(j.at("investment_activity").size());
          ++i) {
-      mo.investment_activity(i, j["investment_activity"][i].get<int32_t>());
+      mo.investment_activity(i,
+                             j.at("investment_activity").at(i).get<int32_t>());
     }
   }
   if (j.contains("fee_paid")) {
     mo.clear_fee_paid();
     for (int i = 0;
-         i < NUMBER_OF_PLAYERS && i < static_cast<int>(j["fee_paid"].size());
+         i < NUMBER_OF_PLAYERS && i < static_cast<int>(j.at("fee_paid").size());
          ++i) {
-      if (j["fee_paid"][i].get<bool>()) {
+      if (j.at("fee_paid").at(i).get<bool>()) {
         mo.fee_paid(i, true);
       }
     }
   }
   if (j.contains("pizza_competition_wins")) {
     for (int i = 0; i < NUMBER_OF_PLAYERS &&
-                    i < static_cast<int>(j["pizza_competition_wins"].size());
+                    i < static_cast<int>(j.at("pizza_competition_wins").size());
          ++i) {
-      mo.pizza_competition_wins(i, j["pizza_competition_wins"][i].get<int>());
+      mo.pizza_competition_wins(
+          i, j.at("pizza_competition_wins").at(i).get<int>());
     }
   }
   if (j.contains("public_bank_account")) {
-    mo.public_bank_account(j["public_bank_account"].get<int>());
+    mo.public_bank_account(j.at("public_bank_account").get<int>());
   }
   if (j.contains("private_bank_account")) {
-    mo.private_bank_account(j["private_bank_account"].get<int>());
+    mo.private_bank_account(j.at("private_bank_account").get<int>());
   }
   if (j.contains("appointment_day")) {
-    mo.appointment_day(j["appointment_day"].get<int>());
+    mo.appointment_day(j.at("appointment_day").get<int>());
   }
   if (j.contains("current_quarterly_award")) {
-    mo.current_quarterly_award(
-        static_cast<MayorAwardType>(j["current_quarterly_award"].get<int>()));
+    mo.current_quarterly_award(static_cast<MayorAwardType>(
+        j.at("current_quarterly_award").get<int>()));
   }
   if (j.contains("award_announcement_day")) {
-    mo.award_announcement_day(j["award_announcement_day"].get<int>());
+    mo.award_announcement_day(j.at("award_announcement_day").get<int>());
   }
   if (j.contains("award_winner_day")) {
-    mo.award_winner_day(j["award_winner_day"].get<int>());
+    mo.award_winner_day(j.at("award_winner_day").get<int>());
   }
 }
 
@@ -473,7 +481,7 @@ static json depot_to_json(const core::city::CentralDepot& depot) {
 
 static void json_to_depot(const json& j, core::city::CentralDepot& depot) {
   if (j.contains("capacity")) {
-    int saved = j["capacity"].get<int>();
+    int saved = j.at("capacity").get<int>();
     int delta = saved - depot.capacity();
     if (delta > 0) {
       depot.add_capacity(delta);
@@ -484,8 +492,8 @@ static void json_to_depot(const json& j, core::city::CentralDepot& depot) {
   }
   if (j.contains("stocks")) {
     depot.all_stocks().fill({});
-    for (const auto& s : j["stocks"]) {
-      int i = s["i"].get<int>();
+    for (const auto& s : j.at("stocks")) {
+      int i = s.at("i").get<int>();
       if (i < 0 || i >= max_ingredient_count) {
         continue;
       }
@@ -498,14 +506,14 @@ static void json_to_depot(const json& j, core::city::CentralDepot& depot) {
   }
   if (j.contains("delivery_priorities")) {
     std::vector<core::RestaurantId> prios;
-    for (const auto& v : j["delivery_priorities"]) {
+    for (const auto& v : j.at("delivery_priorities")) {
       prios.push_back(core::RestaurantId{v.get<int>()});
     }
     depot.delivery_priorities(std::move(prios));
   }
-  if (j.contains("stock_stolen") && !j["stock_stolen"].is_null()) {
+  if (j.contains("stock_stolen") && !j.at("stock_stolen").is_null()) {
     depot.stock_stolen(
-        static_cast<IngredientCategory>(j["stock_stolen"].get<int>()));
+        static_cast<IngredientCategory>(j.at("stock_stolen").get<int>()));
   }
 }
 
@@ -677,8 +685,8 @@ json city_to_json(const City& city) {
 void json_to_city(const json& j, City& city) {
   // Restore all properties
   if (j.contains("properties")) {
-    for (const auto& prop_json : j["properties"]) {
-      int index = prop_json["index"].get<int>();
+    for (const auto& prop_json : j.at("properties")) {
+      int index = prop_json.at("index").get<int>();
       Property* property = city.property_by_index(index);
       if (property) {
         json_to_property(prop_json, *property);
@@ -692,7 +700,7 @@ void json_to_city(const json& j, City& city) {
 
   // Restore blacklist
   if (j.contains("blacklist")) {
-    for (const auto& [key, value] : j["blacklist"].items()) {
+    for (const auto& [key, value] : j.at("blacklist").items()) {
       uint8_t char_id = static_cast<uint8_t>(std::stoi(key));
       for (const auto& player : value) {
         city.blacklist_staff(char_id, core::PlayerId{player.get<int>()});
@@ -702,7 +710,7 @@ void json_to_city(const json& j, City& city) {
 
   // Restore job market status array
   if (j.contains("job_market")) {
-    const auto& arr = j["job_market"];
+    const auto& arr = j.at("job_market");
     std::vector<core::character::MarketStatus> slots;
     slots.reserve(arr.size());
     for (const auto& entry : arr) {
@@ -714,8 +722,8 @@ void json_to_city(const json& j, City& city) {
 
   // Restore suppliers
   if (j.contains("suppliers")) {
-    for (const auto& supp_json : j["suppliers"]) {
-      uint8_t supplier_id = supp_json["id"].get<uint8_t>();
+    for (const auto& supp_json : j.at("suppliers")) {
+      uint8_t supplier_id = supp_json.at("id").get<uint8_t>();
 
       // Find the supplier by ID
       FoodSupplier* supplier = nullptr;
@@ -740,16 +748,20 @@ void json_to_city(const json& j, City& city) {
   if (j.contains("ingredient_trends")) {
     auto& trend_sys = city.ingredient_trend_system();
     trend_sys.clear();
-    for (const auto& slot_j : j["ingredient_trends"]) {
-      int slot = slot_j["slot"].get<int>();
+    for (const auto& slot_j : j.at("ingredient_trends")) {
+      int slot = slot_j.at("slot").get<int>();
+      // The slot indexes the trend arrays, like the depot's stock index.
+      if (slot < 0 || slot >= max_ingredient_count) {
+        continue;
+      }
       auto type = static_cast<core::food::IngredientType>(slot);
       TrendEffect effect;
-      effect.initial_value = slot_j["current"].get<int>();
-      effect.control = slot_j["target"].get<int>();
+      effect.initial_value = slot_j.at("current").get<int>();
+      effect.control = slot_j.at("target").get<int>();
       effect.duration =
-          static_cast<TrendDuration>(slot_j["duration"].get<int>());
+          static_cast<TrendDuration>(slot_j.at("duration").get<int>());
       trend_sys.apply_effect(type, effect);
-      if (!slot_j["approaching"].get<bool>()) {
+      if (!slot_j.at("approaching").get<bool>()) {
         trend_sys.reset_approaching(type);
       }
     }
@@ -757,23 +769,23 @@ void json_to_city(const json& j, City& city) {
 
   // Restore pizza charts
   if (j.contains("pizza_charts")) {
-    json_to_pizza_charts(j["pizza_charts"], city.pizza_charts());
+    json_to_pizza_charts(j.at("pizza_charts"), city.pizza_charts());
   }
 
   // Restore control map
   if (j.contains("control_map")) {
-    json_to_control_map(j["control_map"], city.control_map());
+    json_to_control_map(j.at("control_map"), city.control_map());
   }
 
   // Restore economy trend
   if (j.contains("economy_trend")) {
-    json_to_economy_trend(j["economy_trend"], city.economy_trend());
+    json_to_economy_trend(j.at("economy_trend"), city.economy_trend());
   }
 
   city.interest_rate(j.value("interest_rate", starting_interest_rate));
 
   if (j.contains("refused_call_actors")) {
-    for (const auto& actor_id : j["refused_call_actors"]) {
+    for (const auto& actor_id : j.at("refused_call_actors")) {
       city.refuse_calls_from(core::ActorId{actor_id.get<int>()});
     }
   }
@@ -781,7 +793,7 @@ void json_to_city(const json& j, City& city) {
   // Restore known arms dealers per player
   if (j.contains("known_arms_dealers")) {
     int player_idx = 0;
-    for (const auto& player_data : j["known_arms_dealers"]) {
+    for (const auto& player_data : j.at("known_arms_dealers")) {
       if (player_idx >= NUMBER_OF_PLAYERS) {
         break;
       }
@@ -793,7 +805,7 @@ void json_to_city(const json& j, City& city) {
 
       // Restore saved known arms dealers
       if (player_data.contains("known_actor_ids")) {
-        for (const auto& actor_id_json : player_data["known_actor_ids"]) {
+        for (const auto& actor_id_json : player_data.at("known_actor_ids")) {
           core::ActorId actor_id{actor_id_json.get<int>()};
           city.add_known_arms_dealer(player_id, actor_id);
         }
@@ -805,16 +817,16 @@ void json_to_city(const json& j, City& city) {
 
   // Restore newspaper state
   if (j.contains("newspaper_state")) {
-    const auto& ns_j = j["newspaper_state"];
+    const auto& ns_j = j.at("newspaper_state");
     auto& ns = city.newspaper_state();
     ns.article_id = ns_j.value("article_id", uint8_t{0});
     ns.cooldown = ns_j.value("cooldown", 0);
     ns.polarity = ns_j.value("polarity", int8_t{0});
     ns.category = ns_j.value("category", uint8_t{0});
     if (ns_j.contains("target_ingredient") &&
-        !ns_j["target_ingredient"].is_null()) {
+        !ns_j.at("target_ingredient").is_null()) {
       ns.target_ingredient = static_cast<core::food::IngredientType>(
-          ns_j["target_ingredient"].get<int>());
+          ns_j.at("target_ingredient").get<int>());
     }
     else {
       ns.target_ingredient = std::nullopt;
@@ -826,13 +838,13 @@ void json_to_city(const json& j, City& city) {
 
   // Restore mayor office state
   if (j.contains("mayor_office")) {
-    json_to_mayor_office(j["mayor_office"], city.mayor_office());
+    json_to_mayor_office(j.at("mayor_office"), city.mayor_office());
   }
 
   // Restore per-player central depots
   if (j.contains("central_depots")) {
     int player_idx = 0;
-    for (const auto& depot_j : j["central_depots"]) {
+    for (const auto& depot_j : j.at("central_depots")) {
       if (player_idx >= NUMBER_OF_PLAYERS) {
         break;
       }
@@ -846,18 +858,18 @@ void json_to_city(const json& j, City& city) {
     using core::newspaper::NewspaperEvent;
     std::array<NewspaperEvent, 50> types{};
     std::array<int, 50> countdowns{};
-    for (const auto& entry : j["newspaper_scheduled"]) {
-      int slot = entry["slot"].get<int>();
+    for (const auto& entry : j.at("newspaper_scheduled")) {
+      int slot = entry.at("slot").get<int>();
       if (slot >= 0 && slot < 50) {
-        types[slot] = static_cast<NewspaperEvent>(entry["event"].get<int>());
-        countdowns[slot] = entry["countdown"].get<int>();
+        types[slot] = static_cast<NewspaperEvent>(entry.at("event").get<int>());
+        countdowns[slot] = entry.at("countdown").get<int>();
       }
     }
     city.newspaper_event_system().restore_scheduled(types, countdowns);
   }
 
   if (j.contains("trade_embargoes")) {
-    const auto& embargoes = j["trade_embargoes"];
+    const auto& embargoes = j.at("trade_embargoes");
     for (std::size_t c = 0;
          c < ALL_INGREDIENT_CATEGORIES.size() && c < embargoes.size(); ++c) {
       city.trade_embargo_counter(ALL_INGREDIENT_CATEGORIES[c],
@@ -866,27 +878,27 @@ void json_to_city(const json& j, City& city) {
   }
 
   if (j.contains("poster_rates")) {
-    const auto& saved = j["poster_rates"];
+    const auto& saved = j.at("poster_rates");
     std::array<AdvertisingRate, NUMBER_OF_POSTERS> posters{};
     for (std::size_t i = 0; i < posters.size() && i < saved.size(); ++i) {
-      posters[i].effectiveness = saved[i]["effectiveness"].get<int>();
-      posters[i].cost = Money{saved[i]["cost"].get<int64_t>()};
+      posters[i].effectiveness = saved[i].at("effectiveness").get<int>();
+      posters[i].cost = Money{saved[i].at("cost").get<int64_t>()};
     }
     city.poster_rates(posters);
   }
 
   if (j.contains("tv_ad_rates")) {
-    const auto& saved = j["tv_ad_rates"];
+    const auto& saved = j.at("tv_ad_rates");
     std::array<AdvertisingRate, NUMBER_OF_TV_ADS> tv_ads{};
     for (std::size_t i = 0; i < tv_ads.size() && i < saved.size(); ++i) {
-      tv_ads[i].effectiveness = saved[i]["effectiveness"].get<int>();
-      tv_ads[i].cost = Money{saved[i]["cost"].get<int64_t>()};
+      tv_ads[i].effectiveness = saved[i].at("effectiveness").get<int>();
+      tv_ads[i].cost = Money{saved[i].at("cost").get<int64_t>()};
     }
     city.tv_ad_rates(tv_ads);
   }
 
   if (j.contains("weekly_vendor_spending")) {
-    const auto& spending = j["weekly_vendor_spending"];
+    const auto& spending = j.at("weekly_vendor_spending");
     for (int player_idx = 0; player_idx < NUMBER_OF_PLAYERS &&
                              player_idx < static_cast<int>(spending.size());
          ++player_idx) {

@@ -16,10 +16,13 @@ public:
 
   bool load_config();
 
-  void save_config();
+  // Rewrites the settings file. Returns false, logging why and leaving the
+  // old file in place, if it could not be written.
+  bool save_config();
   const std::string value(const std::string& key) const;
   void value(const std::string& key, const std::string& value);
-  void save_options(const GameOptions& opts);
+  // Stores the options that differ from the defaults, then save_config().
+  bool save_options(const GameOptions& opts);
   GameOptions load_options() const;
 
   std::string active_game_path() const;

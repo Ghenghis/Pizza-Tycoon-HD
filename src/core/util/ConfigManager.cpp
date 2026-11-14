@@ -11,12 +11,13 @@
 #include <charconv>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include "core/food/PizzaJudging.h"
 #include "core/state/GameOptions.h"
 #include "core/state/GameRules.h"
-#include "engine/Fatal.h"
+#include "core/util/AtomicFile.h"
 #include "engine/Logger.h"
 #include "engine/StringUtil.h"
 #include "engine/gfx/HdImage.h"
@@ -280,12 +281,10 @@ bool ConfigManager::load_config() {
   return true;
 }
 
-void ConfigManager::save_config() {
-  std::ofstream file(filename_);
-  if (!file.is_open()) {
-    fatal("Unable to open config file for writing");
-  }
-
+bool ConfigManager::save_config() {
+  // Built in memory and written in one step, so a failed write leaves the old
+  // settings file as it was.
+  std::ostringstream file;
   file << settings_preamble;
 
   const GameOptions defaults;
@@ -303,6 +302,14 @@ void ConfigManager::save_config() {
   for (const auto& [key, value] : config_) {
     file << key << "=" << value << "\n";
   }
+
+  const util::AtomicWriteResult result =
+      util::write_file_atomically(filename_, file.str());
+  if (!result) {
+    Logger::warn("Settings not saved: {}", result.error);
+    return false;
+  }
+  return true;
 }
 
 const std::string ConfigManager::value(const std::string& key) const {
@@ -318,7 +325,7 @@ void ConfigManager::value(const std::string& key, const std::string& value) {
   config_[key] = value;
 }
 
-void ConfigManager::save_options(const GameOptions& opts) {
+bool ConfigManager::save_options(const GameOptions& opts) {
   const GameOptions defaults;
   for (const auto& def : option_defs) {
     std::string value = def.get(opts);
@@ -330,7 +337,7 @@ void ConfigManager::save_options(const GameOptions& opts) {
     }
   }
 
-  save_config();
+  return save_config();
 }
 
 GameOptions ConfigManager::load_options() const {

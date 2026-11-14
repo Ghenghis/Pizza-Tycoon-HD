@@ -1179,8 +1179,14 @@ TurnOrchestrator::execute_pipeline_step(const turn::Step& step) {
           },
 
           [&](const turn::Autosave&) {
-            if (gs_->context_) {
-              save::SaveGameManager::autosave(*gs_, *gs_->context_);
+            // A failed autosave keeps the old one; the player is told, so
+            // they can save by hand.
+            if (gs_->context_ &&
+                !save::SaveGameManager::autosave(*gs_, *gs_->context_)) {
+              gs_->status().post(StatusMsg{
+                  .payload = std::string("Autosave failed! Save by hand."),
+                  .severity = StatusSeverity::Warning,
+              });
             }
             return StepResult::Done;
           },

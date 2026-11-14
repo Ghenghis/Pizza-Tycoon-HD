@@ -23,6 +23,8 @@ std::vector<std::string> binding_tokens(const InputManager& in, Action a);
 // Writes the bindings file if there isn't one yet.
 void write_bindings_template(const InputManager& in, const std::string& path);
 
-void save_bindings_file(const InputManager& in, const std::string& path);
+// Rewrites the bindings file. Returns false, logging why and leaving the old
+// file in place, if it could not be written.
+bool save_bindings_file(const InputManager& in, const std::string& path);
 
 } // namespace input

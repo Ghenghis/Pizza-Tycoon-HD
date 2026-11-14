@@ -50,22 +50,22 @@ json staff_to_json(const Staff& staff) {
 
 Staff json_to_staff(const json& j) {
   auto job_role =
-      static_cast<core::character::JobRole>(j["job_role"].get<int>());
-  auto character = json_to_character(j["character"]);
+      static_cast<core::character::JobRole>(j.at("job_role").get<int>());
+  auto character = json_to_character(j.at("character"));
   Staff staff(job_role, character);
 
   // Handle both old format (dollars as int) and new format (cents as int64)
   if (j.contains("payment_cents")) {
-    staff.payment(Money{j["payment_cents"].get<int64_t>()});
+    staff.payment(Money{j.at("payment_cents").get<int64_t>()});
   }
   else if (j.contains("payment")) {
     // Legacy format: payment in dollars, convert to cents
-    int dollars = j["payment"].get<int>();
+    int dollars = j.at("payment").get<int>();
     staff.payment(Money::from_dollars(dollars));
   }
 
   if (j.contains("course")) {
-    auto course = static_cast<TrainingType>(j["course"].get<int>());
+    auto course = static_cast<TrainingType>(j.at("course").get<int>());
     staff.send_on_training(TrainingFactory::create_training(course));
   }
   staff.days_away(j.value("days_away_remaining", 0));
@@ -97,17 +97,17 @@ json manager_settings_to_json(const ManagerSettings& settings) {
 ManagerSettings json_to_manager_settings(const json& j) {
   ManagerSettings m;
   if (j.contains("shopping_if_needed")) {
-    m.shopping_if_needed = j["shopping_if_needed"].get<bool>();
+    m.shopping_if_needed = j.at("shopping_if_needed").get<bool>();
   }
   if (j.contains("change_prices")) {
-    m.change_prices = j["change_prices"].get<bool>();
+    m.change_prices = j.at("change_prices").get<bool>();
   }
   if (j.contains("overdraw_account")) {
-    m.overdraw_account = j["overdraw_account"].get<bool>();
+    m.overdraw_account = j.at("overdraw_account").get<bool>();
   }
   auto restore_setting = [&](std::string_view setting, auto& member) {
     if (j.contains(setting)) {
-      member = static_cast<ManagerReaction>(j[setting].get<int>());
+      member = static_cast<ManagerReaction>(j.at(setting).get<int>());
     }
   };
   restore_setting("turnover_decrease", m.turnover_decrease);
@@ -116,7 +116,7 @@ ManagerSettings json_to_manager_settings(const json& j) {
   restore_setting("staff_shortage", m.staff_shortage);
   if (j.contains("behavior_towards_staff")) {
     m.behavior_towards_staff =
-        static_cast<ManagerBehavior>(j["behavior_towards_staff"].get<int>());
+        static_cast<ManagerBehavior>(j.at("behavior_towards_staff").get<int>());
   }
   return m;
 }
@@ -144,21 +144,24 @@ json menu_to_json(const core::restaurant::Menu& menu) {
 core::restaurant::Menu json_to_menu(const json& j) {
   core::restaurant::Menu menu;
   for (const auto& entry_json : j) {
-    core::RecipeId recipe_id{entry_json["recipe_id"].get<int>()};
-    Money price{entry_json["price"].get<int64_t>()};
+    core::RecipeId recipe_id{entry_json.at("recipe_id").get<int>()};
+    Money price{entry_json.at("price").get<int64_t>()};
 
     int idx = menu.add_or_set(recipe_id, price);
 
     if (entry_json.contains("quality_base")) {
-      menu.entries()[idx].quality_base = entry_json["quality_base"].get<int>();
+      menu.entries()[idx].quality_base =
+          entry_json.at("quality_base").get<int>();
     }
 
     // Restore popularity multipliers
     if (entry_json.contains("popularity_multiplier")) {
       auto& entry = menu.entries()[idx];
-      for (size_t i = 0; i < entry_json["popularity_multiplier"].size(); ++i) {
-        entry.popularity_multiplier[i] =
-            entry_json["popularity_multiplier"][i].get<float>();
+      const auto& multipliers = entry_json.at("popularity_multiplier");
+      for (size_t i = 0;
+           i < multipliers.size() && i < entry.popularity_multiplier.size();
+           ++i) {
+        entry.popularity_multiplier[i] = multipliers.at(i).get<float>();
       }
     }
   }
@@ -178,18 +181,18 @@ json floor_pattern_to_json(const FloorPattern& pattern) {
 
 FloorPattern json_to_floor_pattern(const json& j) {
   FloorPattern pattern;
-  pattern.vendor_id = j["vendor_id"].get<uint8_t>();
+  pattern.vendor_id = j.at("vendor_id").get<uint8_t>();
 
-  for (size_t i = 0; i < 4 && i < j["tile_indices"].size(); ++i) {
-    pattern.tile_indices[i] = j["tile_indices"][i].get<uint8_t>();
+  for (size_t i = 0; i < 4 && i < j.at("tile_indices").size(); ++i) {
+    pattern.tile_indices[i] = j.at("tile_indices").at(i).get<uint8_t>();
   }
 
   for (size_t i = 0;
-       i < pattern.popularity.size() && i < j["popularity"].size(); ++i) {
-    pattern.popularity[i] = j["popularity"][i].get<int8_t>();
+       i < pattern.popularity.size() && i < j.at("popularity").size(); ++i) {
+    pattern.popularity[i] = j.at("popularity").at(i).get<int8_t>();
   }
 
-  pattern.popularity_factor = j["popularity_factor"].get<uint8_t>();
+  pattern.popularity_factor = j.at("popularity_factor").get<uint8_t>();
   pattern.quality = j.value("quality", uint8_t{0});
   pattern.price_per_tile = Money{j.value("price_per_tile", int64_t{0})};
   return pattern;
@@ -222,7 +225,7 @@ json placed_furniture_to_json(const PlacedFurniture& pf) {
 }
 
 std::unique_ptr<PlacedFurniture> json_to_placed_furniture(const json& j) {
-  int furniture_type = j["furniture_type"].get<int>();
+  int furniture_type = j.at("furniture_type").get<int>();
   const Furniture* furniture = FurnitureFactory::create_furniture(
       static_cast<FurnitureType>(furniture_type));
 
@@ -231,14 +234,15 @@ std::unique_ptr<PlacedFurniture> json_to_placed_furniture(const json& j) {
     return nullptr;
   }
 
-  core::FurnitureId id{j["id"].get<int>()};
-  WorldPoint origin{j["origin"]["x"].get<int>(), j["origin"]["y"].get<int>()};
-  int bob_state = j["bob_state"].get<int>();
+  core::FurnitureId id{j.at("id").get<int>()};
+  WorldPoint origin{j.at("origin").at("x").get<int>(),
+                    j.at("origin").at("y").get<int>()};
+  int bob_state = j.at("bob_state").get<int>();
 
   core::FurnitureId linked_id{UNLINKED_FURNITURE};
   if (j.contains("linked_furniture_id") &&
-      !j["linked_furniture_id"].is_null()) {
-    linked_id = core::FurnitureId{j["linked_furniture_id"].get<int>()};
+      !j.at("linked_furniture_id").is_null()) {
+    linked_id = core::FurnitureId{j.at("linked_furniture_id").get<int>()};
   }
 
   return std::make_unique<PlacedFurniture>(furniture, id, origin, linked_id,
@@ -282,24 +286,24 @@ json restaurant_layout_to_json(const RestaurantLayout& layout) {
 }
 
 std::unique_ptr<RestaurantLayout> json_to_restaurant_layout(const json& j) {
-  Size restaurant_size{j["restaurant_size"]["w"].get<int>(),
-                       j["restaurant_size"]["h"].get<int>()};
-  Size kitchen_size{j["kitchen_size"]["w"].get<int>(),
-                    j["kitchen_size"]["h"].get<int>()};
-  int entrance_offset = j["entrance_offset"].get<int>();
-  int kitchen_entry_offset = j["kitchen_entry_offset"].get<int>();
+  Size restaurant_size{j.at("restaurant_size").at("w").get<int>(),
+                       j.at("restaurant_size").at("h").get<int>()};
+  Size kitchen_size{j.at("kitchen_size").at("w").get<int>(),
+                    j.at("kitchen_size").at("h").get<int>()};
+  int entrance_offset = j.at("entrance_offset").get<int>();
+  int kitchen_entry_offset = j.at("kitchen_entry_offset").get<int>();
 
   auto layout = std::make_unique<RestaurantLayout>(
       restaurant_size, kitchen_size, entrance_offset, kitchen_entry_offset);
 
   // Restore floor pattern
   if (j.contains("floor_pattern")) {
-    layout->floor_pattern(json_to_floor_pattern(j["floor_pattern"]));
+    layout->floor_pattern(json_to_floor_pattern(j.at("floor_pattern")));
   }
 
   // Restore placed furniture
   if (j.contains("placed_furniture")) {
-    for (const auto& pf_json : j["placed_furniture"]) {
+    for (const auto& pf_json : j.at("placed_furniture")) {
       auto pf = json_to_placed_furniture(pf_json);
       if (pf) {
         layout->place_furniture(std::move(pf));
@@ -309,7 +313,7 @@ std::unique_ptr<RestaurantLayout> json_to_restaurant_layout(const json& j) {
 
   // Restore kitchen furniture
   if (j.contains("placed_kitchen_furniture")) {
-    for (const auto& pf_json : j["placed_kitchen_furniture"]) {
+    for (const auto& pf_json : j.at("placed_kitchen_furniture")) {
       auto pf = json_to_placed_furniture(pf_json);
       if (pf) {
         layout->place_kitchen_furniture(std::move(pf));
@@ -476,21 +480,21 @@ json restaurant_to_json(const Restaurant& restaurant) {
 // Property pointer must be set afterwards by the caller
 std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
                                                Property& property) {
-  core::RestaurantId rid{j["id"].get<int>()};
-  std::string name = j["name"].get<std::string>();
-  Size kitchen_size{j["kitchen_size"]["w"].get<int>(),
-                    j["kitchen_size"]["h"].get<int>()};
+  core::RestaurantId rid{j.at("id").get<int>()};
+  std::string name = j.at("name").get<std::string>();
+  Size kitchen_size{j.at("kitchen_size").at("w").get<int>(),
+                    j.at("kitchen_size").at("h").get<int>()};
 
   auto restaurant =
       std::make_unique<Restaurant>(property, kitchen_size, rid, name);
 
   if (j.contains("ai_layout_index")) {
-    restaurant->ai_layout(j["ai_layout_index"].get<int>(),
+    restaurant->ai_layout(j.at("ai_layout_index").get<int>(),
                           j.value("ai_furniture_count", 0));
   }
 
   if (j.contains("ai_tier")) {
-    restaurant->ai_tier(j["ai_tier"].get<int>());
+    restaurant->ai_tier(j.at("ai_tier").get<int>());
     restaurant->ai_revenue_per_customer(
         j.value("ai_revenue_per_customer", j.value("ai_capacity_target", 0)));
     restaurant->ai_customers_per_day(j.value("ai_customers_per_day", 0));
@@ -501,7 +505,7 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
 
   if (j.contains("preferred_suppliers")) {
     auto& chosen = restaurant->preferred_suppliers().data();
-    const auto& arr = j["preferred_suppliers"];
+    const auto& arr = j.at("preferred_suppliers");
     for (std::size_t c = 0; c < chosen.size() && c < arr.size(); ++c) {
       if (!arr[c].is_null()) {
         chosen[c] = arr[c].get<int>();
@@ -511,7 +515,8 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
 
   // Restore open state
   if (j.contains("wants_open")) {
-    RestaurantLoader::set_wants_open(*restaurant, j["wants_open"].get<bool>());
+    RestaurantLoader::set_wants_open(*restaurant,
+                                     j.at("wants_open").get<bool>());
     int forced = j.value("forced_days_remaining", 0);
     if (forced > 0) {
       restaurant->force_close(forced);
@@ -519,7 +524,7 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
   }
   // Legacy save compatibility: convert old enum-based format
   else if (j.contains("open_status")) {
-    int status = j["open_status"].get<int>();
+    int status = j.at("open_status").get<int>();
     // 0=Open, 1=ClosedOutOfHours, 2=ClosedManually, 3=ClosedForced
     RestaurantLoader::set_wants_open(*restaurant, status == 0 || status == 1);
     if (status == 3) {
@@ -534,16 +539,16 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
 
   // Restore menu
   if (j.contains("menu")) {
-    auto menu = json_to_menu(j["menu"]);
+    auto menu = json_to_menu(j.at("menu"));
     restaurant->menu() = std::move(menu);
   }
 
   // Restore cooks
   if (j.contains("cooks")) {
     auto& cooks = restaurant->cooks();
-    for (size_t i = 0; i < j["cooks"].size() && i < cooks.size(); ++i) {
-      if (!j["cooks"][i].is_null()) {
-        cooks[i] = json_to_staff(j["cooks"][i]);
+    for (size_t i = 0; i < j.at("cooks").size() && i < cooks.size(); ++i) {
+      if (!j.at("cooks").at(i).is_null()) {
+        cooks[i] = json_to_staff(j.at("cooks").at(i));
       }
     }
   }
@@ -551,48 +556,50 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
   // Restore waiters
   if (j.contains("waiters")) {
     auto& waiters = restaurant->waiters();
-    for (size_t i = 0; i < j["waiters"].size() && i < waiters.size(); ++i) {
-      if (!j["waiters"][i].is_null()) {
-        waiters[i] = json_to_staff(j["waiters"][i]);
+    for (size_t i = 0; i < j.at("waiters").size() && i < waiters.size(); ++i) {
+      if (!j.at("waiters").at(i).is_null()) {
+        waiters[i] = json_to_staff(j.at("waiters").at(i));
       }
     }
   }
 
   // Restore manager
-  if (j.contains("manager") && !j["manager"].is_null()) {
-    restaurant->manager() = json_to_staff(j["manager"]);
+  if (j.contains("manager") && !j.at("manager").is_null()) {
+    restaurant->manager() = json_to_staff(j.at("manager"));
   }
   // And the manager settings
-  if (j.contains("manager_settings") && !j["manager_settings"].is_null()) {
+  if (j.contains("manager_settings") && !j.at("manager_settings").is_null()) {
     restaurant->manager_settings() =
-        json_to_manager_settings(j["manager_settings"]);
+        json_to_manager_settings(j.at("manager_settings"));
   }
 
   // Restore layout
-  if (j.contains("layout") && !j["layout"].is_null()) {
-    auto layout = json_to_restaurant_layout(j["layout"]);
+  if (j.contains("layout") && !j.at("layout").is_null()) {
+    auto layout = json_to_restaurant_layout(j.at("layout"));
     restaurant->layout(std::move(layout));
   }
 
   // Restore stats
   if (j.contains("stats")) {
-    restaurant->stats() = json_to_restaurant_stats(j["stats"]);
+    restaurant->stats() = json_to_restaurant_stats(j.at("stats"));
   }
 
   // Restore operating hours
   if (j.contains("opening_time")) {
-    core::time::TimeOfDay opening{j["opening_time"]["hours"].get<int>(),
-                                  j["opening_time"]["minutes"].get<int>()};
+    core::time::TimeOfDay opening{
+        j.at("opening_time").at("hours").get<int>(),
+        j.at("opening_time").at("minutes").get<int>()};
     restaurant->opening_time(opening);
   }
   if (j.contains("closing_time")) {
-    core::time::TimeOfDay closing{j["closing_time"]["hours"].get<int>(),
-                                  j["closing_time"]["minutes"].get<int>()};
+    core::time::TimeOfDay closing{
+        j.at("closing_time").at("hours").get<int>(),
+        j.at("closing_time").at("minutes").get<int>()};
     restaurant->closing_time(closing);
   }
 
   if (j.contains("popularity")) {
-    const auto& p = j["popularity"];
+    const auto& p = j.at("popularity");
     RestaurantPopularity popularity;
     popularity.waiting_time = p.value("waiting_time", 0);
     popularity.pizza_prices = p.value("pizza_prices", 0);
@@ -607,90 +614,90 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
 
   // Restore full economy state
   if (j.contains("total_popularity")) {
-    restaurant->economy().total_popularity(j["total_popularity"].get<int>());
+    restaurant->economy().total_popularity(j.at("total_popularity").get<int>());
   }
 
   // Support both old "quality_multiplier" and new "quality_rating" field names
   if (j.contains("quality_rating")) {
-    restaurant->economy().quality_rating(j["quality_rating"].get<int>());
+    restaurant->economy().quality_rating(j.at("quality_rating").get<int>());
   }
   else if (j.contains("quality_multiplier")) {
-    restaurant->economy().quality_rating(j["quality_multiplier"].get<int>());
+    restaurant->economy().quality_rating(j.at("quality_multiplier").get<int>());
   }
 
   if (j.contains("rejection_rate")) {
-    restaurant->economy().rejection_rate(j["rejection_rate"].get<int>());
+    restaurant->economy().rejection_rate(j.at("rejection_rate").get<int>());
   }
   if (j.contains("fulfillment_rate")) {
-    restaurant->fulfillment_rate(j["fulfillment_rate"].get<int>());
+    restaurant->fulfillment_rate(j.at("fulfillment_rate").get<int>());
   }
 
   if (j.contains("range_raw")) {
-    restaurant->economy().range_raw(j["range_raw"].get<int>());
+    restaurant->economy().range_raw(j.at("range_raw").get<int>());
   }
   if (j.contains("range_tiles")) {
-    restaurant->economy().range_tiles(j["range_tiles"].get<int>());
+    restaurant->economy().range_tiles(j.at("range_tiles").get<int>());
   }
 
   // Restore demographic arrays
   if (j.contains("furniture_appeal")) {
     auto& fa = restaurant->economy().furniture_appeal();
-    for (size_t i = 0; i < 6 && i < j["furniture_appeal"].size(); ++i) {
-      fa.data()[i] = j["furniture_appeal"][i].get<int>();
+    for (size_t i = 0; i < 6 && i < j.at("furniture_appeal").size(); ++i) {
+      fa.data()[i] = j.at("furniture_appeal").at(i).get<int>();
     }
   }
   if (j.contains("menu_factor")) {
     auto& mf = restaurant->economy().menu_factor();
-    for (size_t i = 0; i < 6 && i < j["menu_factor"].size(); ++i) {
-      mf.data()[i] = j["menu_factor"][i].get<int>();
+    for (size_t i = 0; i < 6 && i < j.at("menu_factor").size(); ++i) {
+      mf.data()[i] = j.at("menu_factor").at(i).get<int>();
     }
   }
   if (j.contains("competitive_strength")) {
     auto& cs = restaurant->economy().competitive_strength();
-    for (size_t i = 0; i < 6 && i < j["competitive_strength"].size(); ++i) {
-      cs.data()[i] = j["competitive_strength"][i].get<int>();
+    for (size_t i = 0; i < 6 && i < j.at("competitive_strength").size(); ++i) {
+      cs.data()[i] = j.at("competitive_strength").at(i).get<int>();
     }
   }
   if (j.contains("customer_counts")) {
     auto& cc = restaurant->economy().customer_counts();
-    for (size_t i = 0; i < 6 && i < j["customer_counts"].size(); ++i) {
-      cc.data()[i] = j["customer_counts"][i].get<int>();
+    for (size_t i = 0; i < 6 && i < j.at("customer_counts").size(); ++i) {
+      cc.data()[i] = j.at("customer_counts").at(i).get<int>();
     }
   }
 
   // Restore competition data
   if (j.contains("demand_ratio")) {
-    restaurant->economy().demand_ratio(j["demand_ratio"].get<int>());
+    restaurant->economy().demand_ratio(j.at("demand_ratio").get<int>());
   }
   if (j.contains("competitor_count")) {
-    restaurant->economy().competitor_count(j["competitor_count"].get<int>());
+    restaurant->economy().competitor_count(j.at("competitor_count").get<int>());
   }
   if (j.contains("strongest_competitor") &&
-      !j["strongest_competitor"].is_null()) {
+      !j.at("strongest_competitor").is_null()) {
     restaurant->economy().strongest_competitor(
-        core::RestaurantId{j["strongest_competitor"].get<int>()});
+        core::RestaurantId{j.at("strongest_competitor").get<int>()});
   }
   if (j.contains("competition_score")) {
     restaurant->economy().competition_score(
-        j["competition_score"].get<int16_t>());
+        j.at("competition_score").get<int16_t>());
   }
 
   // Restore jukebox/TV settings
   if (j.contains("jukebox_music")) {
-    restaurant->economy().jukebox_music(j["jukebox_music"].get<int>());
+    restaurant->economy().jukebox_music(j.at("jukebox_music").get<int>());
   }
   if (j.contains("tv_channel")) {
-    restaurant->economy().tv_channel(j["tv_channel"].get<int>());
+    restaurant->economy().tv_channel(j.at("tv_channel").get<int>());
   }
 
   // Restore inventory
   if (j.contains("inventory")) {
-    restaurant->inventory() = json_to_restaurant_inventory(j["inventory"]);
+    restaurant->inventory() = json_to_restaurant_inventory(j.at("inventory"));
   }
 
   if (j.contains("daily_ingredient_demand")) {
     core::food::IngredientDemand demand{};
-    const auto& arr = j["daily_ingredient_demand"];
+    const auto& arr = j.at("daily_ingredient_demand");
     for (std::size_t i = 0; i < demand.size() && i < arr.size(); ++i) {
       demand[static_cast<int>(i)] = arr[i].get<int>();
     }
@@ -699,10 +706,11 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
 
   // Restore pizza quality
   if (j.contains("pizza_quality_rating")) {
-    restaurant->set_pizza_quality_rating(j["pizza_quality_rating"].get<int>());
+    restaurant->set_pizza_quality_rating(
+        j.at("pizza_quality_rating").get<int>());
   }
   if (j.contains("pizza_quality_factors")) {
-    const auto& pqf = j["pizza_quality_factors"];
+    const auto& pqf = j.at("pizza_quality_factors");
     if (pqf.size() == 4) {
       PizzaQualityFactors factors;
       factors.ingredients = pqf[0].get<int>();
@@ -714,48 +722,48 @@ std::unique_ptr<Restaurant> json_to_restaurant(const json& j,
   }
 
   if (j.contains("protection_timer")) {
-    restaurant->protection_timer(j["protection_timer"].get<int>());
+    restaurant->protection_timer(j.at("protection_timer").get<int>());
   }
   if (j.contains("protection_contacted")) {
-    restaurant->protection_contacted(j["protection_contacted"].get<bool>());
+    restaurant->protection_contacted(j.at("protection_contacted").get<bool>());
   }
 
   // Restore sabotage contamination and reputation damage slots
   if (j.contains("sabotage_contamination")) {
     restaurant->set_sabotage_contamination(
-        j["sabotage_contamination"].get<int>());
+        j.at("sabotage_contamination").get<int>());
   }
   if (j.contains("event_reputation_penalties")) {
     auto& penalties = restaurant->event_reputation_penalties();
-    for (size_t i = 0; i < 4 && i < j["event_reputation_penalties"].size();
+    for (size_t i = 0; i < 4 && i < j.at("event_reputation_penalties").size();
          ++i) {
-      penalties[i] = j["event_reputation_penalties"][i].get<int>();
+      penalties[i] = j.at("event_reputation_penalties").at(i).get<int>();
     }
   }
   if (j.contains("event_reputation_recovery")) {
     auto& recovery = restaurant->event_reputation_recovery();
-    for (size_t i = 0; i < 4 && i < j["event_reputation_recovery"].size();
+    for (size_t i = 0; i < 4 && i < j.at("event_reputation_recovery").size();
          ++i) {
-      recovery[i] = j["event_reputation_recovery"][i].get<int>();
+      recovery[i] = j.at("event_reputation_recovery").at(i).get<int>();
     }
   }
 
   // Mayor inspection state
   if (j.contains("star_rating")) {
-    restaurant->star_rating(j["star_rating"].get<int>());
+    restaurant->star_rating(j.at("star_rating").get<int>());
   }
   if (j.contains("inspection_days_remaining")) {
     restaurant->inspection_days_remaining(
-        j["inspection_days_remaining"].get<int>());
+        j.at("inspection_days_remaining").get<int>());
   }
   if (j.contains("first_inspection_pending")) {
     restaurant->first_inspection_pending(
-        j["first_inspection_pending"].get<bool>());
+        j.at("first_inspection_pending").get<bool>());
   }
 
   if (j.contains("last_weekly_profit")) {
     restaurant->last_weekly_profit(
-        Money{j["last_weekly_profit"].get<int64_t>()});
+        Money{j.at("last_weekly_profit").get<int64_t>()});
   }
 
   return restaurant;
@@ -774,12 +782,12 @@ json pizza_sales_data_to_json(const core::restaurant::PizzaSalesData& data) {
 
 core::restaurant::PizzaSalesData json_to_pizza_sales_data(const json& j) {
   core::restaurant::PizzaSalesData data;
-  data.pizza_id = core::RecipeId{j["pizza_id"].get<int>()};
+  data.pizza_id = core::RecipeId{j.at("pizza_id").get<int>()};
   data.count_ordered = j.value("count_ordered", 0);
-  data.count_sold = j["count_sold"].get<int>();
-  data.revenue = Money{j["revenue"].get<int64_t>()};
-  data.ingredient_cost = Money{j["ingredient_cost"].get<int64_t>()};
-  data.profit = Money{j["profit"].get<int64_t>()};
+  data.count_sold = j.at("count_sold").get<int>();
+  data.revenue = Money{j.at("revenue").get<int64_t>()};
+  data.ingredient_cost = Money{j.at("ingredient_cost").get<int64_t>()};
+  data.profit = Money{j.at("profit").get<int64_t>()};
   return data;
 }
 
@@ -858,19 +866,19 @@ core::restaurant::DailyStats json_to_daily_stats(const json& j) {
 
   // Ingredient costs by category (consumption tracking)
   if (j.contains("ingredient_costs_by_category")) {
-    for (size_t i = 0; i < 4 && i < j["ingredient_costs_by_category"].size();
+    for (size_t i = 0; i < 4 && i < j.at("ingredient_costs_by_category").size();
          ++i) {
       stats.ingredient_costs_by_category[i] =
-          Money{j["ingredient_costs_by_category"][i].get<int64_t>()};
+          Money{j.at("ingredient_costs_by_category").at(i).get<int64_t>()};
     }
   }
 
   // Ingredient purchases by category (cash basis tracking)
   if (j.contains("ingredient_purchases_by_category")) {
     for (size_t i = 0;
-         i < 4 && i < j["ingredient_purchases_by_category"].size(); ++i) {
+         i < 4 && i < j.at("ingredient_purchases_by_category").size(); ++i) {
       stats.ingredient_purchases_by_category[i] =
-          Money{j["ingredient_purchases_by_category"][i].get<int64_t>()};
+          Money{j.at("ingredient_purchases_by_category").at(i).get<int64_t>()};
     }
   }
 
@@ -886,7 +894,7 @@ core::restaurant::DailyStats json_to_daily_stats(const json& j) {
 
   // Per-pizza sales
   if (j.contains("pizza_sales")) {
-    for (auto it = j["pizza_sales"].begin(); it != j["pizza_sales"].end();
+    for (auto it = j.at("pizza_sales").begin(); it != j.at("pizza_sales").end();
          ++it) {
       core::RecipeId pizza_id{std::stoi(it.key())};
       stats.pizza_sales[pizza_id] = json_to_pizza_sales_data(it.value());
@@ -931,13 +939,14 @@ core::restaurant::RestaurantStats json_to_restaurant_stats(const json& j) {
 
   // Current days
   if (j.contains("today")) {
-    stats.today = json_to_daily_stats(j["today"]);
+    stats.today = json_to_daily_stats(j.at("today"));
   }
   if (j.contains("yesterday")) {
-    stats.yesterday = json_to_daily_stats(j["yesterday"]);
+    stats.yesterday = json_to_daily_stats(j.at("yesterday"));
   }
   if (j.contains("day_before_yesterday")) {
-    stats.day_before_yesterday = json_to_daily_stats(j["day_before_yesterday"]);
+    stats.day_before_yesterday =
+        json_to_daily_stats(j.at("day_before_yesterday"));
   }
 
   // All-time totals
@@ -949,7 +958,7 @@ core::restaurant::RestaurantStats json_to_restaurant_stats(const json& j) {
 
   // Complete history
   if (j.contains("history")) {
-    for (const auto& day_json : j["history"]) {
+    for (const auto& day_json : j.at("history")) {
       stats.history.push_back(json_to_daily_stats(day_json));
     }
   }
@@ -968,9 +977,9 @@ json ingredient_stock_to_json(const core::restaurant::IngredientStock& stock) {
 
 core::restaurant::IngredientStock json_to_ingredient_stock(const json& j) {
   core::restaurant::IngredientStock stock;
-  stock.quantity = j["quantity"].get<int>();
-  stock.weighted_avg_quality = j["weighted_avg_quality"].get<int>();
-  stock.weighted_avg_cost = Money{j["weighted_avg_cost"].get<int64_t>()};
+  stock.quantity = j.at("quantity").get<int>();
+  stock.weighted_avg_quality = j.at("weighted_avg_quality").get<int>();
+  stock.weighted_avg_cost = Money{j.at("weighted_avg_cost").get<int64_t>()};
   return stock;
 }
 
@@ -991,13 +1000,14 @@ json_to_restaurant_inventory(const json& j) {
   core::restaurant::RestaurantInventory inventory;
   auto& stocks = inventory.all_stocks();
 
-  for (size_t i = 0; i < j["stocks"].size() && i < stocks.size(); ++i) {
-    stocks[static_cast<int>(i)] = json_to_ingredient_stock(j["stocks"][i]);
+  for (size_t i = 0; i < j.at("stocks").size() && i < stocks.size(); ++i) {
+    stocks[static_cast<int>(i)] =
+        json_to_ingredient_stock(j.at("stocks").at(i));
   }
 
   if (j.contains("average_stock_quality")) {
     inventory.set_average_stock_quality(
-        j["average_stock_quality"].get<uint8_t>());
+        j.at("average_stock_quality").get<uint8_t>());
   }
 
   return inventory;

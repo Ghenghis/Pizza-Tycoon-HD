@@ -115,6 +115,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/tutorial/Tutorial.cpp
     src/core/tutorial/TutorialGame.cpp
     src/core/tutorial/TutorialSteps.cpp
+    src/core/util/AtomicFile.cpp
     src/core/util/ConfigManager.cpp
     src/core/util/Tools.cpp
     src/views/base/BobRenderer.cpp
@@ -531,6 +532,7 @@ set(PLEGACY_HEADERS
     src/core/tutorial/TutorialGame.h
     src/core/tutorial/TutorialStep.h
     src/core/tutorial/TutorialSteps.h
+    src/core/util/AtomicFile.h
     src/core/util/Colors.h
     src/core/util/ConfigManager.h
     src/core/util/Constants.h
