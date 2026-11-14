@@ -36,7 +36,7 @@ import urllib.request
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import numpy as np
@@ -54,6 +54,57 @@ MANIFEST_FORMAT = 1
 
 class HdPackError(Exception):
     """A problem the user has to fix (bad input, unreachable server...)."""
+
+
+class UnsafePathError(HdPackError):
+    """A file name that would reach outside the export or pack folder."""
+
+
+# --------------------------------------------------------------------------
+# Paths
+# --------------------------------------------------------------------------
+
+# Names Windows treats as devices, with any extension, in any folder.
+_WINDOWS_DEVICES = frozenset(
+    ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"]
+    + [f"{d}{n}" for d in ("COM", "LPT") for n in [*"123456789", "\u00b9", "\u00b2", "\u00b3"]]
+)
+
+
+def check_relative(name: object) -> str:
+    """A manifest file name, if it is a plain relative path; else UnsafePathError.
+
+    The manifest is data, so its names are checked before they are joined to a
+    folder: forward slashes only, no absolute paths, drive letters, UNC
+    shares, "." or ".." parts, empty parts, colons (Windows streams), NUL
+    bytes or Windows device names.
+    """
+    if not isinstance(name, str) or not name:
+        raise UnsafePathError(f"file name {name!r} is not a relative path")
+    if "\\" in name or ":" in name or "\0" in name:
+        raise UnsafePathError(f"file name {name!r} has a backslash, colon or NUL")
+    if PurePosixPath(name).is_absolute() or PureWindowsPath(name).anchor:
+        raise UnsafePathError(f"file name {name!r} is absolute")
+    for part in name.split("/"):
+        if part in ("", ".", ".."):
+            raise UnsafePathError(f"file name {name!r} has an empty, '.' or '..' part")
+        if part.split(".")[0].rstrip(" ").upper() in _WINDOWS_DEVICES:
+            raise UnsafePathError(f"file name {name!r} is a Windows device name")
+    return name
+
+
+def contained_path(root: Path, name: str) -> Path:
+    """root / name, resolved, refusing anything that ends up outside root.
+
+    Besides the checks of check_relative(), this follows symlinks (inside the
+    root or along the name) so a link cannot lead a read or a write elsewhere.
+    """
+    check_relative(name)
+    base = root.resolve()
+    target = (base / name).resolve()
+    if not target.is_relative_to(base):
+        raise UnsafePathError(f"{name} leads outside {root} (to {target})")
+    return target
 
 
 # --------------------------------------------------------------------------
@@ -93,7 +144,11 @@ def load_manifest(export_dir: Path) -> list[Asset]:
     if data.get("format") != MANIFEST_FORMAT:
         raise HdPackError(f"{path}: unsupported manifest format {data.get('format')!r}")
     assets = []
-    for item in data["images"]:
+    for n, item in enumerate(data["images"]):
+        try:
+            check_relative(item.get("file"))
+        except UnsafePathError as exc:
+            raise UnsafePathError(f"{path}: image {n}: {exc}") from exc
         assets.append(
             Asset(
                 kind=item["kind"],
@@ -215,12 +270,18 @@ def upscale_pack(
         raise HdPackError(f"unknown method {method!r}; use {', '.join(UPSCALE_METHODS)}")
     counts = Counts()
     for asset in select(load_manifest(export_dir), patterns):
-        dst = pack_dir / asset.file
+        try:
+            src_path = contained_path(export_dir, asset.file)
+            dst = contained_path(pack_dir, asset.file)
+        except UnsafePathError as exc:
+            counts.failed += 1
+            counts.errors.append(f"{asset.file}: {exc}")
+            continue
         if dst.exists() and not force:
             counts.skipped += 1
             continue
         try:
-            with Image.open(export_dir / asset.file) as src:
+            with Image.open(src_path) as src:
                 size = asset.target_size(scale)
                 if method == "nearest":
                     out = to_rgba(src).resize(size, Image.Resampling.NEAREST)
@@ -283,12 +344,17 @@ def validate_pack(export_dir: Path, pack_dir: Path, min_scale: int = 2, max_hole
     known = {a.file for a in assets}
     report.total = len(assets)
     for asset in assets:
-        hd_path = pack_dir / asset.file
+        try:
+            hd_path = contained_path(pack_dir, asset.file)
+            ref_path = contained_path(export_dir, asset.file)
+        except UnsafePathError as exc:
+            report.errors.append(f"{asset.file}: {exc}")
+            continue
         if not hd_path.exists():
             continue
         report.present += 1
         try:
-            with Image.open(hd_path) as hd, Image.open(export_dir / asset.file) as ref:
+            with Image.open(hd_path) as hd, Image.open(ref_path) as ref:
                 hd.load()
                 want = asset.width / asset.height
                 have = hd.width / hd.height
@@ -607,7 +673,14 @@ def comfy_pack(
 ) -> Counts:
     counts = Counts()
     assets = select(load_manifest(export_dir), patterns)
-    todo = [a for a in assets if force or not (pack_dir / a.file).exists()]
+
+    def done(asset: Asset) -> bool:
+        try:
+            return contained_path(pack_dir, asset.file).exists()
+        except UnsafePathError:
+            return False  # fails in the loop, with the reason
+
+    todo = [a for a in assets if force or not done(a)]
     counts.skipped = len(assets) - len(todo)
     if limit is not None:
         todo = todo[:limit]
@@ -625,7 +698,9 @@ def comfy_pack(
             wait_for_gpu(settings.wait_gpu, settings.wait_below, log)
         try:
             started = time.monotonic()
-            uploaded = client.upload_image(export_dir / asset.file, asset.file.replace("/", "_"))
+            src_path = contained_path(export_dir, asset.file)
+            dst = contained_path(pack_dir, asset.file)
+            uploaded = client.upload_image(src_path, asset.file.replace("/", "_"))
             prompt = fill_template(
                 copy.deepcopy(settings.workflow_for(asset)), comfy_values(asset, settings, uploaded, seed)
             )
@@ -633,10 +708,9 @@ def comfy_pack(
             data = client.first_image(entry)
             from io import BytesIO
 
-            with Image.open(BytesIO(data)) as generated, Image.open(export_dir / asset.file) as ref:
+            with Image.open(BytesIO(data)) as generated, Image.open(src_path) as ref:
                 out = fit_to_target(generated, asset.target_size(settings.scale))
                 out = apply_reference_alpha(out, ref, settings.feather)
-            dst = pack_dir / asset.file
             dst.parent.mkdir(parents=True, exist_ok=True)
             out.save(dst)
             counts.written += 1

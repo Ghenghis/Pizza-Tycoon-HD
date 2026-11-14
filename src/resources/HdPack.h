@@ -11,6 +11,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -31,9 +32,11 @@ namespace resources {
 //   <pack>/bob/moebel/0012.png    replaces frame 12 of BOB/MOEBEL.BOB
 //
 // Paths are lower case with forward slashes. A replacement may be any size
-// as long as it keeps the original's aspect ratio; it is resized once, on
-// first use, to exactly the engine size times gfx::hd_scale(). Anything
-// missing from the pack keeps the original art.
+// within gfx::PngLimits as long as it keeps the original's aspect ratio; both
+// are checked from the file's header before it is decoded. It is resized
+// once, on first use, to exactly the engine size times gfx::hd_scale().
+// Anything missing from the pack, or that fails to load, keeps the original
+// art.
 class HdPack {
 public:
   struct Stats {
@@ -87,7 +90,8 @@ public:
   load_warm_list(const std::filesystem::path& file);
   // Decodes these on one background thread, stopping after budget_bytes of
   // decoded pictures. A load() of a file that is being decoded waits for it
-  // instead of decoding it twice.
+  // instead of decoding it twice; that wait always ends, with null (the
+  // original art) if the decode fails.
   void prefetch(std::vector<WarmEntry> entries, std::size_t budget_bytes);
   // Blocks until a running prefetch has finished (tests, benchmarks).
   void wait_for_prefetch();
@@ -95,6 +99,10 @@ public:
   // stream to the GPU before they are needed.
   [[nodiscard]] std::vector<std::shared_ptr<const gfx::HdImage>>
   take_prefetched();
+
+  /* The game thread logs the prefetch's warnings (the log is not
+     thread-safe) from take_prefetched(), wait_for_prefetch() and
+     configure(). */
 
   HdPack() = default;
   ~HdPack();
@@ -114,14 +122,25 @@ private:
     std::string warning;
   };
   // Reads, decodes and resizes one file. Touches no member but root (set
-  // before any thread starts), so it runs on any thread.
+  // before any thread starts), so it runs on any thread. A file that fails
+  // to load, even by throwing, comes back Rejected with a warning.
   [[nodiscard]] Decoded decode(const std::string& relative,
                                Size engine_size) const;
+  // A file one thread is decoding, held in pending_ (see HdPack.cpp).
+  class Claim;
   // Under mutex_: counts the result, caches it, notes the first use.
   void record(const std::string& cache_key, const WarmEntry& entry,
               const Decoded& d);
   ImagePtr load(const std::string& relative, Size engine_size);
   void stop_prefetch();
+  // The prefetch thread's loop.
+  void run_prefetch(const std::vector<WarmEntry>& entries,
+                    std::size_t budget_bytes, const std::stop_token& stop);
+  // Any thread: queues a warning for the game thread to log.
+  void note_prefetch_warning(std::string_view text,
+                             std::string_view detail = {}) noexcept;
+  // Game thread: logs the queued warnings.
+  void log_prefetch_warnings();
 
   std::filesystem::path root_;
   mutable std::mutex mutex_;
@@ -129,6 +148,7 @@ private:
   std::unordered_map<std::string, std::shared_future<ImagePtr>> pending_;
   std::vector<WarmEntry> used_;
   std::vector<ImagePtr> prefetched_;
+  std::vector<std::string> prefetch_warnings_;
   Stats stats_;
   std::jthread prefetcher_;
 };

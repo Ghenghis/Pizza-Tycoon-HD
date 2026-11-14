@@ -12,7 +12,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <system_error>
 
@@ -49,13 +51,39 @@ void HdPack::wait_for_prefetch() {
   if (prefetcher_.joinable()) {
     prefetcher_.join();
   }
+  log_prefetch_warnings();
 }
 
 std::vector<std::shared_ptr<const gfx::HdImage>> HdPack::take_prefetched() {
+  log_prefetch_warnings();
   const std::lock_guard lock(mutex_);
   std::vector<ImagePtr> out;
   out.swap(prefetched_);
   return out;
+}
+
+void HdPack::note_prefetch_warning(std::string_view text,
+                                   std::string_view detail) noexcept {
+  try {
+    std::string message(text);
+    message += detail;
+    const std::lock_guard lock(mutex_);
+    prefetch_warnings_.push_back(std::move(message));
+  }
+  catch (...) {
+    // Out of memory: lose the message, not the program.
+  }
+}
+
+void HdPack::log_prefetch_warnings() {
+  std::vector<std::string> warnings;
+  {
+    const std::lock_guard lock(mutex_);
+    warnings.swap(prefetch_warnings_);
+  }
+  for (const std::string& w : warnings) {
+    Logger::warn("{}", w);
+  }
 }
 
 HdPack::Stats HdPack::stats() const {
@@ -70,6 +98,7 @@ std::vector<HdPack::WarmEntry> HdPack::used() const {
 
 void HdPack::configure(const std::filesystem::path& root) {
   stop_prefetch();
+  log_prefetch_warnings();
   const std::lock_guard lock(mutex_);
   cache_.clear();
   pending_.clear();
@@ -155,45 +184,70 @@ std::string cache_key_for(const std::string& relative, int w, int h) {
   return relative + "@" + std::to_string(w) + "x" + std::to_string(h);
 }
 
+// Whether a w x h replacement keeps the original's aspect ratio.
+bool same_shape(int w, int h, Size engine_size) {
+  const double want =
+      static_cast<double>(engine_size.w) / static_cast<double>(engine_size.h);
+  const double have = static_cast<double>(w) / static_cast<double>(h);
+  return std::abs(have / want - 1.0) <= HdPack::aspect_tolerance;
+}
+
 } // namespace
 
 HdPack::Decoded HdPack::decode(const std::string& relative,
                                Size engine_size) const {
   const auto started = std::chrono::steady_clock::now();
-  const int k = gfx::hd_scale();
-  const int target_w = engine_size.w * k;
-  const int target_h = engine_size.h * k;
   Decoded d{nullptr, Decoded::Outcome::Missing, 0.0, {}};
-  const std::filesystem::path file = root_ / relative;
-  std::error_code ec;
-  if (!std::filesystem::is_regular_file(file, ec)) {
-    d.outcome = Decoded::Outcome::Missing;
+  try {
+    const int k = gfx::hd_scale();
+    const int target_w = engine_size.w * k;
+    const int target_h = engine_size.h * k;
+    const std::filesystem::path file = root_ / relative;
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(file, ec)) {
+      d.outcome = Decoded::Outcome::Rejected; // until it loads
+      std::string error;
+      // The header settles the size limits and the shape before anything is
+      // decoded.
+      const auto info = gfx::read_png_info(file, {}, &error);
+      if (!info) {
+        d.warning =
+            compat::format("HD pack: {}; using the original art", error);
+      }
+      else if (!same_shape(info->width, info->height, engine_size)) {
+        d.warning = compat::format(
+            "HD pack: {} is {}x{} but the original is {}x{} (aspect ratio "
+            "differs); ignoring it",
+            relative, info->width, info->height, engine_size.w / 2,
+            engine_size.h / 2);
+      }
+      else if (auto image = gfx::load_png(file, {}, &error); !image) {
+        d.warning =
+            compat::format("HD pack: {}; using the original art", error);
+      }
+      else if (image->width != info->width || image->height != info->height) {
+        d.warning = compat::format(
+            "HD pack: {} changed while it was loading; using the original art",
+            relative);
+      }
+      else if (image->width == target_w && image->height == target_h) {
+        d.image = std::make_shared<const gfx::HdImage>(std::move(*image));
+        d.outcome = Decoded::Outcome::Loaded;
+      }
+      else {
+        d.image = std::make_shared<const gfx::HdImage>(
+            gfx::resample(*image, target_w, target_h));
+        d.outcome = Decoded::Outcome::Loaded;
+      }
+    }
   }
-  else if (auto image = gfx::load_png(file)) {
-    const double want =
-        static_cast<double>(engine_size.w) / static_cast<double>(engine_size.h);
-    const double have =
-        static_cast<double>(image->width) / static_cast<double>(image->height);
-    if (std::abs(have / want - 1.0) > aspect_tolerance) {
-      d.outcome = Decoded::Outcome::Rejected;
-      d.warning = compat::format(
-          "HD pack: {} is {}x{} but the original is {}x{} (aspect ratio "
-          "differs); ignoring it",
-          relative, image->width, image->height, engine_size.w / 2,
-          engine_size.h / 2);
-    }
-    else if (image->width == target_w && image->height == target_h) {
-      d.image = std::make_shared<const gfx::HdImage>(std::move(*image));
-      d.outcome = Decoded::Outcome::Loaded;
-    }
-    else {
-      d.image = std::make_shared<const gfx::HdImage>(
-          gfx::resample(*image, target_w, target_h));
-      d.outcome = Decoded::Outcome::Loaded;
-    }
-  }
-  else {
+  catch (const std::exception& e) {
+    // Out of memory, or a library failing: keep the original art.
+    d.image.reset();
     d.outcome = Decoded::Outcome::Rejected;
+    d.warning =
+        compat::format("HD pack: cannot load {} ({}); using the original art",
+                       relative, e.what());
   }
   d.ms = std::chrono::duration<double, std::milli>(
              std::chrono::steady_clock::now() - started)
@@ -224,13 +278,59 @@ void HdPack::record(const std::string& cache_key, const WarmEntry& entry,
   }
 }
 
+// A file this thread has claimed in pending_, so a load() of the same file
+// waits for this decode instead of starting another. The claim is resolved
+// exactly once: finish() records the result and hands it to the waiters; if
+// an exception skips finish(), the destructor drops the claim and resolves
+// the waiters with null, so they keep the original art and nobody waits
+// forever. Never destroy one while holding mutex_.
+class HdPack::Claim {
+public:
+  // Call under mutex_.
+  Claim(HdPack& pack, std::string key) : pack_(pack), key_(std::move(key)) {
+    pack_.pending_.emplace(key_, promise_.get_future().share());
+  }
+  ~Claim() {
+    if (resolved_) {
+      return;
+    }
+    {
+      const std::lock_guard lock(pack_.mutex_);
+      pack_.pending_.erase(key_);
+    }
+    promise_.set_value(nullptr);
+  }
+  Claim(const Claim&) = delete;
+  Claim& operator=(const Claim&) = delete;
+
+  ImagePtr finish(const Decoded& d, const WarmEntry& entry, bool prefetched) {
+    {
+      const std::lock_guard lock(pack_.mutex_);
+      pack_.record(key_, entry, d);
+      if (prefetched && d.image) {
+        pack_.prefetched_.push_back(d.image);
+      }
+      pack_.pending_.erase(key_);
+    }
+    resolved_ = true;
+    promise_.set_value(d.image);
+    return d.image;
+  }
+
+private:
+  HdPack& pack_;
+  std::string key_;
+  std::promise<ImagePtr> promise_;
+  bool resolved_ = false;
+};
+
 std::shared_ptr<const gfx::HdImage> HdPack::load(const std::string& relative,
                                                  Size engine_size) {
   const int k = gfx::hd_scale();
   const std::string key =
       cache_key_for(relative, engine_size.w * k, engine_size.h * k);
   std::shared_future<ImagePtr> in_flight;
-  std::promise<ImagePtr> mine;
+  std::optional<Claim> claim;
   {
     const std::lock_guard lock(mutex_);
     if (auto it = cache_.find(key); it != cache_.end()) {
@@ -241,7 +341,7 @@ std::shared_ptr<const gfx::HdImage> HdPack::load(const std::string& relative,
     }
     else {
       // Claim it, so a prefetch reaching the same file waits for us.
-      pending_.emplace(key, mine.get_future().share());
+      claim.emplace(*this, key);
     }
   }
   if (in_flight.valid()) {
@@ -251,56 +351,68 @@ std::shared_ptr<const gfx::HdImage> HdPack::load(const std::string& relative,
   if (!d.warning.empty()) {
     Logger::warn("{}", d.warning);
   }
-  ImagePtr result;
-  {
-    const std::lock_guard lock(mutex_);
-    record(key, WarmEntry{relative, engine_size}, d);
-    pending_.erase(key);
-    result = cache_.at(key);
+  return claim->finish(d, WarmEntry{relative, engine_size},
+                       /*prefetched=*/false);
+}
+
+void HdPack::run_prefetch(const std::vector<WarmEntry>& entries,
+                          std::size_t budget_bytes,
+                          const std::stop_token& stop) {
+  std::size_t bytes = 0;
+  for (const WarmEntry& e : entries) {
+    if (stop.stop_requested() || bytes >= budget_bytes) {
+      return;
+    }
+    const int k = gfx::hd_scale();
+    const std::string key =
+        cache_key_for(e.relative, e.engine_size.w * k, e.engine_size.h * k);
+    std::optional<Claim> claim;
+    {
+      const std::lock_guard lock(mutex_);
+      if (cache_.contains(key) || pending_.contains(key)) {
+        continue;
+      }
+      claim.emplace(*this, key);
+    }
+    const Decoded d = decode(e.relative, e.engine_size);
+    if (!d.warning.empty()) {
+      note_prefetch_warning(d.warning);
+    }
+    if (const ImagePtr image = claim->finish(d, e, /*prefetched=*/true)) {
+      bytes += image->pixels.size() * sizeof(uint32_t);
+    }
   }
-  mine.set_value(result);
-  return result;
 }
 
 void HdPack::prefetch(std::vector<WarmEntry> entries,
                       std::size_t budget_bytes) {
   stop_prefetch();
+  log_prefetch_warnings();
   if (!enabled() || entries.empty()) {
     return;
   }
-  prefetcher_ = std::jthread([this, entries = std::move(entries),
-                              budget_bytes](const std::stop_token& stop) {
-    std::size_t bytes = 0;
-    for (const WarmEntry& e : entries) {
-      if (stop.stop_requested() || bytes >= budget_bytes) {
-        return;
+  try {
+    prefetcher_ = std::jthread([this, entries = std::move(entries),
+                                budget_bytes](const std::stop_token& stop) {
+      // An exception leaving a thread ends the program, so stop here and
+      // log it instead. Claims already resolved every file taken so far.
+      try {
+        run_prefetch(entries, budget_bytes, stop);
       }
-      const int k = gfx::hd_scale();
-      const std::string key =
-          cache_key_for(e.relative, e.engine_size.w * k, e.engine_size.h * k);
-      std::promise<ImagePtr> promise;
-      {
-        const std::lock_guard lock(mutex_);
-        if (cache_.contains(key) || pending_.contains(key)) {
-          continue;
-        }
-        pending_.emplace(key, promise.get_future().share());
+      catch (const std::exception& e) {
+        note_prefetch_warning("HD pack: background loading stopped: ",
+                              e.what());
       }
-      const Decoded d = decode(e.relative, e.engine_size);
-      {
-        const std::lock_guard lock(mutex_);
-        record(key, e, d);
-        pending_.erase(key);
-        if (d.image) {
-          prefetched_.push_back(d.image);
-        }
+      catch (...) {
+        note_prefetch_warning("HD pack: background loading stopped");
       }
-      promise.set_value(d.image);
-      if (d.image) {
-        bytes += d.image->pixels.size() * sizeof(uint32_t);
-      }
-    }
-  });
+    });
+  }
+  catch (const std::system_error& e) {
+    Logger::warn("HD pack: cannot start background loading ({}); pictures "
+                 "load when first used",
+                 e.what());
+  }
 }
 
 bool HdPack::save_warm_list(const std::filesystem::path& file,

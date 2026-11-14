@@ -7,7 +7,8 @@
 #include "engine/audio/AudioManager.h"
 
 #include <algorithm>
-#include <cstring>
+#include <cmath>
+#include <cstdlib>
 
 #include "engine/Logger.h"
 #include "engine/SDL_include.h"
@@ -19,6 +20,249 @@
 #endif
 
 namespace audio {
+
+// The callback relies on these never taking a lock (see AudioManager.h).
+static_assert(std::atomic<float>::is_always_lock_free);
+static_assert(std::atomic<bool>::is_always_lock_free);
+static_assert(std::atomic<uint32_t>::is_always_lock_free);
+static_assert(std::atomic<std::size_t>::is_always_lock_free);
+static_assert(std::atomic<MusicState>::is_always_lock_free);
+
+namespace {
+
+// A request word: play/loop flags in the low bits, a tag in the rest.
+constexpr uint32_t PLAY_BIT = 1;
+constexpr uint32_t LOOP_BIT = 2;
+constexpr uint32_t TAG_SHIFT = 2;
+constexpr uint32_t TAG_COUNT = UINT32_MAX >> TAG_SHIFT;
+
+constexpr float INT16_TO_FLOAT = 1.0f / 32768.0f;
+
+// Clamps to 0..1; NaN becomes 0.
+float unit_range(float v) noexcept {
+  return v >= 0.0f ? std::min(v, 1.0f) : 0.0f;
+}
+
+} // namespace
+
+/* Mixing */
+
+void mix_add(std::span<float> acc, std::span<const int16_t> src,
+             float gain_from, float gain_to) {
+  const std::size_t n = std::min(acc.size(), src.size());
+  if (n == 0) {
+    return;
+  }
+  if (gain_from == gain_to) {
+    const float g = gain_to * INT16_TO_FLOAT;
+    for (std::size_t i = 0; i < n; ++i) {
+      acc[i] += static_cast<float>(src[i]) * g;
+    }
+    return;
+  }
+  // Both samples of a frame get the same gain.
+  const std::size_t frames = (n + MIX_CHANNELS - 1) / MIX_CHANNELS;
+  const float step = (gain_to - gain_from) / static_cast<float>(frames);
+  for (std::size_t i = 0; i < n; ++i) {
+    const std::size_t frame = i / MIX_CHANNELS + 1;
+    const float g = frame == frames
+                        ? gain_to
+                        : gain_from + step * static_cast<float>(frame);
+    acc[i] += static_cast<float>(src[i]) * g * INT16_TO_FLOAT;
+  }
+}
+
+void mix_to_s16(std::span<const float> acc, std::span<int16_t> out,
+                float master) {
+  const std::size_t n = std::min(acc.size(), out.size());
+  const float k = master * 32768.0f;
+  for (std::size_t i = 0; i < n; ++i) {
+    const float v = std::clamp(acc[i] * k, -32768.0f, 32767.0f);
+    out[i] = static_cast<int16_t>(std::lrint(v));
+  }
+}
+
+/* Mixer */
+
+std::optional<std::size_t> Mixer::add_effect(std::vector<int16_t> samples,
+                                             std::size_t start_offset) {
+  const std::lock_guard lock(add_mutex_);
+  const std::size_t slot = effect_count_.load(std::memory_order_relaxed);
+  if (slot >= MAX_EFFECTS) {
+    return std::nullopt;
+  }
+  samples.resize(samples.size() - samples.size() % MIX_CHANNELS);
+  start_offset -= start_offset % MIX_CHANNELS;
+  Effect& e = effects_[slot];
+  e.start_offset = start_offset < samples.size() ? start_offset : 0;
+  e.position = e.start_offset;
+  e.samples = std::move(samples);
+  // Publishes the slot: the audio thread reads it only after this store.
+  effect_count_.store(slot + 1, std::memory_order_release);
+  return slot;
+}
+
+std::size_t Mixer::effect_count() const noexcept {
+  return effect_count_.load(std::memory_order_acquire);
+}
+
+bool Mixer::post(std::size_t slot, uint32_t flags) {
+  if (slot >= effect_count()) {
+    return false;
+  }
+  // Each request gets its own nonzero tag, so the audio thread clears only
+  // the one it applied and never loses a newer one.
+  const uint32_t tag =
+      (next_request_.fetch_add(1, std::memory_order_relaxed) % TAG_COUNT + 1)
+      << TAG_SHIFT;
+  effects_[slot].request.store(tag | flags, std::memory_order_release);
+  return true;
+}
+
+bool Mixer::play(std::size_t slot, bool loop) {
+  return post(slot, PLAY_BIT | (loop ? LOOP_BIT : 0u));
+}
+
+bool Mixer::stop(std::size_t slot) { return post(slot, 0); }
+
+bool Mixer::any_effect_playing() const noexcept {
+  const std::size_t count = effect_count();
+  for (std::size_t i = 0; i < count; ++i) {
+    const Effect& e = effects_[i];
+    // A pending request says what the effect is about to do. Once the audio
+    // thread clears it, active already holds the result.
+    const uint32_t request = e.request.load(std::memory_order_acquire);
+    const bool playing = request != 0
+                             ? (request & PLAY_BIT) != 0
+                             : e.active.load(std::memory_order_acquire);
+    if (playing) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void Mixer::music_volume(float volume) noexcept {
+  music_volume_.store(unit_range(volume), std::memory_order_relaxed);
+}
+
+void Mixer::sound_volume(float volume) noexcept {
+  sound_volume_.store(unit_range(volume), std::memory_order_relaxed);
+}
+
+void Mixer::music_enabled(bool enabled) noexcept {
+  music_enabled_.store(enabled, std::memory_order_relaxed);
+}
+
+float Mixer::music_volume() const noexcept {
+  return music_volume_.load(std::memory_order_relaxed);
+}
+
+float Mixer::sound_volume() const noexcept {
+  return sound_volume_.load(std::memory_order_relaxed);
+}
+
+bool Mixer::music_enabled() const noexcept {
+  return music_enabled_.load(std::memory_order_relaxed);
+}
+
+void Mixer::take_request(Effect& e) {
+  uint32_t request = e.request.load(std::memory_order_acquire);
+  if (request == 0) {
+    return;
+  }
+  if ((request & PLAY_BIT) != 0) {
+    e.position = e.start_offset;
+    e.playing = true;
+    e.loop = (request & LOOP_BIT) != 0;
+  }
+  else {
+    e.playing = false;
+  }
+  e.active.store(e.playing, std::memory_order_release);
+  // A newer request than this one stays for the next block.
+  static_cast<void>(e.request.compare_exchange_strong(
+      request, 0, std::memory_order_acq_rel, std::memory_order_relaxed));
+}
+
+void Mixer::mix_effect(Effect& e, std::span<float> acc, float gain_from,
+                       float gain_to) {
+  const std::size_t total = acc.size();
+  const std::span<const int16_t> samples(e.samples);
+  // The block's gain ramp, at a sample position within the block.
+  const auto gain_at = [&](std::size_t at) {
+    return gain_from == gain_to ? gain_to
+                                : gain_from + (gain_to - gain_from) *
+                                                  (static_cast<float>(at) /
+                                                   static_cast<float>(total));
+  };
+  std::size_t done = 0;
+  while (e.playing && done < total) {
+    if (e.position >= samples.size()) {
+      // Loop without a gap, back to the start offset, in the same block.
+      if (e.loop && e.start_offset < samples.size()) {
+        e.position = e.start_offset;
+      }
+      else {
+        e.playing = false;
+        break;
+      }
+    }
+    const std::size_t n = std::min(total - done, samples.size() - e.position);
+    mix_add(acc.subspan(done, n), samples.subspan(e.position, n), gain_at(done),
+            gain_at(done + n));
+    e.position += n;
+    done += n;
+  }
+  // A sound that ends with the block is done now, not a block later.
+  if (e.playing && !e.loop && e.position >= samples.size()) {
+    e.playing = false;
+  }
+}
+
+void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
+  const std::span<float> acc(acc_.data(), out.size());
+  std::fill(acc.begin(), acc.end(), 0.0f);
+
+  const float music_target =
+      music_enabled() ? music_volume_.load(std::memory_order_relaxed) : 0.0f;
+  mix_add(acc, music, music_gain_, music_target);
+  music_gain_ = music_target;
+
+  const float sound_target = sound_volume_.load(std::memory_order_relaxed);
+  const std::size_t count = effect_count();
+  for (std::size_t i = 0; i < count; ++i) {
+    Effect& e = effects_[i];
+    take_request(e);
+    if (e.playing) {
+      mix_effect(e, acc, sound_gain_, sound_target);
+      if (!e.playing) {
+        e.active.store(false, std::memory_order_release);
+      }
+    }
+  }
+  sound_gain_ = sound_target;
+
+  mix_to_s16(acc, out, MASTER_VOLUME);
+}
+
+void Mixer::render(std::span<int16_t> out, std::span<const int16_t> music) {
+  // Whole frames only; a stray odd sample stays silent.
+  const std::size_t usable = out.size() - out.size() % MIX_CHANNELS;
+  if (usable < out.size()) {
+    out.back() = 0;
+  }
+  for (std::size_t done = 0; done < usable; done += MIX_BLOCK_SAMPLES) {
+    const std::size_t n = std::min(MIX_BLOCK_SAMPLES, usable - done);
+    const std::span<const int16_t> music_part =
+        music.size() > done
+            ? music.subspan(done, std::min(n, music.size() - done))
+            : std::span<const int16_t>{};
+    mix_block(out.subspan(done, n), music_part);
+  }
+}
+
+/* AudioManager */
 
 #if PLEGACY_ENABLE_MUSIC
 void AudioManager::ADLMIDIDeleter::operator()(ADL_MIDIPlayer* p) {
@@ -32,6 +276,7 @@ AudioManager::AudioManager()
     : music_data_(static_cast<size_t>(MusicId::COUNT)) {}
 
 AudioManager::~AudioManager() {
+  // Stops the callback before any member it uses goes away.
   if (audio_stream_) {
     SDL_DestroyAudioStream(audio_stream_);
   }
@@ -120,29 +365,21 @@ void AudioManager::load_m_container(const std::string& m_file_path) {
 #endif
     }
     else if (asset.type == AudioAssetType::VOC) {
-      // Decode and store VOC sound effect
       VocAudioData voc_audio = VocDecoder::decode(asset.data, SAMPLE_RATE);
 
-      auto sound = std::make_unique<SoundEffect>();
-      sound->samples = std::move(voc_audio.samples);
-      sound->playback_position = 0;
-      sound->playing = false;
-      sound->loop = false;
-
-      sounds_.push_back(std::move(sound));
-
-      // Skip the static noise at the start of the chopper sound.
-      // We set start_offset instead of erasing so play_sound() resets to
-      // the right position without shifting the entire sample buffer.
-      if (next_sound_slot_ == static_cast<size_t>(SoundId::CHOPPER)) {
-        constexpr size_t skip_samples = 500;
-        auto& chopper = *sounds_.back();
-        if (chopper.samples.size() > skip_samples) {
-          chopper.start_offset = skip_samples;
-          chopper.playback_position = skip_samples;
-        }
+      // Skip the static noise at the start of the chopper sound: playback
+      // starts, and loops back, past it.
+      constexpr size_t chopper_skip_samples = 500;
+      const bool chopper =
+          mixer_.effect_count() == static_cast<size_t>(SoundId::CHOPPER);
+      const size_t start_offset =
+          chopper && voc_audio.samples.size() > chopper_skip_samples
+              ? chopper_skip_samples
+              : 0;
+      if (!mixer_.add_effect(std::move(voc_audio.samples), start_offset)) {
+        Logger::warn("Too many sound effects, ignoring VOC from {}",
+                     m_file_path);
       }
-      next_sound_slot_++;
     }
   }
 }
@@ -152,36 +389,18 @@ void AudioManager::play_sound(SoundId id, LoopMode loop) {
     return;
   }
 
-  auto slot = static_cast<size_t>(id);
-  if (slot >= sounds_.size()) {
+  const auto slot = static_cast<size_t>(id);
+  if (!mixer_.play(slot, loop == LoopMode::Loop)) {
     Logger::warn("Sound slot {} out of range (have {} sounds)", slot,
-                 sounds_.size());
-    return;
+                 mixer_.effect_count());
   }
-
-  if (!sounds_[slot]) {
-    Logger::warn("Sound slot {} is null", slot);
-    return;
-  }
-
-  std::lock_guard<std::mutex> lock(sound_mutex_);
-  sounds_[slot]->playback_position = sounds_[slot]->start_offset;
-  sounds_[slot]->playing = true;
-  sounds_[slot]->loop = (loop == LoopMode::Loop);
 }
 
 void AudioManager::stop_sound(SoundId id) {
   if (!audio_enabled_) {
     return;
   }
-
-  auto slot = static_cast<size_t>(id);
-  if (slot >= sounds_.size() || !sounds_[slot]) {
-    return;
-  }
-
-  std::lock_guard<std::mutex> lock(sound_mutex_);
-  sounds_[slot]->playing = false;
+  mixer_.stop(static_cast<size_t>(id));
 }
 
 void AudioManager::play_sound_if_changed(SoundId id, LoopMode loop) {
@@ -208,7 +427,7 @@ void AudioManager::play_music(MusicId id, LoopMode loop) {
     return;
   }
 
-  if (!music_enabled_) {
+  if (!mixer_.music_enabled()) {
     return;
   }
 
@@ -218,7 +437,10 @@ void AudioManager::play_music(MusicId id, LoopMode loop) {
     return;
   }
 
-  std::lock_guard<std::mutex> lock(music_mutex_);
+  // The callback does not wait for this lock: while the song loads it plays
+  // the music as silence. The old song is cut here.
+  const std::lock_guard lock(music_mutex_);
+  music_stop_requested_.store(false);
 
   adl_reset(midi_player_.get());
 
@@ -227,12 +449,13 @@ void AudioManager::play_music(MusicId id, LoopMode loop) {
                    static_cast<unsigned long>(music_data_[slot].size()));
 
   if (result < 0) {
-    Logger::warn("Failed to load music data: {}", adl_errorString());
-    music_state_ = MusicState::STOPPED;
+    Logger::warn("Failed to load music data: {}",
+                 adl_errorInfo(midi_player_.get()));
+    music_state_.store(MusicState::STOPPED);
   }
   else {
     music_loop_ = (loop == LoopMode::Loop);
-    music_state_ = MusicState::PLAYING;
+    music_state_.store(MusicState::PLAYING);
   }
 #else
   (void)id;
@@ -245,206 +468,143 @@ void AudioManager::stop_music() {
   if (!audio_enabled_) {
     return;
   }
-  std::lock_guard<std::mutex> lock(music_mutex_);
-
-  if (music_state_ == MusicState::PLAYING) {
-    // Trigger the release phase of the active notes so FM tails fade out
-    adl_panic(midi_player_.get());
-
-    music_state_ = MusicState::DRAINING;
-    drain_samples_ = 0;
+  // The callback starts the fade-out at its next block (render_music()).
+  if (music_state_.load() == MusicState::PLAYING) {
+    music_stop_requested_.store(true);
   }
 #endif
 }
 
-void AudioManager::music_volume(float volume) {
-  music_volume_ = std::clamp(volume, 0.0f, 1.0f);
-}
+void AudioManager::music_volume(float volume) { mixer_.music_volume(volume); }
 
-void AudioManager::sound_volume(float volume) {
-  sound_volume_ = std::clamp(volume, 0.0f, 1.0f);
-}
+void AudioManager::sound_volume(float volume) { mixer_.sound_volume(volume); }
 
-void AudioManager::music_enabled(bool enabled) { music_enabled_ = enabled; }
+void AudioManager::music_enabled(bool enabled) {
+  mixer_.music_enabled(enabled);
+}
 
 bool AudioManager::is_playing() const {
   if (!audio_enabled_) {
     return false;
   }
 
-  if (music_state_ == MusicState::PLAYING) {
+#if PLEGACY_ENABLE_MUSIC
+  // The flag first: the callback stores the new state before clearing it.
+  if (!music_stop_requested_.load() &&
+      music_state_.load() == MusicState::PLAYING) {
     return true;
   }
+#endif
 
-  std::lock_guard<std::mutex> lock(sound_mutex_);
-  for (const auto& sound_ptr : sounds_) {
-    if (sound_ptr && sound_ptr->playing) {
-      return true;
-    }
-  }
-
-  return false;
+  return mixer_.any_effect_playing();
 }
 
 void AudioManager::audio_callback(void* userdata, SDL_AudioStream* stream,
                                   int additional_amount, int /*total_amount*/) {
   auto* manager = static_cast<AudioManager*>(userdata);
-  if (additional_amount <= 0 || !manager || !manager->audio_enabled_) {
+  if (additional_amount <= 0 || !manager) {
     // No data results in silence
     return;
   }
 
-  // additional_amount is in bytes; mix in whole interleaved sample frames.
-  const int sample_count =
-      additional_amount / static_cast<int>(sizeof(int16_t) * CHANNELS);
-  if (sample_count <= 0) {
-    return;
-  }
-
-  const size_t total_samples = static_cast<size_t>(sample_count) * CHANNELS;
-  if (manager->output_buffer_.size() != total_samples) {
-    manager->output_buffer_.resize(total_samples);
-  }
-
-  manager->fill_audio_buffer(manager->output_buffer_.data(), sample_count);
-  SDL_PutAudioStreamData(stream, manager->output_buffer_.data(),
-                         static_cast<int>(total_samples * sizeof(int16_t)));
-}
-
-void AudioManager::fill_audio_buffer(int16_t* buffer, int sample_count) {
-  const int n = sample_count * CHANNELS;
-
-  // Reuse pre-allocated mix buffer; resize only when SDL changes buffer size
-  if (static_cast<int>(mix_buffer_.size()) != n) {
-    mix_buffer_.resize(static_cast<size_t>(n));
-  }
-  std::fill(mix_buffer_.begin(), mix_buffer_.end(), 0.0f);
-
-  mix_music(buffer, sample_count);
-  for (int i = 0; i < n; ++i) {
-    mix_buffer_[i] += (buffer[i] / 32768.0f) * music_volume_;
-  }
-
-  mix_sounds(buffer, sample_count);
-  for (int i = 0; i < n; ++i) {
-    mix_buffer_[i] += (buffer[i] / 32768.0f) * sound_volume_;
-  }
-
-  // Apply master volume and clamp to prevent overflow
-  for (int i = 0; i < n; ++i) {
-    float sample = mix_buffer_[i] * master_volume_;
-    sample = std::clamp(sample, -1.0f, 1.0f);
-    buffer[i] = static_cast<int16_t>(sample * 32767.0f);
+  // additional_amount is in bytes; mix whole interleaved sample frames, one
+  // fixed-size block at a time.
+  std::size_t frames = static_cast<std::size_t>(additional_amount) /
+                       (sizeof(int16_t) * MIX_CHANNELS);
+  while (frames > 0) {
+    const std::size_t n = std::min(frames, MIX_BLOCK_FRAMES);
+    const std::span<int16_t> block(manager->out_block_.data(),
+                                   n * MIX_CHANNELS);
+    manager->fill_block(block);
+    SDL_PutAudioStreamData(stream, block.data(),
+                           static_cast<int>(block.size_bytes()));
+    frames -= n;
   }
 }
 
-void AudioManager::mix_music(int16_t* buffer, int sample_count) {
+void AudioManager::fill_block(std::span<int16_t> out) {
 #if PLEGACY_ENABLE_MUSIC
-  std::lock_guard<std::mutex> lock(music_mutex_);
-
-  int generated = 0;
-  if (music_state_ == MusicState::PLAYING) {
-    generated = adl_play(midi_player_.get(), sample_count * CHANNELS,
-                         reinterpret_cast<short*>(buffer));
-
-    // Detect end-of-song (adl_play returns fewer samples than requested)
-    if (generated < sample_count * CHANNELS) {
-      if (music_loop_) {
-        adl_positionRewind(midi_player_.get());
-        int remaining = sample_count * CHANNELS - generated;
-        generated += adl_play(midi_player_.get(), remaining,
-                              reinterpret_cast<short*>(buffer + generated));
-      }
-      else {
-        adl_panic(midi_player_.get());
-        music_state_ = MusicState::DRAINING;
-        drain_samples_ = 0;
-      }
-    }
-  }
-  else if (music_state_ == MusicState::DRAINING) {
-    // Process the OPL3 chip's release envelopes without advancing the
-    // MIDI sequencer or triggering new notes.
-    // This makes it sound the same as the original
-    generated = adl_generate(midi_player_.get(), sample_count * CHANNELS,
-                             reinterpret_cast<short*>(buffer));
-
-    drain_samples_ += sample_count;
-
-    // Check for silence to end the drain
-    bool is_silent = true;
-    for (int i = 0; i < generated; ++i) {
-      if (std::abs(buffer[i]) > 15) { // Threshold for FM noise floor
-        is_silent = false;
-        break;
-      }
-    }
-
-    if (is_silent || drain_samples_ > MAX_DRAIN_SAMPLES) {
-      music_state_ = MusicState::STOPPED;
-      adl_reset(midi_player_.get());
-    }
-  }
-
-  // Boost raw OPL output to get the audio louder (too soft otherwise)
-  if (music_gain_ != 1.0f) {
-    for (int i = 0; i < generated; ++i) {
-      float boosted = buffer[i] * music_gain_;
-      buffer[i] =
-          static_cast<int16_t>(std::clamp(boosted, -32768.0f, 32767.0f));
-    }
-  }
-
-  // Zero out any samples not written by the emulator
-  if (generated < sample_count * CHANNELS) {
-    std::memset(buffer + generated, 0,
-                (sample_count * CHANNELS - generated) * sizeof(int16_t));
-  }
+  const std::span<int16_t> music(music_block_.data(), out.size());
+  render_music(music);
+  mixer_.render(out, music);
 #else
-  std::memset(buffer, 0,
-              static_cast<size_t>(sample_count * CHANNELS * sizeof(int16_t)));
+  mixer_.render(out);
 #endif
 }
 
-void AudioManager::mix_sounds(int16_t* buffer, int sample_count) {
-  std::lock_guard<std::mutex> lock(sound_mutex_);
+#if PLEGACY_ENABLE_MUSIC
+void AudioManager::render_music(std::span<int16_t> block) {
+  const int count = static_cast<int>(block.size());
+  short* out = reinterpret_cast<short*>(block.data());
+  int generated = 0;
 
-  // Clear buffer first
-  std::memset(buffer, 0,
-              static_cast<size_t>(sample_count * CHANNELS * sizeof(int16_t)));
+  // Never wait here: play_music() holds the lock while it loads a song.
+  std::unique_lock lock(music_mutex_, std::try_to_lock);
+  if (lock.owns_lock() && midi_player_) {
+    ADL_MIDIPlayer* player = midi_player_.get();
 
-  // Mix all active sounds
-  for (auto& sound_ptr : sounds_) {
-    if (!sound_ptr || !sound_ptr->playing) {
-      continue;
+    if (music_stop_requested_.load()) {
+      if (music_state_.load() == MusicState::PLAYING) {
+        // Trigger the release phase of the active notes so FM tails fade out
+        adl_panic(player);
+        drain_samples_ = 0;
+        music_state_.store(MusicState::DRAINING);
+      }
+      music_stop_requested_.store(false);
     }
 
-    SoundEffect& sound = *sound_ptr;
-    size_t samples_to_copy = static_cast<size_t>(sample_count * CHANNELS);
-    size_t remaining = sound.samples.size() - sound.playback_position;
+    const MusicState state = music_state_.load();
+    if (state == MusicState::PLAYING) {
+      generated = std::max(adl_play(player, count, out), 0);
 
-    if (remaining == 0 && sound.loop) {
-      // Loop back to start
-      sound.playback_position = 0;
-      remaining = sound.samples.size();
+      // Detect end-of-song (adl_play returns fewer samples than requested)
+      if (generated < count) {
+        if (music_loop_) {
+          adl_positionRewind(player);
+          generated +=
+              std::max(adl_play(player, count - generated, out + generated), 0);
+        }
+        else {
+          adl_panic(player);
+          drain_samples_ = 0;
+          music_state_.store(MusicState::DRAINING);
+        }
+      }
     }
+    else if (state == MusicState::DRAINING) {
+      // Process the OPL3 chip's release envelopes without advancing the
+      // MIDI sequencer or triggering new notes.
+      // This makes it sound the same as the original
+      generated = std::max(adl_generate(player, count, out), 0);
 
-    if (remaining == 0) {
-      // Sound finished
-      sound.playing = false;
-      continue;
+      drain_samples_ += count / CHANNELS;
+
+      // Check for silence to end the drain
+      bool is_silent = true;
+      for (int i = 0; i < std::min(generated, count); ++i) {
+        if (std::abs(block[static_cast<size_t>(i)]) > 15) { // FM noise floor
+          is_silent = false;
+          break;
+        }
+      }
+
+      if (is_silent || drain_samples_ > MAX_DRAIN_SAMPLES) {
+        music_state_.store(MusicState::STOPPED);
+        adl_reset(player);
+      }
     }
-
-    // Copy what we can
-    size_t to_copy = std::min(samples_to_copy, remaining);
-    for (size_t i = 0; i < to_copy; ++i) {
-      // Simple additive mixing (will be handled by float mixing buffer in
-      // fill_audio_buffer)
-      buffer[i] = sound.samples[sound.playback_position + i];
-    }
-
-    sound.playback_position += to_copy;
   }
+
+  const auto written = static_cast<size_t>(std::clamp(generated, 0, count));
+  // Boost raw OPL output to get the audio louder (too soft otherwise)
+  for (size_t i = 0; i < written; ++i) {
+    const float boosted = static_cast<float>(block[i]) * MUSIC_BOOST;
+    block[i] = static_cast<int16_t>(std::clamp(boosted, -32768.0f, 32767.0f));
+  }
+  // Zero out any samples not written by the emulator
+  std::fill(block.begin() + static_cast<std::ptrdiff_t>(written), block.end(),
+            int16_t{0});
 }
+#endif
 
 } // namespace audio
