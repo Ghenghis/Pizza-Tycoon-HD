@@ -1,0 +1,14 @@
+{
+  "format": "pthd.content-golden",
+  "about": "Expected Expanded fingerprints per checkpoint and platform, written by tests/ContentGoldenTests.cpp. Record only with PLEGACY_UPDATE_GOLDEN=1 on the reference build; never edit by hand. Separate from the Classic golden file.",
+  "checkpoints": {
+    "first-week/day-1": {},
+    "first-week/day-2": {},
+    "first-week/day-3": {},
+    "first-week/day-4": {},
+    "first-week/day-5": {},
+    "first-week/day-6": {},
+    "first-week/day-7": {},
+    "first-week/started": {}
+  }
+}
