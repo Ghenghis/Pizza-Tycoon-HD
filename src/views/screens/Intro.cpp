@@ -83,7 +83,7 @@ Intro::~Intro() {
 bool Intro::on_action(const input::ActionEvent& ev) {
   // Skipping the intro swallows every key, so ignore input while a popup owns
   // the keyboard.
-  if (context_.popup->freezes_view()) {
+  if (context_.popup->is_open()) {
     return false;
   }
   if (!ev.state.released) {

@@ -189,7 +189,7 @@ void TutorialLayer::ask_to_skip() {
 }
 
 bool TutorialLayer::popup_up() const {
-  return context_.popup && context_.popup->freezes_view();
+  return context_.popup && context_.popup->is_open();
 }
 
 bool TutorialLayer::game_popup_up() const {

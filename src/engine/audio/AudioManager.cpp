@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 #include "core/content/Sha256.h"
 #include "engine/Logger.h"
@@ -589,13 +590,17 @@ void AudioManager::load_default_assets() {
   load_m_container("sound/m9");  // Hoover (VOC)
   load_m_container("sound/m10"); // Break-in music + burglary sounds (CMF + VOC)
   load_m_container("sound/m11"); // Break-in music (CMF)
+  effects_loaded();
+}
 
+void AudioManager::effects_loaded() {
   // A selection made before the effects were there takes effect now.
   const std::lock_guard lock(effects_mutex_);
   effects_loaded_ = true;
   if (wanted_effects_ != effects_) {
     if (const EffectsChange done = apply_effects(); !done) {
       Logger::warn("Enhanced effects not used: {}", done.error);
+      effects_problem_ = done.error;
     }
   }
 }
@@ -639,6 +644,11 @@ AudioManager::EffectsChange AudioManager::apply_effects() {
   }
   mixer_.collect_banks(audio_stream_ == nullptr);
   return done;
+}
+
+std::string AudioManager::take_effects_problem() {
+  const std::lock_guard lock(effects_mutex_);
+  return std::exchange(effects_problem_, {});
 }
 
 EffectsSet AudioManager::effects() const {

@@ -262,3 +262,39 @@ TEST_CASE("a looping effect plays on through a switch of effect sets",
   CHECK(music_test::fill(am).back() == before);
   CHECK(am.is_playing());
 }
+
+TEST_CASE("an enhanced pack chosen at startup and then refused is reported "
+          "once, and the originals play",
+          "[audio][sfx]") {
+  music_test::PausedAudio a;
+  if (!a.ok) {
+    SKIP("SDL has no dummy audio driver");
+  }
+  AudioManager& am = a.am;
+  test_support::TempDir dir;
+  const std::vector<std::uint8_t> levels = {132, 136, 140};
+  music_test::write_file(dir.path() / "fx.m", music_test::effects_m(levels));
+  const fs::path bad = dir.path() / "bad";
+  music_test::write_file(bad / "manifest.json",
+                         std::vector<std::uint8_t>(20, '{'));
+
+  // As Game does before the assets load: the choice waits for them.
+  am.effects_pack(bad);
+  CHECK(am.select_effects(EffectsSet::ENHANCED));
+  CHECK(am.take_effects_problem().empty());
+
+  am.load_m_container((dir.path() / "fx.m").string());
+  am.effects_loaded();
+  const std::string problem = am.take_effects_problem();
+  CHECK(problem.find("damaged") != std::string::npos);
+  CHECK(am.take_effects_problem().empty());
+  CHECK(am.effects() == EffectsSet::ORIGINAL);
+  CHECK(heard(am, SoundId::RESTAURANT_NOISE_1) ==
+        music_test::effect_level(static_cast<std::int16_t>(4 * 256)));
+
+  // Refused live, the menu has the reason from select_effects(); nothing
+  // is kept for later.
+  am.effects_pack(dir.path() / "not-there");
+  CHECK_FALSE(am.select_effects(EffectsSet::ENHANCED));
+  CHECK(am.take_effects_problem().empty());
+}

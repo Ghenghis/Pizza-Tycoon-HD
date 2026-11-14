@@ -363,7 +363,7 @@ void Menu::move_focus(int dir) {
 }
 
 bool Menu::on_action(const input::ActionEvent& ev) {
-  if (keyboard_receiving_item_ != nullptr || context_.popup->freezes_view()) {
+  if (keyboard_receiving_item_ != nullptr || context_.popup->is_open()) {
     return false;
   }
   if (ev.state.pressed) {

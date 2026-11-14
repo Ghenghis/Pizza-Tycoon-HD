@@ -41,6 +41,10 @@ public:
     return std::nullopt;
   }
 
+  // Whether the game goes on while this popup is open (it still takes the
+  // input). Popups stop the game by default.
+  virtual bool keeps_game_running() const { return false; }
+
   bool is_finished() const { return finished_; };
   void finished() { finished_ = true; };
   virtual void add_interactions(views::ui::InteractionContext, ViewPoint) = 0;

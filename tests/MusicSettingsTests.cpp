@@ -188,9 +188,11 @@ TEST_CASE("three working copies stay behind, and a damaged file falls back "
   }
   SECTION("edited without its checksum") {
     std::string text = slurp(file);
-    const auto at = text.find("\"seconds\": 4");
+    // As dump(2) writes the field; any other spelling would edit nothing.
+    const std::string field = "\"resume_seconds\": 4.0";
+    const auto at = text.find(field);
     REQUIRE(at != std::string::npos);
-    text.replace(at, 12, "\"seconds\": 9");
+    text.replace(at, field.size(), "\"resume_seconds\": 9.0");
     overwrite(file, text);
   }
   SettingsStore store(file);

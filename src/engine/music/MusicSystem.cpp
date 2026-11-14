@@ -7,10 +7,12 @@
 #include "engine/music/MusicSystem.h"
 
 #include <algorithm>
+#include <functional>
 #include <set>
 #include <system_error>
 
 #include "engine/Logger.h"
+#include "engine/SDL_include.h"
 #include "engine/audio/AudioManager.h"
 
 namespace fs = std::filesystem;
@@ -214,6 +216,27 @@ void MusicSystem::set_mode(Mode mode) {
 
 void MusicSystem::restore_original() { set_mode(Mode::ORIGINAL); }
 
+void MusicSystem::set_repeat(Repeat repeat) {
+  playback_->set_repeat(repeat);
+  save_state();
+}
+
+void MusicSystem::set_shuffle(bool shuffle) {
+  playback_->set_shuffle(shuffle);
+  save_state();
+}
+
+void MusicSystem::set_bar_collapsed(bool collapsed) {
+  if (store_->locked() || store_->settings().bar_collapsed == collapsed) {
+    return;
+  }
+  MusicSettings s = store_->settings();
+  s.bar_collapsed = collapsed;
+  if (const auto saved = store_->save_settings(s); !saved) {
+    Logger::warn("Music settings not saved: {}", saved.error);
+  }
+}
+
 FolderDraft& MusicSystem::folders() {
   if (!scanned_) {
     scan(); // the rows show what each folder holds
@@ -388,8 +411,70 @@ void MusicSystem::refresh_queue() {
   }
 }
 
+namespace {
+
+// What travels through the folder dialog: where to put the answer.
+struct PickRequest {
+  std::weak_ptr<void> owner;
+  std::function<void(std::vector<std::string>)> deliver;
+};
+
+void SDLCALL on_folders_picked(void* userdata, const char* const* files,
+                               int /*filter*/) {
+  std::unique_ptr<PickRequest> request(static_cast<PickRequest*>(userdata));
+  // The list is only borrowed until this returns: copied now.
+  std::vector<std::string> picked;
+  for (int i = 0; files && files[i] && i < 32; ++i) {
+    picked.emplace_back(files[i]);
+  }
+  if (!request->owner.expired() && !picked.empty()) {
+    request->deliver(std::move(picked));
+  }
+}
+
+} // namespace
+
+void MusicSystem::browse_folder(const std::string& relink_id) {
+  std::weak_ptr<Picks> picks = picks_;
+  auto request = std::make_unique<PickRequest>();
+  request->owner = picks_;
+  request->deliver = [picks, relink_id](std::vector<std::string> folders) {
+    if (const auto p = picks.lock()) {
+      const std::lock_guard lock(p->mutex);
+      for (std::string& f : folders) {
+        p->items.emplace_back(relink_id, std::move(f));
+      }
+    }
+  };
+  const std::string start = utf8_path(paths_.user_music);
+  SDL_ShowOpenFolderDialog(on_folders_picked, request.release(), nullptr,
+                           start.empty() ? nullptr : start.c_str(),
+                           relink_id.empty());
+}
+
 void MusicSystem::tick() {
+  std::vector<std::pair<std::string, std::string>> picked;
+  {
+    const std::lock_guard lock(picks_->mutex);
+    picked.swap(picks_->items);
+  }
+  for (const auto& [relink, path] : picked) {
+    std::string error;
+    const fs::path folder = path_from_utf8(path);
+    const std::string name = utf8_path(folder.filename());
+    if (relink.empty()) {
+      folder_message_ = draft_.add(folder, &error).empty()
+                            ? name + ": " + error
+                            : "Added " + name + "; Save keeps it";
+    }
+    else {
+      folder_message_ = draft_.relink(relink, folder, &error)
+                            ? "Now at " + name + "; Save keeps it"
+                            : name + ": " + error;
+    }
+  }
   for (const Notice& n : playback_->poll_notices()) {
+    last_notice_ = n.text;
     if (n.kind == Notice::Kind::SKIPPED) {
       Logger::warn("Music: {}", n.text);
     }

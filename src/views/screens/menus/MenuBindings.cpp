@@ -51,6 +51,8 @@ constexpr ActionText action_texts[] = {
      "Switch between the HD remaster and the original 1994 look."},
     {Action::ToggleCompare, "Compare 1994/HD",
      "Show the original look left of the mouse and the HD one right of it."},
+    {Action::ToggleMusicPlayer, "Music player",
+     "Open or close the mini-player for your music."},
     {Action::TogglePause, "Pause", "Pause the game."},
     {Action::TimeScale1, "Normal speed", "Run the game at normal speed."},
     {Action::TimeScale2, "Speed x2", "Run the game twice as fast."},

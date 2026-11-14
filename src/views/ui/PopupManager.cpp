@@ -130,10 +130,14 @@ void PopupManager::mark_dirty() {
   }
 }
 
-bool PopupManager::freezes_view() const { return active_popup_ != nullptr; }
+// A popup that keeps the game running leaves the view ticking with it; its
+// backdrop still takes the mouse.
+bool PopupManager::freezes_view() const {
+  return active_popup_ != nullptr && !active_popup_->keeps_game_running();
+}
 
 bool PopupManager::freezes_simulation() const {
-  return active_popup_ != nullptr;
+  return active_popup_ != nullptr && !active_popup_->keeps_game_running();
 }
 
 ViewPoint PopupManager::origin() const {

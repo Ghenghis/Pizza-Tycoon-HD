@@ -66,6 +66,12 @@ bool GlobalActionHandler::on_action(const input::ActionEvent& ev) {
     }
     return true;
 
+  case input::Action::ToggleMusicPlayer:
+    if (callbacks_.toggle_music_player) {
+      callbacks_.toggle_music_player();
+    }
+    return true;
+
   case input::Action::TimeScale1:
   case input::Action::TimeScale2:
   case input::Action::TimeScale3:

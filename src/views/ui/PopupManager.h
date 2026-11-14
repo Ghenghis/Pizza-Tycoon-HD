@@ -59,6 +59,9 @@ public:
   void clean() override;
   void mark_dirty() override;
   bool freezes_view() const override;
+  // A popup is up and takes the keyboard, even one that keeps the game
+  // running.
+  bool is_open() const { return active_popup_ != nullptr; }
   bool freezes_simulation() const override;
   ViewPoint origin() const;
   // Where the active popup is drawn.

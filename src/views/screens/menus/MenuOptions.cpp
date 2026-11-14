@@ -28,6 +28,8 @@
 #include "resources/HdTypeface.h"
 #include "views/ui/PopupManager.h"
 #include "views/ui/popups/AlertPopup.h"
+#include "views/ui/popups/MusicFoldersPopup.h"
+#include "views/ui/popups/MusicPlayerPopup.h"
 #include "views/ui/widgets/CheckboxMenuItem.h"
 #include "views/ui/widgets/EnumMenuItem.h"
 #include "views/ui/widgets/IntSliderMenuItem.h"
@@ -173,6 +175,21 @@ void MenuOptions::build_audio(GameState& state) {
         .help_text("Original plays the 1994 songs; Christmas Background and "
                    "Jukebox play your own music; Off plays none. Effects stay "
                    "as they are.");
+    add_menu_item(std::make_unique<TextMenuItem>(
+                      context_, "Music Player",
+                      [&state, this] {
+                        context_.popup->create<MusicPlayerPopup>(
+                            &state.options());
+                      },
+                      face))
+        .help_text("Play, pause, skip and seek your music, with its volume, "
+                   "repeat and shuffle. Ctrl+M opens it anywhere.");
+    add_menu_item(std::make_unique<TextMenuItem>(
+                      context_, "Music Folders",
+                      [this] { context_.popup->create<MusicFoldersPopup>(); },
+                      face))
+        .help_text("The folders your music is in: add, rename, locate, turn "
+                   "off or remove them. Nothing changes until Save.");
   }
   effects_set_ = context_.audio->effects();
   add_menu_item(
@@ -183,6 +200,10 @@ void MenuOptions::build_audio(GameState& state) {
             if (const auto done = context_.audio->select_effects(effects_set_);
                 !done) {
               Logger::warn("Enhanced effects not used: {}", done.error);
+              context_.popup->create<AlertPopup>(
+                  "The enhanced sound effects could not be used, so the "
+                  "original ones play. " +
+                  done.error);
             }
             effects_set_ = context_.audio->effects();
             state.options().enhanced_effects =
@@ -220,11 +241,13 @@ void MenuOptions::build_audio(GameState& state) {
       .help_text("Silences the music, which plays on underneath; Off above "
                  "stops it.");
   add_menu_item(std::make_unique<SliderMenuItem>(
-      context_, "Sound Volume", state.options().sound_volume,
-      [this](float v) { context_.audio->sound_volume(v); }));
+                    context_, "Sound Volume", state.options().sound_volume,
+                    [this](float v) { context_.audio->sound_volume(v); }))
+      .help_text("The sound effects.");
   add_menu_item(std::make_unique<SliderMenuItem>(
-      context_, "Music Volume", state.options().music_volume,
-      [this](float v) { context_.audio->music_volume(v); }));
+                    context_, "Music Volume", state.options().music_volume,
+                    [this](float v) { context_.audio->music_volume(v); }))
+      .help_text("The music, original or your own.");
   add_menu_item(std::make_unique<SliderMenuItem>(
                     context_, "Master Volume", state.options().master_volume,
                     [this](float v) { context_.audio->master_volume(v); }))

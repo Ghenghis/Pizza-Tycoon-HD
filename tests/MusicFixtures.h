@@ -225,19 +225,46 @@ inline fs::path tone_wav(const fs::path& path, double hz, double seconds,
   return path;
 }
 
-// Positive-going zero crossings per second of one channel of interleaved
-// int16 stereo at 44100 Hz: the tone's frequency.
+// The pitch of one channel of interleaved int16 stereo at 44100 Hz: rising
+// crossings of a quarter of the peak (with hysteresis, so codec noise near
+// zero is not counted), timed from the first to the last, so silence before
+// or after the tone does not count either. Plain zero crossings read a 660 Hz
+// tone in the 48 kbit/s MP3 fixture as 712 Hz, against a spectral peak of
+// 660 Hz.
 inline double frequency(std::span<const std::int16_t> stereo, int channel = 0) {
   const std::size_t frames = stereo.size() / 2;
-  std::size_t crossings = 0;
-  for (std::size_t f = 1; f < frames; ++f) {
-    if (stereo[(f - 1) * 2 + channel] < 0 && stereo[f * 2 + channel] >= 0) {
-      ++crossings;
+  const auto side = static_cast<std::size_t>(channel);
+  int top = 0;
+  for (std::size_t f = 0; f < frames; ++f) {
+    top = std::max(top, std::abs(static_cast<int>(stereo[f * 2 + side])));
+  }
+  const int threshold = top / 4;
+  if (threshold == 0) {
+    return 0.0;
+  }
+  int state = 0; // -1 below -threshold, +1 above
+  std::size_t first = 0;
+  std::size_t last = 0;
+  std::size_t rises = 0;
+  for (std::size_t f = 0; f < frames; ++f) {
+    const int v = stereo[f * 2 + side];
+    if (v > threshold) {
+      if (state < 0) {
+        if (rises == 0) {
+          first = f;
+        }
+        last = f;
+        ++rises;
+      }
+      state = 1;
+    }
+    else if (v < -threshold) {
+      state = -1;
     }
   }
-  return frames > 0 ? static_cast<double>(crossings) * 44100.0 /
-                          static_cast<double>(frames)
-                    : 0.0;
+  return rises > 1 && last > first ? static_cast<double>(rises - 1) * 44100.0 /
+                                         static_cast<double>(last - first)
+                                   : 0.0;
 }
 
 inline int peak(std::span<const std::int16_t> samples, int channel = -1) {

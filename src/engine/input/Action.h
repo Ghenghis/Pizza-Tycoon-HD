@@ -19,6 +19,8 @@ enum class Action {
   // (display only, nothing in the game changes).
   ToggleLook,
   ToggleCompare,
+  // The music player (see views/ui/popups/MusicPlayerPopup.h).
+  ToggleMusicPlayer,
   Exit,
 
   // Game speed

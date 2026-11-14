@@ -87,11 +87,16 @@ struct TrackInfo {
   bool frames_exact = false;
   std::uint32_t bitrate_kbps = 0;
   std::string encoding;
-  // From the tags, or the file's name when it has no title.
+  // From the tags, or the file's name when it has no title. Files with the
+  // same bytes are one track: its first source (below) gives these, and is
+  // the one played.
   std::string title;
   std::string artist;
   std::string album;
-  // The first one plays; the rest are files with exactly the same bytes.
+  // Files with exactly these bytes, in a fixed order: by root, in the
+  // player's order of folders, then by the byte order of the path below it
+  // (so "a copy.wav" comes before "a.wav"). The first plays and gives the
+  // title; the order does not depend on which file was hashed first.
   std::vector<TrackSource> sources;
 };
 

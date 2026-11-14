@@ -20,6 +20,7 @@ public:
     std::function<void()> toggle_fullscreen;
     std::function<void()> toggle_look;
     std::function<void()> toggle_compare;
+    std::function<void()> toggle_music_player;
     std::function<void(int)> set_time_scale;
   };
 

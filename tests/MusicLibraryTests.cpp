@@ -110,7 +110,10 @@ TEST_CASE("folders become collections of tracks with stable ids",
   const auto a = library.find(id_of(tree.a));
   REQUIRE(a);
   CHECK(a->sources.size() == 2);
-  CHECK(a->title == "a");
+  // The first source by path ("a copy.wav" < "a.wav": space before '.')
+  // plays and names the track.
+  CHECK(a->sources[0].relative == fs::path("Classic Christmas") / "a copy.wav");
+  CHECK(a->title == "a copy");
   CHECK(library.file_of(*a) == tree.root / "Classic Christmas" / "a copy.wav");
   const auto mp3 = library.find(id_of(tree.mp3));
   REQUIRE(mp3);
@@ -131,6 +134,32 @@ TEST_CASE("folders become collections of tracks with stable ids",
   const auto problems = library.poll_problems();
   REQUIRE(problems.size() == 1);
   CHECK(problems[0].find("broken.wav") != std::string::npos);
+}
+
+TEST_CASE("which copy of the same bytes names a track does not depend on "
+          "the order they were found in",
+          "[music][library]") {
+  test_support::TempDir dir;
+  const fs::path root = dir.path() / "Music";
+  const fs::path later = music_test::tone_wav(root / "b.wav", 440, 0.2);
+  const fs::path cache = dir.path() / "cache.json";
+  {
+    MusicLibrary library(cache);
+    library.set_roots({music::chosen_root(root)});
+    scan(library);
+    CHECK(library.find(id_of(later))->title == "b");
+  }
+  // A copy that sorts first arrives later; b.wav is a cache hit now.
+  fs::copy_file(later, root / "a.wav");
+  MusicLibrary library(cache);
+  REQUIRE(library.load_cache());
+  library.set_roots({music::chosen_root(root)});
+  scan(library);
+  const auto t = library.find(id_of(later));
+  REQUIRE(t);
+  REQUIRE(t->sources.size() == 2);
+  CHECK(t->sources[0].relative == fs::path("a.wav"));
+  CHECK(t->title == "a");
 }
 
 TEST_CASE("a moved file keeps its id, and unchanged files are not hashed "

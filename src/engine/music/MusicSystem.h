@@ -6,10 +6,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine/music/MusicLibrary.h"
@@ -31,6 +34,11 @@ public:
     return draft_;
   }
   [[nodiscard]] bool dirty() const { return draft_ != saved_; }
+  // Whether the saved list has this entry, so a scan has looked at it.
+  [[nodiscard]] bool saved(const std::string& id) const {
+    return std::any_of(saved_.begin(), saved_.end(),
+                       [&](const FolderChoice& f) { return f.id == id; });
+  }
 
   // Adds a folder of any name and returns its new id; empty, with the reason,
   // when it is not a folder or is in the list already.
@@ -90,6 +98,13 @@ public:
   // was, while the game goes on. Folders and playlists stay; the effects are
   // the AudioManager's (select_effects()).
   void restore_original();
+  // The player's choices in the mini-player, saved.
+  void set_repeat(Repeat repeat);
+  void set_shuffle(bool shuffle);
+  [[nodiscard]] bool bar_collapsed() const {
+    return store_->settings().bar_collapsed;
+  }
+  void set_bar_collapsed(bool collapsed);
 
   // The folder screen.
   [[nodiscard]] FolderDraft& folders();
@@ -114,8 +129,19 @@ public:
   // place. new_id must be a track of the library.
   SaveResult relink_track(const TrackId& old_id, const TrackId& new_id);
 
-  // Game thread, once a frame: takes notices, and queues the music when a
-  // scan has finished.
+  // Opens the system's folder picker. What the player picks is added to the
+  // folder draft (relink_id empty) or relinks that entry, at the next
+  // tick(); folder_message() then says how it went. The picker answers on
+  // its own time and maybe another thread; this object may be gone by then.
+  void browse_folder(const std::string& relink_id = {});
+  [[nodiscard]] const std::string& folder_message() const {
+    return folder_message_;
+  }
+  // The newest notice of the music owner ("Playing ...", "Skipped ...").
+  [[nodiscard]] const std::string& last_notice() const { return last_notice_; }
+
+  // Game thread, once a frame: takes notices and folder picks, and queues
+  // the music when a scan has finished.
   void tick();
 
 private:
@@ -132,6 +158,15 @@ private:
   std::unique_ptr<MusicLibrary> library_;
   std::unique_ptr<MusicPlayback> playback_;
   FolderDraft draft_;
+  // Folders picked in the system dialog: (relink id, path), filled by its
+  // callback.
+  struct Picks {
+    std::mutex mutex;
+    std::vector<std::pair<std::string, std::string>> items;
+  };
+  std::shared_ptr<Picks> picks_ = std::make_shared<Picks>();
+  std::string folder_message_;
+  std::string last_notice_;
   bool scanned_ = false;
   std::uint32_t scans_seen_ = 0;
 };

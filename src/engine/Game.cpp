@@ -68,7 +68,9 @@
 #include "views/ui/PopupManager.h"
 #include "views/ui/TurnPresenterView.h"
 #include "views/ui/competition/CompetitionPopups.h"
+#include "views/ui/popups/AlertPopup.h"
 #include "views/ui/popups/ConfirmPopup.h"
+#include "views/ui/popups/MusicPlayerPopup.h"
 #include "views/ui/staff/StaffEventPopups.h"
 
 namespace {
@@ -397,6 +399,18 @@ int Game::run() {
           [this, &loop_state] { toggle_look(loop_state, /*compare=*/false); },
       .toggle_compare =
           [this, &loop_state] { toggle_look(loop_state, /*compare=*/true); },
+      // Opens the mini-player when no other popup is up; the player closes
+      // itself on the same keys.
+      .toggle_music_player =
+          [&loop_state, &overlays] {
+            if (!overlays || !loop_state.context.music ||
+                overlays->popup->is_open()) {
+              return;
+            }
+            PopupManager& popup = *overlays->popup;
+            popup.anchor({DisplayConstants::SCREEN_WIDTH, 24});
+            popup.create<MusicPlayerPopup>(&loop_state.game_state.options());
+          },
       .set_time_scale =
           [&loop_state](int scale) {
             loop_state.game_state.time_scale(scale);
@@ -462,6 +476,9 @@ int Game::run() {
   uint32_t tick_accumulator_ms = 0;
   bool did_initial_raise = false;
   uint32_t title_fps = std::numeric_limits<uint32_t>::max();
+  // Every five minutes of play and each new game day and week; written off
+  // this thread (SaveGameManager.h).
+  save::TimedCheckpoints timed_checkpoints;
 
   while (!state.should_exit()) {
     uint64_t wall_ms = SDL_GetTicks();
@@ -494,6 +511,16 @@ int Game::run() {
 
     if (music_) {
       music_->tick();
+    }
+    // An enhanced sound pack that was refused says so, once.
+    if (overlays) {
+      if (std::string problem = audio_manager_->take_effects_problem();
+          !problem.empty()) {
+        overlays->popup->create<AlertPopup>(
+            "The enhanced sound effects could not be used, so the original "
+            "ones play. " +
+            problem);
+      }
     }
 
     // Logic runs independent of FPS
@@ -631,6 +658,13 @@ int Game::run() {
     if (tick_accumulator_ms >= simulation_tick_ms) {
       tick_accumulator_ms = 0;
     }
+
+    // Play time counts only while the game itself runs.
+    const bool playing = overlays && !overlays->manager.simulation_frozen() &&
+                         !state.is_clock_suspended();
+    timed_checkpoints.frame(state, context,
+                            std::chrono::milliseconds(context.clock.dt_ms),
+                            playing);
     // The 1994 look shows the original letters and no lights; the options
     // themselves stay as they are.
     lighting::set_enabled(state.options().lighting && !classic_look_);
@@ -687,6 +721,8 @@ int Game::run() {
 
     fps.end_frame_and_sleep();
   }
+  // A checkpoint still being written is finished, not cut short.
+  timed_checkpoints.finish();
   // --crt is a one-off that we don't want to update the config with the CRT
   // option on, so don't write the config if this flag was passed.
   if (!crt_mode_override_) {

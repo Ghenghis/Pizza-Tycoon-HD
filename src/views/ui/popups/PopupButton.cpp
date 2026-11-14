@@ -74,5 +74,25 @@ void PopupButton::add_interactions(views::ui::InteractionContext ctx,
         if (dirty) {
           inv();
         }
-      });
+      },
+      tooltip_options(tooltip_));
+}
+
+views::ui::ItemOptions PopupButton::tooltip_options(const std::string& text) {
+  if (text.empty()) {
+    return {};
+  }
+  return views::ui::ItemOptions{
+      .tooltip = [text](const views::ui::InteractionEvent& ie) {
+        return std::optional<TooltipRequest>(TooltipRequest{
+            .text = text,
+            .anchor = TooltipAnchor::Mouse,
+            .pos = ie.pos,
+            .palette = 62,
+            .bg_color = 15,
+            .text_color = 240,
+            .border_color = 240,
+            .padding = 4,
+        });
+      }};
 }

@@ -38,6 +38,12 @@ public:
   }
 
   void set_painter(Painter p) { painter_ = std::move(p); }
+  // Shown when the pointer rests on the button.
+  void tooltip(std::string text) { tooltip_ = std::move(text); }
+  // The options that show text as this kit's tooltip, for any popup item;
+  // none for empty text.
+  static views::ui::ItemOptions tooltip_options(const std::string& text);
+  void text(std::string text) { text_ = std::move(text); }
   void set_rect(ViewRect r) { rect_ = r; }
   void face(FontFace face) { face_ = face; }
   // Overrides the item name, which is otherwise built from the text.
@@ -58,6 +64,7 @@ private:
   FontFace face_{FontFace::ASTANDAR};
   Callback on_click_;
   Painter painter_;
+  std::string tooltip_;
 
   bool hovered_ = false;
   bool pressed_ = false;

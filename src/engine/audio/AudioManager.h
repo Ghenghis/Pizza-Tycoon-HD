@@ -381,6 +381,9 @@ public:
   // are. Game thread (or the thread that loads the assets).
   EffectsChange select_effects(EffectsSet set);
   [[nodiscard]] EffectsSet effects() const;
+  // Why a selection made before the effects were loaded could not be used,
+  // once; empty otherwise. For a notice to the player.
+  [[nodiscard]] std::string take_effects_problem();
   // SHA-256 (hex) of each original effect's VOC data as loaded, for packs to
   // name what they replace; empty for a slot not loaded.
   [[nodiscard]] std::string effect_source_sha256(SoundId id) const;
@@ -392,6 +395,10 @@ public:
 
   void init();
   void load_default_assets();
+  // The original effects are all loaded (load_default_assets() ends with
+  // it): a selection made before them is applied now, and a refused one is
+  // kept for take_effects_problem().
+  void effects_loaded();
 
   // automatically distributes CMF/VOC to appropriate storage
   void load_m_container(const std::string& m_file_path);
@@ -452,6 +459,7 @@ private:
   EffectsSet effects_ = EffectsSet::ORIGINAL;
   EffectsSet wanted_effects_ = EffectsSet::ORIGINAL;
   bool effects_loaded_ = false;
+  std::string effects_problem_;
   std::array<std::string, static_cast<std::size_t>(SoundId::COUNT)>
       effect_sources_;
   // Selection for play_sound_if_changed.

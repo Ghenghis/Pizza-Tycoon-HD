@@ -61,6 +61,14 @@ const music::Collection* named(const std::vector<music::Collection>& all,
                    [&](const music::Collection& c) { return c.name == name; });
   return it == all.end() ? nullptr : &*it;
 }
+// The pointer points into the vector, so it must outlive the pointer: a
+// temporary one would leave it dangling.
+const music::Collection* named(std::vector<music::Collection>&& all,
+                               const std::string& name) = delete;
+
+bool has(const std::vector<music::Collection>& all, const std::string& name) {
+  return named(all, name) != nullptr;
+}
 
 } // namespace
 
@@ -123,7 +131,7 @@ TEST_CASE("several folders of any name, labels, and Save, Cancel and Reset",
       CHECK(row.tracks == 1);
     }
     // A folder's own songs make a collection under the player's label.
-    CHECK(named(sys.collections(), "Navidad"));
+    CHECK(has(sys.collections(), "Navidad"));
   }
   // After a restart the same folders and labels, and a new suggestion does
   // not change a saved list.
@@ -156,7 +164,8 @@ TEST_CASE("a moved folder is relinked: its collections, labels and playlists "
   const std::string root = draft.add(before);
   REQUIRE(sys.save_folders());
   REQUIRE(scanned(sys, 1));
-  const music::Collection* carols = named(sys.collections(), "Carols");
+  const auto first_scan = sys.collections();
+  const music::Collection* carols = named(first_scan, "Carols");
   REQUIRE(carols);
   const std::string carols_id = carols->id;
   REQUIRE(sys.rename_collection(carols_id, "Our Carols"));
@@ -190,8 +199,8 @@ TEST_CASE("a moved folder is relinked: its collections, labels and playlists "
 
   // Hiding a collection keeps it, out of sight.
   REQUIRE(sys.hide_collection(carols_id, true));
-  CHECK_FALSE(named(sys.collections(), "Our Carols"));
-  CHECK(named(sys.collections(true), "Our Carols"));
+  CHECK_FALSE(has(sys.collections(), "Our Carols"));
+  CHECK(has(sys.collections(true), "Our Carols"));
 }
 
 TEST_CASE("Locate: a replaced track is relinked in every playlist",
@@ -277,4 +286,40 @@ TEST_CASE("Restore original audio mid-game: the FM song goes on exactly, and "
     REQUIRE(music_test::fill(am) == ref.output());
   }
 #endif
+}
+
+TEST_CASE("the mini-player's repeat, shuffle and collapsed bar are saved, and "
+          "a folder is new until the list is saved",
+          "[music][folders]") {
+  Places at;
+  music_test::tone_wav(at.other.path() / "Hymns" / "a.wav", 440, 0.2);
+  audio::AudioManager am;
+  {
+    MusicSystem sys(am, at.paths());
+    CHECK(sys.bar_collapsed());
+    sys.set_bar_collapsed(false);
+    sys.set_repeat(music::Repeat::ONE);
+    sys.set_shuffle(true);
+    CHECK(sys.playback().repeat() == music::Repeat::ONE);
+    CHECK(sys.playback().shuffle());
+
+    music::FolderDraft& draft = sys.folders();
+    const std::string id = draft.add(at.other.path() / "Hymns");
+    REQUIRE_FALSE(id.empty());
+    CHECK_FALSE(draft.saved(id));
+    for (const auto& row : sys.folder_rows()) {
+      if (row.folder.id == id) {
+        CHECK(row.available);
+        CHECK(row.tracks == 0); // not scanned yet
+      }
+    }
+    REQUIRE(sys.save_folders());
+    CHECK(draft.saved(id));
+  }
+  MusicSystem again(am, at.paths());
+  CHECK_FALSE(again.bar_collapsed());
+  CHECK(again.playback().repeat() == music::Repeat::ONE);
+  CHECK(again.playback().shuffle());
+  again.set_bar_collapsed(true);
+  CHECK(again.store().settings().bar_collapsed);
 }

@@ -254,6 +254,8 @@ set(GAME_PLEGACY_SOURCES
     src/views/ui/popups/GuestTalkPopup.cpp
     src/views/ui/popups/InvoicePopup.cpp
     src/views/ui/popups/JukeboxPopup.cpp
+    src/views/ui/popups/MusicFoldersPopup.cpp
+    src/views/ui/popups/MusicPlayerPopup.cpp
     src/views/ui/popups/NumberInputPopup.cpp
     src/views/ui/popups/OptionsPopup.cpp
     src/views/ui/popups/PopupButton.cpp
@@ -853,6 +855,8 @@ set(PLEGACY_HEADERS
     src/views/ui/popups/GuestTalkPopup.h
     src/views/ui/popups/InvoicePopup.h
     src/views/ui/popups/JukeboxPopup.h
+    src/views/ui/popups/MusicFoldersPopup.h
+    src/views/ui/popups/MusicPlayerPopup.h
     src/views/ui/popups/NumberInputPopup.h
     src/views/ui/popups/OptionsPopup.h
     src/views/ui/popups/PopupButton.h
