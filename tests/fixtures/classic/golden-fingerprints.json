@@ -1,16 +1,88 @@
 {
-  "format": "pthd.classic-golden",
-  "version": 1,
   "about": "Expected Classic fingerprints per checkpoint and platform, written by tests/ClassicFingerprintTests.cpp. Record only with PLEGACY_UPDATE_GOLDEN=1 on the reference build; never edit by hand.",
   "checkpoints": {
-    "quick-start-madrid/started": null,
-    "quick-start-madrid/day-4": null,
-    "free-paris/started": null,
-    "free-paris/day-9": null,
-    "free-paris/april": null,
-    "free-paris/new-year": null,
-    "ten-cities/built": null,
-    "ten-cities-original-bugs/built": null,
-    "legacy-v1/loaded": null
-  }
+    "free-paris/april": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1995-04-02",
+        "fingerprint": "096b990c00261ffb",
+        "restaurants": 9,
+        "rng_state": 668531863,
+        "time_blocks": 4662
+      }
+    },
+    "free-paris/day-9": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1995-03-09",
+        "fingerprint": "906bbeb2f2c08106",
+        "restaurants": 9,
+        "rng_state": 4291099377,
+        "time_blocks": 1206
+      }
+    },
+    "free-paris/new-year": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1996-01-02",
+        "fingerprint": "935e1635e065d2c5",
+        "restaurants": 9,
+        "rng_state": 2019100570,
+        "time_blocks": 44262
+      }
+    },
+    "free-paris/started": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1995-03-01",
+        "fingerprint": "16a48b91aa3927d5",
+        "restaurants": 5,
+        "rng_state": 2961941690,
+        "time_blocks": 54
+      }
+    },
+    "legacy-v1/loaded": null,
+    "quick-start-madrid/day-4": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1995-03-04",
+        "fingerprint": "c184a30452fda958",
+        "restaurants": 7,
+        "rng_state": 2710025210,
+        "time_blocks": 486
+      }
+    },
+    "quick-start-madrid/started": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1995-03-01",
+        "fingerprint": "3f4fc251901b21b5",
+        "restaurants": 7,
+        "rng_state": 1472530497,
+        "time_blocks": 54
+      }
+    },
+    "ten-cities-original-bugs/built": {
+      "linux-gcc-x64": {
+        "cities_built": 10,
+        "date": "1995-03-01",
+        "fingerprint": "86a6ee6ce6e6aac9",
+        "restaurants": 6,
+        "rng_state": 3035796507,
+        "time_blocks": 54
+      }
+    },
+    "ten-cities/built": {
+      "linux-gcc-x64": {
+        "cities_built": 10,
+        "date": "1995-03-01",
+        "fingerprint": "f36fd0d97b2d3e64",
+        "restaurants": 6,
+        "rng_state": 3035796507,
+        "time_blocks": 54
+      }
+    }
+  },
+  "format": "pthd.classic-golden",
+  "version": 1
 }
