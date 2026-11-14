@@ -324,10 +324,10 @@ ViewFactory::Result ViewFactory::create(GameContext& context, GameState& gs) {
                                                     mr.district_index);
           },
           [&](const EuroMapState& em) {
-            // A game outside the original ten travels on the Expanded world
-            // map; Classic games, game set-up and depot exports keep EuroMap.
-            if (em.mode == MapMode::TRAVEL && !gs.roster().is_classic()) {
-              view = std::make_unique<WorldMapView>(context, gs);
+            // A game outside the original ten travels and exports on the
+            // Expanded world map; Classic games and game set-up keep EuroMap.
+            if (em.mode != MapMode::GAME_INIT && !gs.roster().is_classic()) {
+              view = std::make_unique<WorldMapView>(context, gs, em);
             }
             else {
               view =

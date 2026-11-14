@@ -145,6 +145,11 @@ struct RecipeImportState {
 struct EuroMapState {
   MapMode mode;
   std::optional<IngredientCategory> category = std::nullopt;
+  // Expanded world map only: the view to open on (a region index, or the
+  // bonus view), and browsing without any travel or export (review
+  // captures, `nav worldmap`).
+  std::optional<int> world_view = std::nullopt;
+  bool browse_only = false;
 };
 enum class GameOverCause {
   BankruptLoans, // unused

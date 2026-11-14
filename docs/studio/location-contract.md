@@ -650,7 +650,7 @@ order); selecting a cluster zooms or opens the list. The full list is always ava
 
 A game whose roster is not the Classic ten travels on the Expanded world map
 (`src/views/screens/WorldMapView.cpp`, logic in `src/core/content/WorldMap.cpp`); EuroMap stays
-for Classic games, game set-up and depot exports. Regions are the placement's (a bonus route
+for Classic games and game set-up. Regions are the placement's (a bonus route
 has its own view); the original ten use the Classic adapter's region and city-centre point
 (`ClassicCities.h`, to be replaced by the pinned gazetteer). Fares are integer arithmetic on
 micro-degrees and need no RNG:
@@ -666,6 +666,17 @@ The default rate matches the original map within a dollar (Paris to Berlin: 59 m
 there, 58 here). `scenario.rules.travel` sets both rates. With travel `disabled` the map closes
 as it opens and offers no travel. Travel is one explicit action with a confirmation that names
 the fare; browsing, paging and previous/next only change the view.
+
+Depot exports of an Expanded game use the same map: the target is chosen the same way, the
+cost is the fare above, a place without the player's central depot is refused ("You do not
+have a central depot in X."), and with `fix_legacy_bugs` so is a place under embargo, as on
+EuroMap. Choosing the current place closes the map; a valid target opens the export screen.
+
+For review captures `nav worldmap [view]` opens the map on a region (id or 0-7) or the bonus
+view (`bonus` or 8) for looking only: no travel or export button, open even when travel is
+disabled, no time passes. `data/scenarios/review-world-tour.json` (not in any menu) is a game
+whose places fill three views: Paris and Madrid (Europe), New York (North America) and the
+village (bonus).
 
 ### 10.5 Facets
 

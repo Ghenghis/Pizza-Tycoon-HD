@@ -1,0 +1,61 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:review-world-tour",
+  "revision": 1,
+  "display": {
+    "title": "World Tour (review)",
+    "subtitle": "Paris, New York, Madrid and the North Pole",
+    "summary": "A review game whose places span several regions of the world map.",
+    "intro": "Four places on three views of the world map, so every view can be looked at and captured. Not offered in the menus.",
+    "goal_summary": "No goals: this game exists for review captures.",
+    "victory_summary": "There is nothing to win here.",
+    "difficulty_label": "forgiving"
+  },
+  "roster": [
+    {
+      "location_key": "classic:paris",
+      "pin": "classic"
+    },
+    {
+      "location_key": "classic:new-york",
+      "pin": "classic"
+    },
+    {
+      "location_key": "classic:madrid",
+      "pin": "classic"
+    },
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": {
+        "revision": 2,
+        "definition_sha256": "d3d1f82ed8227a3a5bce70dab7e742c8725954c81d21dae415f54adb14020355"
+      }
+    }
+  ],
+  "start": {
+    "location_key": "classic:paris",
+    "game_mode": "freemode",
+    "difficulty": 2
+  },
+  "rules": {
+    "win": {
+      "mode": "none"
+    },
+    "travel": {
+      "model": "geo_manhattan"
+    },
+    "game_rules": {}
+  },
+  "objectives": {
+    "goal": {
+      "all_of": []
+    },
+    "optional": [],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  }
+}

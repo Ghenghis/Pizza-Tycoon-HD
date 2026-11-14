@@ -9,6 +9,7 @@
 #include "core/city/City.h"
 #include "core/city/Property.h"
 #include "core/common/Ids.h"
+#include "core/content/Regions.h"
 #include "core/debug/command/CommonArgs.h"
 #include "core/food/IngredientCategoryType.h"
 #include "core/food/StandardPizza.h"
@@ -425,6 +426,70 @@ Examples:
   };
 }
 
+// The Expanded world map of the game in progress, opened on one view and
+// only for looking: no travel, no export, open even when travel is off, so
+// every region can be captured for review.
+static CommandDef make_nav_worldmap() {
+  return CommandDef{
+      .name = "worldmap",
+      .aliases = {"wm"},
+      .description = "Expanded world map, browse only",
+      .help_text = R"(Usage: nav worldmap [view]
+
+Opens the world map of a game whose places are not the original ten, on a
+region or the bonus routes, for looking only: there is no travel or export
+button and no time passes. Classic games use `nav euromap`.
+
+Views: north-america, latin-america-caribbean, europe,
+north-africa-western-asia, sub-saharan-africa, central-south-asia,
+east-southeast-asia, oceania-pacific, bonus (or 0-8).
+
+Examples:
+  nav worldmap            # where the player is
+  nav worldmap europe
+  nav worldmap bonus
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "view",
+                  .type = ArgType::String,
+                  .optional = true,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Region id, bonus, or 0-8",
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        if (ctx.state.roster().is_classic()) {
+          return CommandResult::error(
+              "A Classic game has the original map: use nav euromap");
+        }
+        std::optional<int> view;
+        if (ctx.has_arg(0)) {
+          const std::string name = ctx.string_arg(0);
+          if (name == "bonus") {
+            view = static_cast<int>(core::content::regions.size());
+          }
+          else if (const auto index = core::content::region_index(name)) {
+            view = static_cast<int>(*index);
+          }
+          else if (name.size() == 1 && name[0] >= '0' && name[0] <= '8') {
+            view = name[0] - '0';
+          }
+          else {
+            return CommandResult::error("No world map view " + name);
+          }
+        }
+        ctx.state.ui().push<EuroMapState>(EuroMapState{.mode = MapMode::TRAVEL,
+                                                       .category = std::nullopt,
+                                                       .world_view = view,
+                                                       .browse_only = true});
+        return CommandResult::success().add_message(
+            "Navigated to the world map");
+      },
+  };
+}
+
 CommandDef make_nav_commands() {
   return CommandDef{
       .name = "nav",
@@ -445,6 +510,9 @@ CommandDef make_nav_commands() {
                                       ScreenTag::Kind::DiskMenu))
       .add_subcommand(make_screen_nav("load", {}, "game load menu",
                                       ScreenTag::Kind::MenuGameLoad))
+      .add_subcommand(make_screen_nav("northpole", {"np"},
+                                      "North Pole preset chooser",
+                                      ScreenTag::Kind::MenuNorthPole))
 
       // Screens
       .add_subcommand(make_screen_nav("advertising", {"ad"}, "advertising",
@@ -541,6 +609,7 @@ CommandDef make_nav_commands() {
                 "Navigated to Europe map");
           },
       })
+      .add_subcommand(make_nav_worldmap())
       .add_subcommand(CommandDef{
           .name = "terminal",
           .aliases = {"tm"},

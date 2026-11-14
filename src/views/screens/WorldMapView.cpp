@@ -11,6 +11,8 @@
 #include <string>
 
 #include "core/character/Player.h"
+#include "core/city/City.h"
+#include "core/city/Property.h"
 #include "core/finance/Ledger.h"
 #include "core/state/GameState.h"
 #include "core/state/UIState.h"
@@ -68,18 +70,25 @@ bool clicked(const views::ui::InteractionEvent& ev) {
 
 } // namespace
 
-WorldMapView::WorldMapView(GameContext& context, GameState& state)
+WorldMapView::WorldMapView(GameContext& context, GameState& state,
+                           const EuroMapState& request)
     : View(context, state),
       browser_(core::content::roster_world_entries(state.roster()), page_size),
-      rates_(core::content::travel_rates(state.scenario())) {
-  closes_at_once_ = !state_.travel_enabled();
+      rates_(core::content::travel_rates(state.scenario())),
+      mode_(request.mode), category_(request.category),
+      browse_only_(request.browse_only) {
+  closes_at_once_ = !browse_only_ && !state_.travel_enabled();
   if (closes_at_once_) {
     return;
   }
-  // Open on the region of the place the player is in, with it selected.
+  // Open on the region of the place the player is in, with it selected, or
+  // on the view asked for.
   if (const auto* current = here()) {
     browser_.show(current->region.value_or(WorldBrowser::bonus_view));
     browser_.select(current->key);
+  }
+  if (request.world_view) {
+    browser_.show(static_cast<std::size_t>(*request.world_view));
   }
 
   for (std::size_t v = 0; v < WorldBrowser::view_count; ++v) {
@@ -110,8 +119,10 @@ WorldMapView::WorldMapView(GameContext& context, GameState& state)
          [this] { browser_.page(browser_.page() - 1); });
   button(ViewRect{list_x + 148, 312, 24, 18}, "worldmap.page_next",
          [this] { browser_.page(browser_.page() + 1); });
-  button(ViewRect{list_x, 350, 110, 22}, "worldmap.travel",
-         [this] { ask_to_travel(); });
+  if (!browse_only_) {
+    button(ViewRect{list_x, 350, 110, 22}, "worldmap.travel",
+           [this] { act(); });
+  }
   button(ViewRect{list_x + 122, 350, 110, 22}, "worldmap.back",
          [this] { state_.ui().pop(); });
 }
@@ -129,6 +140,73 @@ void WorldMapView::tick() {
   if (closes_at_once_) {
     closes_at_once_ = false;
     state_.ui().pop();
+  }
+}
+
+void WorldMapView::act() {
+  if (exporting()) {
+    const auto* target = browser_.selected();
+    const auto* from = here();
+    if (!target || !from || !target->city) {
+      return;
+    }
+    if (target->key == from->key) {
+      // As EuroMap: choosing the city the depot is in goes back.
+      state_.ui().pop();
+      return;
+    }
+    if (export_refusal()) {
+      return;
+    }
+    export_to(*target->city,
+              core::content::travel_cost(*from, *target, rates_,
+                                         state_.difficulty_level()));
+    return;
+  }
+  ask_to_travel();
+}
+
+bool WorldMapView::has_depot_in(core::CityId city_id) const {
+  // As EuroMap::player_has_depot_in_city.
+  if (!state_.is_city_loaded(city_id)) {
+    return false;
+  }
+  const auto* city = state_.city(city_id);
+  const auto* player = state_.active_player();
+  if (!city || !player) {
+    return false;
+  }
+  for (const auto* property : city->properties()) {
+    if (property->type() == PropertyType::DEPOT) {
+      const auto owner = property->owner_or_tenant();
+      if (owner && *owner == player->id()) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+std::optional<std::string> WorldMapView::export_refusal() const {
+  const auto* target = browser_.selected();
+  if (!target || !target->city) {
+    return std::string("Choose a place of this game.");
+  }
+  if (!has_depot_in(*target->city)) {
+    return "You do not have a central depot in " + target->name + ".";
+  }
+  const auto* city = state_.city(*target->city);
+  if (category_ && state_.rules().fix_legacy_bugs && city &&
+      city->trade_embargo_counter(*category_)) {
+    return target->name + " is under embargo!";
+  }
+  return std::nullopt;
+}
+
+void WorldMapView::export_to(core::CityId target, Money cost) {
+  // As EuroMap's export box: the export screen takes it from here.
+  if (category_) {
+    state_.ui().replace_top<DepotExportState>(*category_, target, cost);
   }
 }
 
@@ -259,18 +337,30 @@ void WorldMapView::render(const RenderContext& ctx) {
       TextAnchor::Middle);
 
   // What the selection costs, and the buttons.
-  const bool can_travel =
-      chosen && current && chosen->city && chosen->key != current->key;
-  if (can_travel) {
+  bool can_act = !browse_only_ && chosen && current && chosen->city &&
+                 chosen->key != current->key;
+  if (can_act && exporting()) {
+    if (const auto refusal = export_refusal()) {
+      font.render_text_onto(s, *refusal, ViewPoint{list_x, 334},
+                            FontFace::SUPERSMA, text);
+      can_act = false;
+    }
+  }
+  if (can_act) {
     const Money cost = core::content::travel_cost(*current, *chosen, rates_,
                                                   state_.difficulty_level());
-    font.render_text_onto(s, compat::format("Fare: {:w}", cost),
-                          ViewPoint{list_x, 334}, FontFace::SUPERSMA, text);
+    const std::string fare = exporting()
+                                 ? compat::format("Export will cost {:w}", cost)
+                                 : compat::format("Fare: {:w}", cost);
+    font.render_text_onto(s, fare, ViewPoint{list_x, 334}, FontFace::SUPERSMA,
+                          text);
   }
-  gfx::draw::beveled_box(s, ViewRect{list_x, 350, 110, 22}, light, dark, 1);
-  font.render_text_onto(s, "Travel", ViewPoint{list_x + 55, 354},
-                        FontFace::SUPERSMA, can_travel ? text : light,
-                        TextAnchor::Middle);
+  if (!browse_only_) {
+    gfx::draw::beveled_box(s, ViewRect{list_x, 350, 110, 22}, light, dark, 1);
+    font.render_text_onto(s, exporting() ? "Export" : "Travel",
+                          ViewPoint{list_x + 55, 354}, FontFace::SUPERSMA,
+                          can_act ? text : light, TextAnchor::Middle);
+  }
   gfx::draw::beveled_box(s, ViewRect{list_x + 122, 350, 110, 22}, light, dark,
                          1);
   font.render_text_onto(s, "Back", ViewPoint{list_x + 177, 354},
