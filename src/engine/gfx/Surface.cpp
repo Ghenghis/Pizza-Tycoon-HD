@@ -71,6 +71,7 @@ Surface Surface::clone() const {
   Surface copy(width_, height_, palette_.value_or(PaletteHandle{0}));
   std::memcpy(copy.data(), pixels_.data(), pixels_.size());
   copy.hd_ = hd_; // shared until either side draws
+  copy.hd_image_ = hd_image_;
   return copy;
 }
 
@@ -84,34 +85,149 @@ void Surface::attach_hd(std::shared_ptr<const HdImage> hd) {
   if (!hd || hd->width != width_ * k || hd->height != height_ * k) {
     fatal("Surface::attach_hd: HD image does not match surface size");
   }
-  // Never written through while shared: hd_mut() clones first.
-  hd_ = std::const_pointer_cast<HdImage>(std::move(hd));
+  hd_image_ = hd;
+  hd_ = HdList::leaf(std::move(hd), width_, height_);
 }
 
-HdImage& Surface::hd_mut() {
-  const int k = hd_scale();
+const HdImage* Surface::hd() const {
+  if (!has_hd()) {
+    return nullptr;
+  }
+  if (!hd_image_) {
+    if (hd_->is_leaf()) {
+      hd_image_ = hd_->cmds().front().img;
+    }
+    else {
+      hd_image_ = std::make_shared<const HdImage>(hd_->materialize(hd_scale()));
+    }
+  }
+  return hd_image_.get();
+}
+
+HdList& Surface::hd_mut() {
   if (!hd_) {
-    hd_ = std::make_shared<HdImage>(width_ * k, height_ * k, 0u);
+    hd_ = std::make_shared<HdList>(width_, height_);
   }
   else if (hd_.use_count() > 1) {
-    hd_ = std::make_shared<HdImage>(*hd_);
+    hd_ = std::make_shared<HdList>(*hd_);
   }
+  hd_image_.reset();
   return *hd_;
 }
 
-void Surface::hd_clear_rect(int x0, int y0, int x1, int y1) noexcept {
-  if (!hd_ || x1 <= x0 || y1 <= y0) {
+void Surface::hd_clear_rect(int x0, int y0, int x1, int y1) {
+  if (!has_hd() || x1 <= x0 || y1 <= y0) {
     return;
   }
-  HdImage& hd = hd_mut();
-  const int k = hd_scale();
-  for (int ty = y0 * k; ty < y1 * k; ++ty) {
-    std::fill_n(hd.row(ty) + x0 * k, (x1 - x0) * k, 0u);
-  }
+  hd_mut().plain_rect(x0, y0, x1, y1);
 }
 
-void Surface::hd_clear_pixel(int x, int y) noexcept {
-  hd_clear_rect(x, y, x + 1, y + 1);
+void Surface::hd_clear_pixel(int x, int y) {
+  if (!has_hd()) {
+    return;
+  }
+  hd_mut().plain(x, y);
+}
+
+void Surface::hd_transfer(const Surface& src, ViewRect s, ViewPoint d,
+                          bool copy_all, uint8_t transparent) {
+  const int k = hd_scale();
+  // Keeps the source list alive and unchanged even when src is *this.
+  std::shared_ptr<const HdList> keep = src.hd_;
+  const HdList* from = keep.get();
+  int fx0 = s.x; // the rect's origin within `from`
+  int fy0 = s.y;
+
+  // A transparent source pixel blends the source's HD texels over ours,
+  // which is drawing the source's commands again, unless some of them were
+  // hidden on that pixel. Then the rect is flattened to one picture first.
+  if (!copy_all && !from->is_leaf()) {
+    bool flatten = false;
+    for (int row = 0; row < s.h && !flatten; ++row) {
+      const uint8_t* src_row = &src.pixels_[(s.y + row) * src.pitch_ + s.x];
+      for (int col = 0; col < s.w; ++col) {
+        if (src_row[col] == transparent &&
+            from->floor_of(s.x + col, s.y + row) != 0) {
+          flatten = true;
+          break;
+        }
+      }
+    }
+    if (flatten) {
+      keep = HdList::leaf(std::make_shared<const HdImage>(
+                              from->materialize(k, s.x, s.y, s.w, s.h)),
+                          s.w, s.h);
+      from = keep.get();
+      fx0 = 0;
+      fy0 = 0;
+    }
+  }
+
+  HdList& to = hd_mut();
+  const auto& cmds = from->cmds();
+  const std::size_t n = cmds.size();
+  const int cx0 = fx0 * k;
+  const int cy0 = fy0 * k;
+  const int cx1 = (fx0 + s.w) * k;
+  const int cy1 = (fy0 + s.h) * k;
+  const int offx = d.x * k - cx0;
+  const int offy = d.y * k - cy0;
+  std::vector<uint32_t> next_kept(n + 1);
+  std::vector<int64_t> kept(n, -1);
+  for (std::size_t i = 0; i < n; ++i) {
+    const HdCmd& c = cmds[i];
+    const int x0 = std::max(c.dx, cx0);
+    const int y0 = std::max(c.dy, cy0);
+    const int x1 = std::min(c.dx + c.dw(), cx1);
+    const int y1 = std::min(c.dy + c.dh(), cy1);
+    if (x1 <= x0 || y1 <= y0) {
+      continue;
+    }
+    HdCmd m = c;
+    const int scale = c.half ? 2 : 1;
+    m.sx = c.sx + (x0 - c.dx) * scale;
+    m.sy = c.sy + (y0 - c.dy) * scale;
+    m.sw = (x1 - x0) * scale;
+    m.sh = (y1 - y0) * scale;
+    m.dx = x0 + offx;
+    m.dy = y0 + offy;
+    kept[i] = to.push(std::move(m));
+  }
+  const auto end = static_cast<uint32_t>(to.cmds().size());
+  next_kept[n] = end;
+  for (std::size_t i = n; i-- > 0;) {
+    next_kept[i] =
+        kept[i] >= 0 ? static_cast<uint32_t>(kept[i]) : next_kept[i + 1];
+  }
+  // Per pixel: where the source pixel is copied, our floor becomes the
+  // source's (renumbered), so exactly the same commands show through.
+  const uint32_t* from_floor = from->floor_data();
+  const uint8_t* from_opaque = from->leaf_opacity(); // leaf: floor all 0
+  const int from_w = from->width();
+  for (int row = 0; row < s.h; ++row) {
+    const uint8_t* src_row = &src.pixels_[(s.y + row) * src.pitch_ + s.x];
+    uint32_t* dst_floor = to.floor_row(d.y + row) + d.x;
+    const std::size_t from_off =
+        static_cast<std::size_t>(fy0 + row) * from_w + fx0;
+    for (int col = 0; col < s.w; ++col) {
+      if (!copy_all && src_row[col] == transparent) {
+        continue; // blended over: the commands above draw it
+      }
+      uint32_t f = 0;
+      bool base = true;
+      if (from_floor) {
+        const uint32_t v = from_floor[from_off + col];
+        f = v & ~HdList::base_bit;
+        base = (v & HdList::base_bit) != 0;
+      }
+      else if (from_opaque) {
+        base = from_opaque[from_off + col] == 0;
+      }
+      const uint32_t first = next_kept[f];
+      dst_floor[col] = first | ((base || first == end) ? HdList::base_bit : 0);
+    }
+  }
+  to.compact_if_needed();
 }
 
 /* Check if the point is within this surface */
@@ -140,6 +256,7 @@ void Surface::fill(ColorIndex idx, std::optional<PaletteHandle> pal) {
   (void)pal;
   std::memset(pixels_.data(), idx.get(), height_ * pitch_);
   hd_.reset();
+  hd_image_.reset();
 }
 
 /* fill_rect, give it a rect and all the pixels in it will be updated */
@@ -190,7 +307,7 @@ void Surface::blit_raw(const Surface& src, ViewPoint dst) {
     std::memcpy(dst_row, src_row, static_cast<std::size_t>(copy_w));
   }
 
-  if (!src.hd_ && !hd_) {
+  if (!src.has_hd() && !has_hd()) {
     return;
   }
   // The same clipping as above, for the whole block at once.
@@ -201,18 +318,12 @@ void Surface::blit_raw(const Surface& src, ViewPoint dst) {
   if (sx1 <= sx0 || sy1 <= sy0) {
     return;
   }
-  if (!src.hd_) {
+  if (!src.has_hd()) {
     hd_clear_rect(dst.x + sx0, dst.y + sy0, dst.x + sx1, dst.y + sy1);
     return;
   }
-  const int k = hd_scale();
-  const HdImage& from = *src.hd_;
-  HdImage& to = hd_mut();
-  const auto count = static_cast<std::size_t>((sx1 - sx0) * k);
-  for (int ty = sy0 * k; ty < sy1 * k; ++ty) {
-    std::memcpy(to.row(ty + dst.y * k) + (dst.x + sx0) * k,
-                from.row(ty) + sx0 * k, count * sizeof(uint32_t));
-  }
+  hd_transfer(src, ViewRect{sx0, sy0, sx1 - sx0, sy1 - sy0},
+              ViewPoint{dst.x + sx0, dst.y + sy0}, true, 0);
 }
 
 /* Full blit with support for transparency, source and destination rects */
@@ -277,8 +388,8 @@ void Surface::blit(const Surface& src, ViewRect s, ViewPoint d,
     }
   }
 
-  if (!src.hd_) {
-    if (!hd_) {
+  if (!src.has_hd()) {
+    if (!has_hd()) {
       return;
     }
     // Plain pixels landed on an HD picture: let them show through.
@@ -293,34 +404,11 @@ void Surface::blit(const Surface& src, ViewRect s, ViewPoint d,
     return;
   }
 
-  // HD source. Where the source pixel is opaque, the HD block replaces what
+  // HD source. Where the source pixel is opaque, its HD block replaces what
   // was there (the indexed pixel underneath is now the source's own pixel).
   // Where it is transparent, the HD texels may still carry soft edges that
   // reach past the original outline, so they are blended over.
-  const int k = hd_scale();
-  const HdImage& from = *src.hd_;
-  HdImage& to = hd_mut();
-  for (int row = 0; row < s.h; ++row) {
-    const uint8_t* src_row = &src.pixels_[(s.y + row) * src.pitch_ + s.x];
-    for (int ty = 0; ty < k; ++ty) {
-      const uint32_t* from_row = from.row((s.y + row) * k + ty) + s.x * k;
-      uint32_t* to_row = to.row((d.y + row) * k + ty) + d.x * k;
-      for (int col = 0; col < s.w; ++col) {
-        const uint32_t* f = from_row + col * k;
-        uint32_t* t = to_row + col * k;
-        if (src_row[col] != transparent) {
-          std::memcpy(t, f, static_cast<std::size_t>(k) * sizeof(uint32_t));
-        }
-        else {
-          for (int tx = 0; tx < k; ++tx) {
-            if (alpha(f[tx]) != 0) {
-              t[tx] = blend_over(f[tx], t[tx]);
-            }
-          }
-        }
-      }
-    }
-  }
+  hd_transfer(src, s, d, false, transparent);
 }
 
 void Surface::blit_stencil(const Surface& src, ViewRect s, ViewPoint d,
@@ -345,47 +433,66 @@ void Surface::blit_stencil(const Surface& src, ViewRect s, ViewPoint d,
 void Surface::blit_half(const Surface& src, ViewRect src_rect, ViewPoint dst) {
   const int w = src_rect.w / 2;
   const int h = src_rect.h / 2;
-  const int k = hd_scale();
-  for (int y = 0; y < h; ++y) {
-    for (int x = 0; x < w; ++x) {
+  // Pixels where both ends are inside their surfaces form one rectangle.
+  auto range = [](int n, int to0, int to_size, int from0, int from_size) {
+    int lo = std::max({0, -to0, (-from0 + 1) / 2});
+    int hi = std::min({n, to_size - to0, (from_size - from0 + 1) / 2});
+    return std::pair{lo, std::max(lo, hi)};
+  };
+  const auto [xa, xb] = range(w, dst.x, width_, src_rect.x, src.width_);
+  const auto [ya, yb] = range(h, dst.y, height_, src_rect.y, src.height_);
+  if (xa >= xb || ya >= yb) {
+    return;
+  }
+  for (int y = ya; y < yb; ++y) {
+    for (int x = xa; x < xb; ++x) {
       const ViewPoint from{src_rect.x + (x * 2), src_rect.y + (y * 2)};
-      const ViewPoint to{dst.x + x, dst.y + y};
-      if (!in_bounds(to) || !src.in_bounds(from)) {
-        continue;
-      }
-      pixels_[to.y * pitch_ + to.x] = src.get(from);
-      if (!src.hd_) {
-        hd_clear_pixel(to.x, to.y);
-        continue;
-      }
-      // Average the 2k x 2k source texels into k x k, premultiplied.
-      HdImage& out = hd_mut();
-      const HdImage& in = *src.hd_;
-      for (int ty = 0; ty < k; ++ty) {
-        for (int tx = 0; tx < k; ++tx) {
-          uint32_t r = 0;
-          uint32_t g = 0;
-          uint32_t b = 0;
-          uint32_t a = 0;
-          for (int sy = 0; sy < 2; ++sy) {
-            for (int sx = 0; sx < 2; ++sx) {
-              const uint32_t p =
-                  in.at(from.x * k + tx * 2 + sx, from.y * k + ty * 2 + sy);
-              const uint32_t pa = alpha(p);
-              r += red(p) * pa;
-              g += green(p) * pa;
-              b += blue(p) * pa;
-              a += pa;
-            }
-          }
-          out.at(to.x * k + tx, to.y * k + ty) =
-              a == 0 ? 0u
-                     : pack_rgba((r + a / 2) / a, (g + a / 2) / a,
-                                 (b + a / 2) / a, (a + 2) / 4);
-        }
-      }
+      pixels_[(dst.y + y) * pitch_ + dst.x + x] = src.get(from);
     }
   }
+  if (!src.has_hd()) {
+    hd_clear_rect(dst.x + xa, dst.y + ya, dst.x + xb, dst.y + yb);
+    return;
+  }
+  // The 2x2 source pixel blocks, flattened to one picture (zero beyond the
+  // source's edge), drawn at half size.
+  const int k = hd_scale();
+  const int fx = src_rect.x + xa * 2;
+  const int fy = src_rect.y + ya * 2;
+  const int fw = (xb - xa) * 2;
+  const int fh = (yb - ya) * 2;
+  const int cw = std::min(fw, src.width_ - fx);
+  const int ch = std::min(fh, src.height_ - fy);
+  auto img = std::make_shared<HdImage>(fw * k, fh * k, 0u);
+  if (src.hd_->is_leaf()) {
+    const HdImage& in = *src.hd_->cmds().front().img;
+    for (int ty = 0; ty < ch * k; ++ty) {
+      std::memcpy(img->row(ty), in.row(fy * k + ty) + fx * k,
+                  static_cast<std::size_t>(cw) * k * sizeof(uint32_t));
+    }
+  }
+  else {
+    const HdImage part = src.hd_->materialize(k, fx, fy, cw, ch);
+    for (int ty = 0; ty < part.height; ++ty) {
+      std::memcpy(img->row(ty), part.row(ty),
+                  static_cast<std::size_t>(part.width) * sizeof(uint32_t));
+    }
+  }
+  HdCmd cmd;
+  cmd.sw = img->width;
+  cmd.sh = img->height;
+  cmd.dx = (dst.x + xa) * k;
+  cmd.dy = (dst.y + ya) * k;
+  cmd.half = true;
+  cmd.img = std::move(img);
+  HdList& to = hd_mut();
+  const uint32_t index = to.push(std::move(cmd));
+  for (int y = ya; y < yb; ++y) {
+    for (int x = xa; x < xb; ++x) {
+      to.replaced_by(dst.x + x, dst.y + y, index, true);
+    }
+  }
+  to.compact_if_needed();
 }
 
 /* Blit masked, so respect transparency */
@@ -430,7 +537,7 @@ void Surface::replace_colors(std::initializer_list<uint8_t> keys,
     for (int x = x0; x < x1; ++x) {
       const uint8_t before = row[x - x0];
       row[x - x0] = map[before];
-      if (hd_ && row[x - x0] != before) {
+      if (row[x - x0] != before) {
         hd_clear_pixel(x, y);
       }
     }

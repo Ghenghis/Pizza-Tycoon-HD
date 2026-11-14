@@ -15,6 +15,7 @@
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/ColorIndex.h"
 #include "engine/gfx/HdImage.h"
+#include "engine/gfx/HdList.h"
 #include "engine/gfx/PaletteBank.h"
 #include "engine/gfx/Upscaler.h"
 
@@ -104,8 +105,14 @@ public:
   // exactly width() * hd_scale() by height() * hd_scale(); it is shared, not
   // copied, until this surface is drawn on.
   void attach_hd(std::shared_ptr<const HdImage> hd);
-  [[nodiscard]] const HdImage* hd() const noexcept { return hd_.get(); }
-  [[nodiscard]] bool has_hd() const noexcept { return hd_ != nullptr; }
+  // The HD texels as one image, or null. Built from the draw list on first
+  // use after a change (the renderer draws the list directly instead).
+  [[nodiscard]] const HdImage* hd() const;
+  [[nodiscard]] bool has_hd() const noexcept { return hd_ && !hd_->empty(); }
+  // The HD pictures drawn on this surface, in order, or null.
+  [[nodiscard]] const HdList* hd_list() const noexcept {
+    return has_hd() ? hd_.get() : nullptr;
+  }
 
   // Copies src_rect at half size, keeping one pixel of each 2x2 block, and
   // averaging the HD texels of the same block when there are any.
@@ -128,14 +135,21 @@ private:
   // Skip palette mapping (for fonts)
   bool disable_palette_translation_{false};
 
-  // HD texels for this surface, or null. Shared copy-on-write: hd_mut()
-  // clones before the first change if anyone else holds the image.
-  std::shared_ptr<HdImage> hd_;
+  // HD pictures drawn on this surface (see HdList.h), or null. Shared
+  // copy-on-write: hd_mut() clones before the first change if anyone else
+  // holds the list.
+  std::shared_ptr<HdList> hd_;
+  // hd() result for the current list.
+  mutable std::shared_ptr<const HdImage> hd_image_;
 
-  [[nodiscard]] HdImage& hd_mut();
-  // Clears the HD texels behind one engine pixel, so the indexed pixel shows.
-  void hd_clear_pixel(int x, int y) noexcept;
-  void hd_clear_rect(int x0, int y0, int x1, int y1) noexcept;
+  [[nodiscard]] HdList& hd_mut();
+  // Hides the HD texels behind one engine pixel, so the indexed pixel shows.
+  void hd_clear_pixel(int x, int y);
+  void hd_clear_rect(int x0, int y0, int x1, int y1);
+  // HD side of a blit from an HD source: the rect s of src lands at d.
+  // `copy_all` copies even transparent source pixels (blit_raw).
+  void hd_transfer(const Surface& src, ViewRect s, ViewPoint d, bool copy_all,
+                   uint8_t transparent);
 
   [[nodiscard]] bool in_bounds(ViewPoint p) const noexcept;
   // Clips src_rect against both surfaces, moving dst to match. False when

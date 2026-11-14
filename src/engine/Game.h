@@ -59,6 +59,10 @@ public:
   int run();
 
   bool capture_screenshot(GameState& gs, const std::string& path);
+  // Renders the current screen `frames` times as fast as possible, with the
+  // simulation running and every layer redrawn each frame (the worst case),
+  // and describes the frame times. Empty when there is nothing to render.
+  std::string benchmark_frames(GameState& gs, int frames);
   bool write_screen_as_vga(GameState& gs, const std::string& path);
 
 private:

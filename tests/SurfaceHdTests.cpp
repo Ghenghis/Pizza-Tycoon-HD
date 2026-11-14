@@ -197,3 +197,19 @@ TEST_CASE("renderer expands to HD and lays texels over the index pixels",
     CHECK(blue(t) == 0);
   }
 }
+
+TEST_CASE("soft HD texels blend once on every texel row", "[hd][renderer]") {
+  // Rows after the first of each engine pixel used to be blended twice.
+  resources::load_fallback_palette();
+  ScopedHdScale scale(K);
+  Surface soft(2, 2, PaletteHandle{0}, 25);
+  soft.attach_hd(
+      std::make_shared<HdImage>(2 * K, 2 * K, pack_rgba(200, 10, 10, 100)));
+  auto rgba = Renderer::to_sdl_surface(soft, 1.0f, K);
+  const auto* first = static_cast<const uint32_t*>(rgba->pixels);
+  for (int ty = 1; ty < K; ++ty) {
+    const auto* row = reinterpret_cast<const uint32_t*>(
+        static_cast<const uint8_t*>(rgba->pixels) + ty * rgba->pitch);
+    CHECK(row[0] == first[0]);
+  }
+}

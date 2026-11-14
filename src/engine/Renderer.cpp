@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <thread>
@@ -29,7 +30,198 @@ void Renderer::add_layers(Renderable* r) {
   }
 }
 
+Renderer::~Renderer() {
+  destroy_layer_textures();
+  if (back_tex_) {
+    SDL_DestroyTexture(back_tex_);
+  }
+  if (cursor_tex_) {
+    SDL_DestroyTexture(cursor_tex_);
+  }
+}
+
+void Renderer::redraw_all() {
+  for (auto& layer : layers_) {
+    layer.view->mark_dirty();
+  }
+  force_recompose_ = true;
+}
+
+void Renderer::destroy_layer_textures() {
+  for (auto& [view, tex] : layer_tex_) {
+    SDL_DestroyTexture(tex);
+  }
+  layer_tex_.clear();
+  gpu_cached_.clear();
+}
+
+SDL_Texture* Renderer::layer_texture(Renderable* view, int w, int h) {
+  SDL_Texture*& tex = layer_tex_[view];
+  if (tex && (tex->w != w || tex->h != h)) {
+    SDL_DestroyTexture(tex);
+    tex = nullptr;
+  }
+  if (!tex) {
+    tex = SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+                            SDL_TEXTUREACCESS_TARGET, w, h);
+    if (!tex) {
+      fatal(SDL_GetError());
+    }
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+    gpu_cached_.erase(view);
+  }
+  return tex;
+}
+
+void Renderer::ensure_back_texture() {
+  if (back_tex_) {
+    return;
+  }
+  back_tex_ = SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+                                SDL_TEXTUREACCESS_TARGET, frame_width(),
+                                frame_height());
+  if (!back_tex_) {
+    fatal(SDL_GetError());
+  }
+  SDL_SetTextureBlendMode(back_tex_, SDL_BLENDMODE_NONE);
+  SDL_SetTextureScaleMode(back_tex_, SDL_SCALEMODE_NEAREST);
+  clear_back_texture();
+}
+
+void Renderer::clear_back_texture() {
+  if (!back_tex_) {
+    return;
+  }
+  SDL_Renderer* r = sdl_.renderer.get();
+  SDL_SetRenderTarget(r, back_tex_);
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+  SDL_RenderClear(r);
+  SDL_SetRenderTarget(r, nullptr);
+}
+
+void Renderer::render_gpu() {
+  SDL_Renderer* r = sdl_.renderer.get();
+  if (!gpu_) {
+    gpu_ = std::make_unique<HdCompositor>(r);
+  }
+  ensure_back_texture();
+
+  // During a fade every layer is redrawn with the current fade factor.
+  if (is_fading()) {
+    gpu_cached_.clear();
+    force_recompose_ = true;
+  }
+  for (auto& layer : layers_) {
+    force_recompose_ |= layer.view->needs_force_recompose();
+  }
+  bool below_changed = force_recompose_;
+  bool frame_changed = force_recompose_;
+
+  for (auto& layer : layers_) {
+    Renderable* view = layer.view;
+    const ViewRect area = layer.area;
+    auto& layer_surface = layer_surfaces_[view];
+    if (!layer_surface || layer_surface->width() != area.w ||
+        layer_surface->height() != area.h) {
+      layer_surface = std::make_unique<Surface>(area.w, area.h);
+      view->mark_dirty();
+    }
+    SDL_Texture* tex = layer_texture(view, area.w * scale_, area.h * scale_);
+
+    const bool rerender = view->is_dirty() || !gpu_cached_.contains(view);
+    const bool recomposite = rerender || below_changed;
+    if (rerender) {
+      if (!layer.preserve_background) {
+        layer_surface->fill(0);
+        layer_surface->clear_palette_state();
+      }
+      RenderContext ctx{layer_surface.get()};
+      view->render(ctx);
+      gpu_->draw_layer(tex, *layer_surface,
+                       view->ignore_fade() ? 1.0f : fade_factor_);
+      gpu_cached_.insert(view);
+      view->clean();
+    }
+    if (recomposite) {
+      SDL_SetRenderTarget(r, back_tex_);
+      const SDL_FRect dest{static_cast<float>(area.x * scale_),
+                           static_cast<float>(area.y * scale_),
+                           static_cast<float>(area.w * scale_),
+                           static_cast<float>(area.h * scale_)};
+      SDL_RenderTexture(r, tex, nullptr, &dest);
+      frame_changed = true;
+      below_changed |= rerender;
+    }
+  }
+  force_recompose_ = false;
+
+  const Surface* cursor_sprite =
+      cursor_ ? cursor_->software_cursor_sprite() : nullptr;
+  const ScreenPoint cursor_pos =
+      cursor_ ? cursor_->cursor_position() : ScreenPoint{};
+  const bool cursor_changed =
+      (cursor_sprite != last_cursor_sprite_) ||
+      (cursor_sprite && (cursor_pos.x != last_cursor_pos_.x ||
+                         cursor_pos.y != last_cursor_pos_.y));
+  if (!frame_changed && !cursor_changed) {
+    SDL_SetRenderTarget(r, nullptr);
+    gpu_->end_frame();
+    return;
+  }
+  last_cursor_sprite_ = cursor_sprite;
+  last_cursor_pos_ = cursor_pos;
+
+  // The frame plus the cursor, in the display texture the GPU stretches to
+  // the window.
+  SDL_SetRenderTarget(r, sdl_.texture.get());
+  SDL_RenderTexture(r, back_tex_, nullptr, nullptr);
+  if (cursor_sprite) {
+    if (cursor_sprite != cursor_tex_sprite_ || !cursor_tex_) {
+      if (cursor_tex_) {
+        SDL_DestroyTexture(cursor_tex_);
+      }
+      SDL_Surface_unique_ptr rgba =
+          to_sdl_surface(*cursor_sprite, 1.0f, scale_);
+      cursor_tex_ = SDL_CreateTextureFromSurface(r, rgba.get());
+      if (cursor_tex_) {
+        SDL_SetTextureBlendMode(cursor_tex_, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(cursor_tex_, SDL_SCALEMODE_NEAREST);
+      }
+      cursor_tex_sprite_ = cursor_sprite;
+    }
+    if (cursor_tex_) {
+      const float w = static_cast<float>(cursor_tex_->w);
+      const float h = static_cast<float>(cursor_tex_->h);
+      float x = static_cast<float>(cursor_pos.x * scale_);
+      float y =
+          static_cast<float>(cursor_pos.y * DisplayConstants::SCREEN_HEIGHT /
+                             display_height_ * scale_);
+      if (cursor_->software_cursor_centered()) {
+        x -= std::floor(w / 2);
+        y -= std::floor(h / 2);
+      }
+      const SDL_FRect dest{x, y, w, h};
+      SDL_RenderTexture(r, cursor_tex_, nullptr, &dest);
+    }
+  }
+  SDL_SetRenderTarget(r, nullptr);
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+  SDL_RenderClear(r);
+  SDL_RenderTexture(r, sdl_.texture.get(), nullptr, nullptr);
+  SDL_RenderPresent(r);
+  gpu_->end_frame();
+
+  if (fade_state_ == FadeState::FADING_OUT && fade_factor_ <= 0.0f) {
+    fade_state_ = FadeState::FADED_OUT;
+  }
+}
+
 void Renderer::render() {
+  if (scale_ > 1 && hd_gpu_compositing()) {
+    render_gpu();
+    return;
+  }
   // For now all layers have to be full screen size
   ensure_backbuffer(frame_width(), frame_height());
 
@@ -200,6 +392,8 @@ SDL_Rect Renderer::draw_software_cursor(SDL_Surface* dst, const Surface& sprite,
 void Renderer::clear_layers() {
   layers_.clear();
   cache_.clear();
+  destroy_layer_textures();
+  clear_back_texture();
   force_recompose_ = true;
   if (backbuffer_) {
     SDL_FillSurfaceRect(backbuffer_.get(), nullptr,
@@ -210,6 +404,7 @@ void Renderer::clear_layers() {
 void Renderer::clear_layers_preserve_backbuffer() {
   layers_.clear();
   cache_.clear();
+  destroy_layer_textures();
   force_recompose_ = true;
 }
 
@@ -279,20 +474,19 @@ SDL_Surface_unique_ptr Renderer::to_sdl_surface(const Surface& src,
 
     // Rows are independent, so big frames are split across threads.
     auto expand_rows = [&](int y0, int y1) {
+      // One expanded row of indexed pixels, copied under every texel row
+      // before that row's HD texels are blended on.
+      std::vector<uint32_t> plain(static_cast<std::size_t>(big_w));
       for (int y = y0; y < y1; ++y) {
-        auto* first = reinterpret_cast<uint32_t*>(
-            base + static_cast<std::ptrdiff_t>(y * scale) * pitch);
         const uint8_t* src_row = index + static_cast<std::ptrdiff_t>(y) * w;
         for (int x = 0; x < w; ++x) {
-          std::fill_n(first + x * scale, scale, lut[src_row[x]]);
+          std::fill_n(plain.data() + x * scale, scale, lut[src_row[x]]);
         }
         for (int ty = 0; ty < scale; ++ty) {
           auto* out = reinterpret_cast<uint32_t*>(
               base + static_cast<std::ptrdiff_t>(y * scale + ty) * pitch);
-          if (ty > 0) {
-            std::memcpy(out, first,
-                        static_cast<std::size_t>(big_w) * sizeof(uint32_t));
-          }
+          std::memcpy(out, plain.data(),
+                      static_cast<std::size_t>(big_w) * sizeof(uint32_t));
           if (!hd) {
             continue;
           }
@@ -385,6 +579,23 @@ SDL_Surface_unique_ptr Renderer::to_sdl_surface(const Surface& src,
 
 void Renderer::with_current_frame(
     std::function<void(SDL_Surface*)> callback) const {
+  if (back_tex_) {
+    SDL_Renderer* r = sdl_.renderer.get();
+    SDL_SetRenderTarget(r, back_tex_);
+    SDL_Surface* read = SDL_RenderReadPixels(r, nullptr);
+    SDL_SetRenderTarget(r, nullptr);
+    if (!read) {
+      fatal(SDL_GetError());
+    }
+    SDL_Surface_unique_ptr frame(
+        SDL_ConvertSurface(read, SDL_PIXELFORMAT_RGBA8888));
+    SDL_DestroySurface(read);
+    if (!frame) {
+      fatal(SDL_GetError());
+    }
+    callback(frame.get());
+    return;
+  }
   if (software_crt()) {
     callback(apply_crt_scaling(backbuffer_.get()));
   }

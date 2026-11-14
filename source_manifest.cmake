@@ -298,6 +298,7 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/Math.cpp
     src/engine/PlatformPaths.cpp
     src/engine/Random.cpp
+    src/engine/HdCompositor.cpp
     src/engine/Renderer.cpp
     src/engine/RendererManager.cpp
     src/engine/Screenshot.cpp
@@ -308,6 +309,7 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/gfx/ColorIndex.cpp
     src/engine/gfx/Draw.cpp
     src/engine/gfx/HdImage.cpp
+    src/engine/gfx/HdList.cpp
     src/engine/gfx/Mmpx.cpp
     src/engine/gfx/Png.cpp
     src/engine/gfx/Surface.cpp
@@ -552,6 +554,7 @@ set(PLEGACY_HEADERS
     src/engine/Random.h
     src/engine/RenderContext.h
     src/engine/Renderable.h
+    src/engine/HdCompositor.h
     src/engine/Renderer.h
     src/engine/RendererManager.h
     src/engine/SDLContext.h
@@ -579,6 +582,7 @@ set(PLEGACY_HEADERS
     src/engine/gfx/ColorIndex.h
     src/engine/gfx/Draw.h
     src/engine/gfx/HdImage.h
+    src/engine/gfx/HdList.h
     src/engine/gfx/Mmpx.h
     src/engine/gfx/PaletteBank.h
     src/engine/gfx/PaletteCycleController.h

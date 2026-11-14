@@ -5,8 +5,10 @@
  */
 
 // Hidden by default ("[.bench]"); run with: test_plegacy "[.bench]"
-// Measures what one fully dirty HD frame costs: an HD background, 60 HD
-// sprites on it, and the expansion to RGBA the renderer does.
+// Measures what one fully dirty HD frame costs on the CPU: an HD background
+// and 60 HD sprites drawn on a layer. With GPU compositing (the default) that
+// is all the CPU does; the CPU fallback (PLEGACY_CPU_COMPOSE=1) also
+// flattens the draw list and expands the frame to RGBA.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,21 +36,26 @@ TEST_CASE("HD frame cost", "[.bench]") {
                                                  pack_rgba(20, 200, 40, 200)));
     }
     constexpr int frames = 10;
-    const auto start = std::chrono::steady_clock::now();
+    using clock = std::chrono::steady_clock;
+    double record_ms = 0;
+    double cpu_ms = 0;
     for (int f = 0; f < frames; ++f) {
+      const auto t0 = clock::now();
       Surface layer(640, 400);
       layer.blit_raw(background);
       for (int i = 0; i < 60; ++i) {
         layer.blit_masked(sprite, ViewPoint{(i * 37) % 590, (i * 53) % 340});
       }
+      const auto t1 = clock::now();
       auto rgba = Renderer::to_sdl_surface(layer, 1.0f, k);
       REQUIRE(rgba);
+      const auto t2 = clock::now();
+      record_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
+      cpu_ms += std::chrono::duration<double, std::milli>(t2 - t0).count();
     }
-    const auto ms = std::chrono::duration<double, std::milli>(
-                        std::chrono::steady_clock::now() - start)
-                        .count() /
-                    frames;
     std::cout << "hd_scale " << k << " (" << 640 * k << "x" << 400 * k
-              << "): " << ms << " ms per fully redrawn frame\n";
+              << "): GPU path CPU work " << record_ms / frames
+              << " ms, CPU fallback " << cpu_ms / frames
+              << " ms per fully redrawn frame\n";
   }
 }

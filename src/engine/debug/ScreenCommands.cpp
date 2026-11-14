@@ -19,6 +19,8 @@
 #include "engine/gfx/Surface.h"
 #include "resources/VgaManager.h"
 
+#include <iostream>
+
 namespace engine {
 
 std::vector<debug::command::CommandDef>
@@ -57,6 +59,38 @@ Examples:
               "Nothing was written to " + path);
         }
         return debug::command::CommandResult::success({"Wrote " + path});
+      },
+  });
+
+  commands.push_back(debug::command::CommandDef{
+      .name = "bench",
+      .description = "Measure frame times of the current screen",
+      .help_text = R"(Renders the screen on top as fast as possible, running the
+simulation and redrawing everything each frame (the worst case), and
+prints the frame times. Default 300 frames.
+
+Example:
+  bench 600
+)",
+      .args =
+          {
+              debug::command::ArgSpec{
+                  .name = "frames",
+                  .type = debug::command::ArgType::Int,
+                  .optional = true,
+                  .description = "How many frames to render",
+              },
+          },
+      .handler = [&game, &state](const debug::command::CommandContext& ctx)
+          -> debug::command::CommandResult {
+        const int frames =
+            ctx.has_arg(0) ? static_cast<int>(ctx.int_arg(0)) : 300;
+        const std::string report = game.benchmark_frames(state, frames);
+        if (report.empty()) {
+          return debug::command::CommandResult::error("Nothing to render");
+        }
+        std::cout << report << std::endl;
+        return debug::command::CommandResult::success({report});
       },
   });
 

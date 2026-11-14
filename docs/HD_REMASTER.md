@@ -119,21 +119,23 @@ image `hd_scale` times larger, shared copy-on-write.
   across CPU threads. The result is uploaded as one texture and the GPU
   scales it to the window (letterboxed, CRT aspect if enabled).
 
-Measured on a 2-core cloud VM (worst case: every layer redrawn, an HD
-background plus 60 HD sprites, `test_plegacy "[.bench]"`):
+The HD art is drawn by the GPU. Each surface keeps the HD pictures drawn on
+it as a list (`src/engine/gfx/HdList.h`) rather than copying texels, and
+`HdCompositor` draws that list as textured quads into one texture per layer.
+The CPU only expands the 640x400 indexed pixels. Every SDL renderer works
+(Direct3D 11/12, Vulkan, Metal, OpenGL); there are no custom shaders.
 
-| hd_scale | Frame | ms per fully redrawn frame |
-|---|---|---|
-| 1 | 640x400 | 0.3 |
-| 3 | 1920x1200 | 9.3 |
-| 4 | 2560x1600 | 16.8 |
-| 6 | 3840x2400 | 36.1 |
+Measured with `bench 600` in a restaurant, every layer redrawn every frame
+(Ryzen 7 5800X3D, RTX 3090 Ti, Direct3D 11, 3840x2400):
 
-Most frames redraw only the layers that changed, so typical cost is lower. A
-16-thread desktop CPU splits the expansion further. If 6x stutters in busy
-restaurants, use 4 (2560x1600): the GPU's final stretch to a 4K screen is
-barely visible. Moving the compositing itself to the GPU is the next step
-for more headroom.
+| Compositing | avg | p99 | fps |
+|---|---|---|---|
+| GPU (default) | 3.5 ms | 5.3 ms | 285 |
+| CPU (`PLEGACY_CPU_COMPOSE=1`) | 80 ms | 143 ms | 12 |
+
+Both give the same picture (largest difference 2/255 per channel); the tests
+check the draw list against the old texel-copy rules and the GPU result
+against the CPU result on random drawing.
 
 **DLSS and similar** do not apply: they need a 3D renderer with motion vectors
 and depth. This is a 2D game drawn at native resolution, so there is nothing

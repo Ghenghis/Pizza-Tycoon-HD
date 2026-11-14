@@ -1,5 +1,17 @@
 Unreleased
 
+* GPU compositing for HD: surfaces keep their HD art as a draw list
+  (`gfx::HdList`) instead of copying hd_scale()^2 texels per pixel on the
+  CPU, and `HdCompositor` draws the list with the GPU through any SDL
+  renderer. Measured on a Ryzen 7 5800X3D with Direct3D 11, a fully redrawn
+  3840x2400 restaurant frame: 3.5 ms (285 fps) instead of 80 ms (12 fps);
+  the picture matches the CPU path within 2/255 per channel.
+  `PLEGACY_CPU_COMPOSE=1` keeps the CPU path as a fallback.
+* Fix: semi-transparent HD texels were blended twice on all but the first
+  texel row of each pixel, so soft sprite edges came out too strong.
+* `bench [frames]` console command: frame times of the current screen,
+  worst case (everything redrawn every frame).
+* `--exec` batch runs keep their window hidden.
 * `hdpack.py comfy`: pictures under 4096 original pixels (`--small-area`)
   skip SDXL and use model upscaling only (`--small-workflow`); a first GPU
   test showed SDXL turns tiny sprites and portrait sheets to mush.

@@ -5,6 +5,7 @@
  */
 
 #include "engine/Game.h"
+#include "engine/HdCompositor.h"
 
 #include <algorithm>
 #include <cassert>
@@ -849,9 +850,12 @@ bool Game::init(int display_height, const GameOptions& options) {
   auto [win_w, win_h] = window_size_for(options.double_size, display_height);
   SDL_Window* window = nullptr;
   SDL_Renderer* renderer_handle = nullptr;
-  if (!SDL_CreateWindowAndRenderer("Pizza Legacy", win_w, win_h,
-                                   SDL_WINDOW_RESIZABLE, &window,
-                                   &renderer_handle)) {
+  // Batch mode (--exec) never shows its window: it only renders off screen
+  // for screenshots and benchmarks.
+  const SDL_WindowFlags window_flags =
+      SDL_WINDOW_RESIZABLE | (exec_script_ ? SDL_WINDOW_HIDDEN : 0);
+  if (!SDL_CreateWindowAndRenderer("Pizza Legacy", win_w, win_h, window_flags,
+                                   &window, &renderer_handle)) {
     Logger::warn("Failed to create window/renderer: {}", SDL_GetError());
     return false;
   }
@@ -904,6 +908,57 @@ bool Game::init(int display_height, const GameOptions& options) {
   // context.config is set in run() after ConfigManager is created
 
   return true;
+}
+
+std::string Game::benchmark_frames(GameState& gs, int frames) {
+  TemporaryStatusPanel status(context, gs);
+  auto result = ViewFactory::create(context, gs);
+  if (!result.view || frames <= 0) {
+    return {};
+  }
+  Renderer renderer(sdl_, display_height_);
+  renderer.add_layers(result.view.get());
+  SDL_SetRenderVSync(sdl_.renderer.get(), SDL_RENDERER_VSYNC_DISABLED);
+  std::vector<double> ms;
+  ms.reserve(static_cast<std::size_t>(frames));
+  constexpr int warmup = 10;
+  for (int i = 0; i < frames + warmup; ++i) {
+    const uint64_t t0 = SDL_GetPerformanceCounter();
+    result.view->tick();
+    gs.update(simulation_tick_ms);
+    renderer.redraw_all();
+    renderer.render();
+    const uint64_t t1 = SDL_GetPerformanceCounter();
+    if (i >= warmup) {
+      ms.push_back(static_cast<double>(t1 - t0) * 1000.0 /
+                   static_cast<double>(SDL_GetPerformanceFrequency()));
+    }
+  }
+  SDL_SetRenderVSync(sdl_.renderer.get(), 1);
+  std::vector<double> sorted = ms;
+  std::sort(sorted.begin(), sorted.end());
+  auto pct = [&sorted](double p) {
+    return sorted[std::min(
+        sorted.size() - 1,
+        static_cast<std::size_t>(p * static_cast<double>(sorted.size())))];
+  };
+  double sum = 0;
+  for (double v : ms) {
+    sum += v;
+  }
+  const double avg = sum / static_cast<double>(ms.size());
+  const SDL_PropertiesID props = SDL_GetRendererProperties(sdl_.renderer.get());
+  const char* backend =
+      SDL_GetStringProperty(props, SDL_PROP_RENDERER_NAME_STRING, "?");
+  const auto* comp = renderer.compositor();
+  return compat::format(
+      "{} frames at {}x{} ({}, {} compositing): avg {:.2f} ms ({:.0f} fps), "
+      "median {:.2f}, p95 {:.2f}, p99 {:.2f}, worst {:.2f} ms; "
+      "{} HD textures, {} MB",
+      ms.size(), renderer.frame_width(), renderer.frame_height(), backend,
+      comp ? "GPU" : "CPU", avg, 1000.0 / avg, pct(0.5), pct(0.95), pct(0.99),
+      sorted.back(), comp ? comp->texture_count() : 0,
+      comp ? comp->texture_bytes() >> 20 : 0);
 }
 
 bool Game::capture_screenshot(GameState& gs, const std::string& path) {
@@ -1052,10 +1107,13 @@ SDL_Texture* Game::create_display_texture(int display_height) const {
   // HD: the frame is always 640x400 times the scale. The logical
   // presentation (640 x display_height) stretches it on the GPU, which also
   // gives the CRT aspect ratio when that is on.
-  SDL_Texture* texture = SDL_CreateTexture(
-      sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
-      SDL_TEXTUREACCESS_STREAMING, DisplayConstants::SCREEN_WIDTH * scale,
-      DisplayConstants::SCREEN_HEIGHT * scale);
+  // A render target: the GPU compositor draws the frame straight into it.
+  SDL_Texture* texture =
+      SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+                        hd_gpu_compositing() ? SDL_TEXTUREACCESS_TARGET
+                                             : SDL_TEXTUREACCESS_STREAMING,
+                        DisplayConstants::SCREEN_WIDTH * scale,
+                        DisplayConstants::SCREEN_HEIGHT * scale);
   if (texture) {
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
   }

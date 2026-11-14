@@ -8,8 +8,11 @@
 
 #include "engine/SDL_include.h"
 
+#include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
+#include "engine/HdCompositor.h"
 #include "engine/LayerInfo.h"
 #include "engine/SDLContext.h"
 #include "engine/geom/Spaces.h"
@@ -26,6 +29,9 @@ public:
 
   Renderer(const SDLContext& sdl, int display_height)
       : sdl_(sdl), display_height_(display_height), scale_(gfx::hd_scale()) {}
+  ~Renderer();
+  Renderer(const Renderer&) = delete;
+  Renderer& operator=(const Renderer&) = delete;
   void add_layers(Renderable* r);
   void render();
   void clear_layers();
@@ -42,6 +48,8 @@ public:
   void set_display_height(int height) { display_height_ = height; }
   // Recomposite and present even when no layer is dirty.
   void invalidate() { force_recompose_ = true; }
+  // Marks every layer for a full redraw (benchmarks).
+  void redraw_all();
   void set_cursor_manager(CursorManager* cursor) { cursor_ = cursor; }
 
   // Fade control - returns true when fade completes
@@ -51,7 +59,17 @@ public:
   [[nodiscard]] bool is_fading() const;
   [[nodiscard]] bool fade_out_complete() const;
 
+  // GPU statistics of the last frame (HD only).
+  [[nodiscard]] const HdCompositor* compositor() const { return gpu_.get(); }
+
 private:
+  // HD: layers are drawn by the GPU (HdCompositor) into textures and
+  // composited there; the CPU only expands 640x400 indexed pixels.
+  void render_gpu();
+  SDL_Texture* layer_texture(Renderable* view, int w, int h);
+  void ensure_back_texture();
+  void clear_back_texture();
+  void destroy_layer_textures();
   void update_cache(Renderable* layer, const gfx::Surface& source_surface);
   void ensure_backbuffer(int w, int h);
   // Returns true when the surface was (re)created.
@@ -81,6 +99,13 @@ private:
   // HD texels per engine pixel (gfx::hd_scale() when constructed).
   int scale_;
   [[nodiscard]] bool software_crt() const;
+
+  std::unique_ptr<HdCompositor> gpu_;
+  std::unordered_map<Renderable*, SDL_Texture*> layer_tex_;
+  std::unordered_set<Renderable*> gpu_cached_;
+  SDL_Texture* back_tex_{nullptr};
+  SDL_Texture* cursor_tex_{nullptr};
+  const Surface* cursor_tex_sprite_{nullptr};
 
   FadeState fade_state_{FadeState::NONE};
   float fade_factor_{1.0f}; // 1.0 = normal, 0.0 = black

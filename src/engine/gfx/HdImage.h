@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace gfx {
@@ -21,6 +22,19 @@ namespace gfx {
 struct HdImage {
   HdImage() = default;
   HdImage(int w, int h, uint32_t fill = 0);
+  // Copies start without the opacity cache: the copy may be edited.
+  HdImage(const HdImage& o)
+      : width(o.width), height(o.height), pixels(o.pixels) {}
+  HdImage& operator=(const HdImage& o) {
+    width = o.width;
+    height = o.height;
+    pixels = o.pixels;
+    opaque_blocks.reset();
+    opaque_blocks_k = 0;
+    return *this;
+  }
+  HdImage(HdImage&&) noexcept = default;
+  HdImage& operator=(HdImage&&) noexcept = default;
 
   int width = 0;
   int height = 0;
@@ -38,6 +52,12 @@ struct HdImage {
   [[nodiscard]] const uint32_t* row(int y) const {
     return pixels.data() + static_cast<std::size_t>(y) * width;
   }
+
+  // Cache for gfx::opaque_block(): one byte per k x k block, 1 when every
+  // texel in it is fully opaque. Filled on first use; the pixels of an image
+  // that is shared are never changed, so the cache stays valid.
+  mutable std::shared_ptr<const std::vector<uint8_t>> opaque_blocks;
+  mutable int opaque_blocks_k = 0;
 };
 
 inline constexpr int max_hd_scale = 8;
