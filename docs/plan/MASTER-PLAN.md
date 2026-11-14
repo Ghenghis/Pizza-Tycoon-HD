@@ -25,6 +25,7 @@ A finished document, build or agent run never counts as verified. Nothing in thi
 | GitHub `main` | `94d616e` | Moves forward only after the PC gates pass |
 | GitHub `integration/2026-11-14` | `39c56ee` | Immutable baseline for the AMD worker (tree `ea5e4723`) |
 | GitHub `integration/2026-11-14-r6` | `de7ed28` | Every integrated commit through round 6 (tree `641c90a7`) |
+| GitHub `integration/2026-11-14-r9` | `1f13262` | Through round 9 |
 | Bundle for the AMD worker | `<work>\bundles\pizza-tycoon-hd-94d616e..39c56ee.bundle` | `94d616e..39c56ee`, sha256 `b0513dc31cb0fb49d429dc2e5b99edb849c01fc070783ed3debb56a2192a61c7`; tree `ea5e47230b4bd9d424f123c12e38dda2a9a5f2a8` |
 
 ### Integrated commits (oldest first)
@@ -55,6 +56,11 @@ A finished document, build or agent run never counts as verified. Nothing in thi
 | `94fec32` | HD far city map (H4), district hatching (M2), newspaper paper restore (N1) | visual agent |
 | `2d059ba` | Legacy v1 fixture from a real quick start (17,725 bytes); its golden value recorded | persistence agent; recorded by integrator |
 | `de7ed28` | Far-map cache test uses a palette that changes a colour in use | integrator |
+| `d975032`, `936e512`, `34d8951`, `5ac1e7b`, `085efb7` | Contract steps 3–6; definition cities; goal observer; Santa's Pizza Village (6 flagship districts, 44 premises); New Game presets Cozy Village, Workshop Rush, Pizza Empire, Sandbox; headless furniture placement | core agent |
+| `3082ffa` | Far map off the frame; HD medium map from landsym; water cycle at close zoom | visual agent |
+| `bd9dd71`, `eecde53` | R35: one music-mode owner with playback generations; dr_mp3/dr_wav; libVLC 3 at runtime; library, folders, settings with three backups; Audio menu modes; SFX overrides by ID | platform agent |
+| `70e2eb7`, `6277fd5` | Three verified versions per save slot; checkpoints (pre-change and timed); save v4; unique commands; recovery model | persistence agent |
+| `f3eef9c`, `1f13262`, `a8060ab` | 23-ID SFX matrix from decoding the originals; private pack-v0 (outside the repo) | curator (visual agent) |
 
 ### Test and gate results
 
@@ -70,6 +76,11 @@ Clean worktree `integ`; cloud build lane with 2 cores.
 | Round 5: `720020b` | No crash any more: the v1 fixture is now refused cleanly. 117 cases: 103 passed, **3 failed**, 11 skipped; with the game, 115: 111 passed, **3 failed**, 1 skipped. All failures are save tests built on the old 2-player game: `30ac96a` had picked up the stricter validator from the working tree without its tests (`f16a728` completes it). Windows exe built; 0 warnings. |
 | Round 6: `94fec32` | With the game, after the recorder wrote the new fixture: 126 cases, 123 passed, 1 skipped, **2 failed**. The failures were the v1 golden checkpoint, not yet recorded (recorded in the same run as `84c8e5a930faab92`), and a far-map cache test bug (fixed in `de7ed28`). **The 8 Classic golden values from `b42fedb` are unchanged** with the roster, saves, audio and HD changes in. Windows exe built; 0 warnings. |
 | PC: `PizzaTycoonHD-text-9.exe` (glyph sheets, before the ARGB, base-texture and batching changes) | Steady avg 3.3–4.3 ms, p99 5.0–5.7 ms. First frame **16.8–17.4 ms: FAILS** the 16 ms gate. HD text off: 10.7–11.8 ms. |
+| Round 7: `3082ffa` | With the game: 158 cases, 154 passed, 1 skipped, **3 failed**: a static definition build drew the RNG, and the journey harness never dismissed the day report (both fixed in `34d8951`). Classic golden PASS. 0 warnings. |
+| Round 8: `f3eef9c` | With the game: 224 cases, 220 passed, 1 skipped, **3 failed**: 2 [music] cases, and `is_valid_save` accepting a bad definition hash (fixed in `6277fd5`). Classic golden PASS. |
+| Round 9: `1f13262` | With the game: 232 cases, 226 passed, 1 skipped, **5 failed**, all [music]; one is a `bad_alloc` in MusicFolderTests, treated as a memory-safety bug. Sent to the platform lane. Classic golden PASS. |
+| ThreadSanitizer at `9aa59ba` | [audio],[budget],[save],[hd]: 102 cases, 96 passed, 6 skipped, 0 TSan warnings |
+| PC bench gate r3 | Ready, not run. Gate `88032c24...`, Job wrapper `e25e470a...`; answers the r2 review. Checked on the PC without the GPU: a negative pin path (exit 1, 0 launches), and a deadline kill (Job terminated at 29.7 s, child gone). Sent as `msg_7ce2a9d27b9aee47`. r2 is superseded. |
 | PC bench gate r2 | Ready, not run: `<work>\bench-gate-r2.ps1` sha256 `d0d1ba09...0a0ad`. It answers the coordinator's review of v1 (`msg_0b98b89aa85d2bfc`). Content pins: exe `0f2a8022`, data `a5fe3281`, pack `a9d3a378`, game `a4d02cd1`. Broker check before each launch. Handle-only cleanup, one trial deadline, receipt written in finally. Parser and PSScriptAnalyzer clean; negative path checked on the PC (FAIL in 4.6 s; nothing started). Sent as `msg_f6d09620548a30c2`. |
 | PC gates for round 3 (v1, superseded by r2) | **Waiting for a grant.** The broker denied it at rev 16/17 while the freezes were diagnosed. Readiness was sent to codex-einhander-crash-check as `msg_a8c4f3539628225c`, with the one command, all identities and the cleanup bounds (`<work>\logs\readiness-39c56ee.txt`). `bench-gate.ps1` sha256 is `ee527b47...dc97a`, parse-checked on the PC. |
 
