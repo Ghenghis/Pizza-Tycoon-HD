@@ -43,6 +43,15 @@ public:
   // The GPU copy of a picture, uploaded on first use.
   SDL_Texture* texture_for(const std::shared_ptr<const gfx::HdImage>& img);
 
+  // Streams pictures to the GPU ahead of use, a band of rows at a time,
+  // spending at most budget_ms per call (call once per frame). Pictures not
+  // finished when they are first drawn are completed then.
+  void stream(const std::vector<std::shared_ptr<const gfx::HdImage>>& add,
+              double budget_ms);
+  [[nodiscard]] std::size_t streaming() const noexcept {
+    return stream_queue_.size();
+  }
+
   // Uploads pictures ahead of use (a screen's art while it loads), up to
   // `budget_bytes` this call. Returns how many bytes were uploaded.
   std::size_t
@@ -74,6 +83,7 @@ private:
     SDL_Texture* tex = nullptr;
     std::size_t bytes = 0;
     uint64_t last_used = 0;
+    int rows_done = 0; // rows uploaded so far; complete at img height
   };
   struct Run {
     uint32_t floor;
@@ -84,6 +94,10 @@ private:
   void draw_runs(const std::vector<Run>& runs, std::size_t& pos, uint32_t floor,
                  int k);
   void evict(Entry& e);
+  // Creates the texture (nothing uploaded yet), or null when impossible.
+  Entry* create(const std::shared_ptr<const gfx::HdImage>& img);
+  // Premultiplies and uploads up to `rows` more rows.
+  void upload_rows(Entry& e, const gfx::HdImage& img, int rows);
 
   SDL_Renderer* renderer_;
   std::unordered_map<const gfx::HdImage*, Entry> cache_;
@@ -96,6 +110,7 @@ private:
   std::size_t bytes_ = 0;
   std::size_t budget_ = std::size_t{1536} << 20; // 1.5 GiB of textures
   int max_texture_size_ = 16384;
+  std::vector<std::weak_ptr<const gfx::HdImage>> stream_queue_;
   double upload_ms_ = 0;
   Stats stats_;
 };

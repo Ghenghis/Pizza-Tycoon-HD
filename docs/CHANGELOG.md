@@ -22,6 +22,15 @@ Unreleased
   area average to the target. All 1,554 sprite frames take about 20 s at
   12x; edges stay crisp and no colour is invented, where AI repainting
   turned small sprites to mush.
+* No pause when a screen first opens: the HD pack remembers which pictures a
+  session used (`hd_warm.txt` next to the config), decodes them on a
+  background thread while the next session's intro plays, and the renderer
+  streams them to the GPU a few milliseconds per frame. Opening the
+  restaurant at 3840x2400 on a 5800X3D + RTX 3090 Ti: first frame 222 ms
+  before, 55 ms with decoding moved off the frame, and streaming removes
+  most of the remaining upload. Checked with ThreadSanitizer.
+* `tools/hdpack/depthmaps.py`: depth (Depth Anything V2) and normal maps for
+  every pack picture, the inputs for 2.5D lighting.
 * `bench [frames]` console command: frame times of the current screen,
   worst case (everything redrawn every frame).
 * `--exec` batch runs keep their window hidden.

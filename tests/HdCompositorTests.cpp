@@ -192,3 +192,33 @@ TEST_CASE("GPU textures are shared and released", "[hd][gpu]") {
   CHECK(comp.texture_count() == 1);
   CHECK(comp.preload({a, b}, 1 << 20) == 8 * 8 * 4);
 }
+
+TEST_CASE("streamed textures draw the same as direct uploads", "[hd][gpu]") {
+  resources::load_fallback_palette();
+  ScopedHdScale scale(2);
+  std::mt19937 rng(3);
+  // Big enough to be streamed in several bands.
+  Surface big = random_sprite(rng, 1200, 600, true);
+  Surface layer(1200, 600, PaletteHandle{0}, 0);
+  layer.blit_raw(big, ViewPoint{0, 0});
+  const int worst_direct = compare(layer, 1.0f);
+
+  SoftGpu gpu(2400, 1200);
+  HdCompositor comp(gpu.renderer);
+  const auto img = layer.hd_list()->cmds().front().img;
+  comp.stream({img}, 0.0); // queued, nothing uploaded yet
+  CHECK(comp.streaming() == 1);
+  comp.stream({}, 1e9); // all bands
+  CHECK(comp.streaming() == 0);
+  CHECK(comp.texture_bytes() == img->pixels.size() * 4);
+  const double before = comp.upload_ms();
+  CHECK(comp.texture_for(img) != nullptr);
+  CHECK(comp.upload_ms() == before); // already complete: no upload at draw
+
+  // A picture only partly streamed is finished when first drawn.
+  auto other =
+      std::make_shared<const HdImage>(2000, 900, pack_rgba(9, 8, 7, 255));
+  comp.stream({other}, 0.0);
+  CHECK(comp.texture_for(other) != nullptr);
+  CHECK(worst_direct <= 2);
+}

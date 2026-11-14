@@ -20,6 +20,7 @@
 #include "engine/adapters/SDLRectAdapter.h"
 #include "engine/gfx/Surface.h"
 #include "engine/ui/CursorManager.h"
+#include "resources/HdPack.h"
 
 using gfx::Surface;
 
@@ -100,6 +101,19 @@ void Renderer::clear_back_texture() {
   SDL_SetRenderTarget(r, nullptr);
 }
 
+void Renderer::stream_ahead(double budget_ms) {
+  if (!gpu_) {
+    gpu_ = std::make_unique<HdCompositor>(sdl_.renderer.get());
+  }
+  gpu_->stream(resources::HdPack::instance().take_prefetched(), budget_ms);
+}
+
+void Renderer::warm_up_gpu() {
+  if (scale_ > 1 && hd_gpu_compositing()) {
+    stream_ahead(1e9);
+  }
+}
+
 void Renderer::render_gpu() {
   SDL_Renderer* r = sdl_.renderer.get();
   if (!gpu_) {
@@ -166,6 +180,7 @@ void Renderer::render_gpu() {
                          cursor_pos.y != last_cursor_pos_.y));
   if (!frame_changed && !cursor_changed) {
     SDL_SetRenderTarget(r, nullptr);
+    stream_ahead(stream_budget_ms);
     gpu_->end_frame();
     return;
   }
@@ -210,6 +225,7 @@ void Renderer::render_gpu() {
   SDL_RenderClear(r);
   SDL_RenderTexture(r, sdl_.texture.get(), nullptr, nullptr);
   SDL_RenderPresent(r);
+  stream_ahead(stream_budget_ms);
   gpu_->end_frame();
 
   if (fade_state_ == FadeState::FADING_OUT && fade_factor_ <= 0.0f) {

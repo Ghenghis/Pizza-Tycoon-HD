@@ -91,6 +91,10 @@ public:
   void prefetch(std::vector<WarmEntry> entries, std::size_t budget_bytes);
   // Blocks until a running prefetch has finished (tests, benchmarks).
   void wait_for_prefetch();
+  // Pictures the prefetch decoded since the last call, for the renderer to
+  // stream to the GPU before they are needed.
+  [[nodiscard]] std::vector<std::shared_ptr<const gfx::HdImage>>
+  take_prefetched();
 
   HdPack() = default;
   ~HdPack();
@@ -124,6 +128,7 @@ private:
   std::unordered_map<std::string, ImagePtr> cache_;
   std::unordered_map<std::string, std::shared_future<ImagePtr>> pending_;
   std::vector<WarmEntry> used_;
+  std::vector<ImagePtr> prefetched_;
   Stats stats_;
   std::jthread prefetcher_;
 };

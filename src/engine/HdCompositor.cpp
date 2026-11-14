@@ -57,25 +57,14 @@ HdCompositor::~HdCompositor() {
   }
 }
 
-SDL_Texture*
-HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
-  auto it = cache_.find(img.get());
-  if (it != cache_.end()) {
-    if (it->second.img.lock() == img) {
-      it->second.last_used = frame_;
-      return it->second.tex;
-    }
-    // Same address, new picture: the old one is gone.
-    evict(it->second);
-    cache_.erase(it);
-  }
+HdCompositor::Entry*
+HdCompositor::create(const std::shared_ptr<const HdImage>& img) {
   if (img->width > max_texture_size_ || img->height > max_texture_size_ ||
       img->width <= 0 || img->height <= 0) {
     Logger::warn("HD picture {}x{} is larger than the GPU allows ({})",
                  img->width, img->height, max_texture_size_);
     return nullptr;
   }
-  const uint64_t started = SDL_GetPerformanceCounter();
   SDL_Texture* tex =
       SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888,
                         SDL_TEXTUREACCESS_STATIC, img->width, img->height);
@@ -83,9 +72,26 @@ HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
     Logger::warn("Cannot create HD texture: {}", SDL_GetError());
     return nullptr;
   }
-  scratch_.resize(img->pixels.size());
-  // Big pictures (a 4K screen is 9 million texels) are split across cores.
-  const std::size_t n = img->pixels.size();
+  SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+  Entry e;
+  e.img = img;
+  e.tex = tex;
+  e.bytes = img->pixels.size() * 4;
+  e.last_used = frame_;
+  bytes_ += e.bytes;
+  return &cache_.insert_or_assign(img.get(), std::move(e)).first->second;
+}
+
+void HdCompositor::upload_rows(Entry& e, const HdImage& img, int rows) {
+  const int y0 = e.rows_done;
+  const int y1 = std::min(img.height, y0 + rows);
+  if (y1 <= y0) {
+    return;
+  }
+  const std::size_t first = static_cast<std::size_t>(y0) * img.width;
+  const std::size_t n = static_cast<std::size_t>(y1 - y0) * img.width;
+  scratch_.resize(n);
+  // Big bands (a whole 4K screen is 9 million texels) use several cores.
   const unsigned workers =
       n < 1'000'000
           ? 1u
@@ -93,33 +99,99 @@ HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
   {
     std::vector<std::jthread> pool;
     const std::size_t step = (n + workers - 1) / workers;
+    auto part = [&](std::size_t a, std::size_t b) {
+      std::transform(
+          img.pixels.begin() + static_cast<std::ptrdiff_t>(first + a),
+          img.pixels.begin() + static_cast<std::ptrdiff_t>(first + b),
+          scratch_.begin() + static_cast<std::ptrdiff_t>(a), premultiply);
+    };
     for (unsigned w = 1; w < workers; ++w) {
       const std::size_t a = std::min(n, w * step);
-      const std::size_t b = std::min(n, a + step);
-      pool.emplace_back([&, a, b] {
-        std::transform(img->pixels.begin() + static_cast<std::ptrdiff_t>(a),
-                       img->pixels.begin() + static_cast<std::ptrdiff_t>(b),
-                       scratch_.begin() + static_cast<std::ptrdiff_t>(a),
-                       premultiply);
-      });
+      pool.emplace_back(part, a, std::min(n, a + step));
     }
-    std::transform(img->pixels.begin(),
-                   img->pixels.begin() +
-                       static_cast<std::ptrdiff_t>(std::min(n, step)),
-                   scratch_.begin(), premultiply);
+    part(0, std::min(n, step));
   }
-  SDL_UpdateTexture(tex, nullptr, scratch_.data(), img->width * 4);
-  SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+  const SDL_Rect rect{0, y0, img.width, y1 - y0};
+  SDL_UpdateTexture(e.tex, &rect, scratch_.data(), img.width * 4);
+  e.rows_done = y1;
+}
+
+SDL_Texture*
+HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
+  Entry* e = nullptr;
+  auto it = cache_.find(img.get());
+  if (it != cache_.end()) {
+    if (it->second.img.lock() == img) {
+      e = &it->second;
+    }
+    else {
+      // Same address, new picture: the old one is gone.
+      evict(it->second);
+      cache_.erase(it);
+    }
+  }
+  if (e && e->rows_done >= img->height) {
+    e->last_used = frame_;
+    return e->tex;
+  }
+  // Not there yet, or only partly streamed: finish it now.
+  const uint64_t started = SDL_GetPerformanceCounter();
+  if (!e) {
+    e = create(img);
+    if (!e) {
+      return nullptr;
+    }
+  }
+  upload_rows(*e, *img, img->height);
+  e->last_used = frame_;
   upload_ms_ += static_cast<double>(SDL_GetPerformanceCounter() - started) *
                 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
-  Entry e;
-  e.img = img;
-  e.tex = tex;
-  e.bytes = img->pixels.size() * 4;
-  e.last_used = frame_;
-  bytes_ += e.bytes;
-  cache_.emplace(img.get(), std::move(e));
-  return tex;
+  return e->tex;
+}
+
+void HdCompositor::stream(
+    const std::vector<std::shared_ptr<const HdImage>>& add, double budget_ms) {
+  for (const auto& img : add) {
+    if (img) {
+      stream_queue_.emplace_back(img);
+    }
+  }
+  const uint64_t freq = SDL_GetPerformanceFrequency();
+  const uint64_t started = SDL_GetPerformanceCounter();
+  auto spent_ms = [&] {
+    return static_cast<double>(SDL_GetPerformanceCounter() - started) * 1000.0 /
+           static_cast<double>(freq);
+  };
+  std::size_t done = 0;
+  while (done < stream_queue_.size() && spent_ms() < budget_ms) {
+    const auto img = stream_queue_[done].lock();
+    if (!img) {
+      ++done;
+      continue;
+    }
+    Entry* e = nullptr;
+    auto it = cache_.find(img.get());
+    if (it != cache_.end() && it->second.img.lock() == img) {
+      e = &it->second;
+    }
+    else {
+      if (it != cache_.end()) {
+        evict(it->second);
+        cache_.erase(it);
+      }
+      e = create(img);
+    }
+    if (!e || e->rows_done >= img->height) {
+      ++done;
+      continue;
+    }
+    // About a million texels (4 MB) per band.
+    const int band = std::max(16, 1'000'000 / std::max(1, img->width));
+    upload_rows(*e, *img, band);
+  }
+  stream_queue_.erase(stream_queue_.begin(),
+                      stream_queue_.begin() +
+                          static_cast<std::ptrdiff_t>(done));
 }
 
 std::size_t

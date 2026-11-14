@@ -50,6 +50,9 @@ public:
   void invalidate() { force_recompose_ = true; }
   // Marks every layer for a full redraw (benchmarks).
   void redraw_all();
+  // Uploads everything the HD pack has pre-decoded, now (benchmarks; the game
+  // streams it a little each frame instead).
+  void warm_up_gpu();
   void set_cursor_manager(CursorManager* cursor) { cursor_ = cursor; }
 
   // Fade control - returns true when fade completes
@@ -66,6 +69,10 @@ private:
   // HD: layers are drawn by the GPU (HdCompositor) into textures and
   // composited there; the CPU only expands 640x400 indexed pixels.
   void render_gpu();
+  // Streams pre-decoded HD art to the GPU for up to budget_ms.
+  void stream_ahead(double budget_ms);
+  // Per frame: small enough not to be felt at 144 Hz.
+  static constexpr double stream_budget_ms = 3.0;
   SDL_Texture* layer_texture(Renderable* view, int w, int h);
   void ensure_back_texture();
   void clear_back_texture();

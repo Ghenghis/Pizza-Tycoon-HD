@@ -940,12 +940,13 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   }
   Renderer renderer(sdl_, display_height_);
   renderer.add_layers(result.view.get());
+  // In a real session the intro gives the background warm-up time to decode
+  // and stream the art; measure that state rather than a race against it.
+  resources::HdPack::instance().wait_for_prefetch();
+  renderer.warm_up_gpu();
   SDL_SetRenderVSync(sdl_.renderer.get(), SDL_RENDERER_VSYNC_DISABLED);
   std::vector<double> ms;
   ms.reserve(static_cast<std::size_t>(frames));
-  // In a real session the intro gives the background warm-up time to finish;
-  // measure that state rather than a race against it.
-  resources::HdPack::instance().wait_for_prefetch();
   double first_ms = 0;
   double first_pack_ms = 0;
   double first_upload_ms = 0;

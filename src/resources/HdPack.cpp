@@ -51,6 +51,13 @@ void HdPack::wait_for_prefetch() {
   }
 }
 
+std::vector<std::shared_ptr<const gfx::HdImage>> HdPack::take_prefetched() {
+  const std::lock_guard lock(mutex_);
+  std::vector<ImagePtr> out;
+  out.swap(prefetched_);
+  return out;
+}
+
 HdPack::Stats HdPack::stats() const {
   const std::lock_guard lock(mutex_);
   return stats_;
@@ -67,6 +74,7 @@ void HdPack::configure(const std::filesystem::path& root) {
   cache_.clear();
   pending_.clear();
   used_.clear();
+  prefetched_.clear();
   stats_ = {};
   root_.clear();
   if (root.empty()) {
@@ -283,6 +291,9 @@ void HdPack::prefetch(std::vector<WarmEntry> entries,
         const std::lock_guard lock(mutex_);
         record(key, e, d);
         pending_.erase(key);
+        if (d.image) {
+          prefetched_.push_back(d.image);
+        }
       }
       promise.set_value(d.image);
       if (d.image) {
