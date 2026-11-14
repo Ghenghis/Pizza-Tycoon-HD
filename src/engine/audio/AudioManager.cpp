@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <random>
 #include <utility>
 
 #include "core/content/Sha256.h"
@@ -34,10 +35,14 @@ static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
 namespace {
 
-// A request word: play/loop flags in the low bits, a tag in the rest.
+// A request word: play/loop flags and the variant in the low bits, a tag in
+// the rest.
 constexpr uint32_t PLAY_BIT = 1;
 constexpr uint32_t LOOP_BIT = 2;
-constexpr uint32_t TAG_SHIFT = 2;
+constexpr uint32_t VARIANT_SHIFT = 2;
+constexpr uint32_t VARIANT_MASK = 7;
+static_assert(Mixer::MAX_VARIANTS == VARIANT_MASK + 1);
+constexpr uint32_t TAG_SHIFT = 5;
 constexpr uint32_t TAG_COUNT = UINT32_MAX >> TAG_SHIFT;
 
 constexpr float INT16_TO_FLOAT = 1.0f / 32768.0f;
@@ -127,6 +132,43 @@ void mix_add(std::span<float> acc, std::span<const int16_t> src,
   }
 }
 
+void mix_add_panned(std::span<float> acc, std::span<const int16_t> src,
+                    float gain_from, float gain_to, float left, float right) {
+  if (left == 1.0f && right == 1.0f) {
+    mix_add(acc, src, gain_from, gain_to);
+    return;
+  }
+  const std::size_t n = std::min(acc.size(), src.size());
+  if (n == 0) {
+    return;
+  }
+  const std::array<float, MIX_CHANNELS> side{left, right};
+  const std::size_t frames = (n + MIX_CHANNELS - 1) / MIX_CHANNELS;
+  const float step = (gain_to - gain_from) / static_cast<float>(frames);
+  for (std::size_t i = 0; i < n; ++i) {
+    const std::size_t frame = i / MIX_CHANNELS + 1;
+    const float g = gain_from == gain_to || frame == frames
+                        ? gain_to
+                        : gain_from + step * static_cast<float>(frame);
+    acc[i] += static_cast<float>(src[i]) * g * side[i % MIX_CHANNELS] *
+              INT16_TO_FLOAT;
+  }
+}
+
+Placement screen_placement(float x, float y, float width, float height) {
+  if (!(width > 0.0f) || !(height > 0.0f) || !std::isfinite(x) ||
+      !std::isfinite(y)) {
+    return {};
+  }
+  const float pan = std::clamp((x / width) * 2.0f - 1.0f, -1.0f, 1.0f);
+  // How far outside the screen, in screen widths.
+  const float dx = std::max({0.0f, -x, x - width});
+  const float dy = std::max({0.0f, -y, y - height});
+  const float away = std::min(std::sqrt(dx * dx + dy * dy) / width, 1.0f);
+  return {.pan = pan * PAN_LIMIT,
+          .gain = 1.0f - (1.0f - OFF_SCREEN_GAIN) * away};
+}
+
 void mix_to_s16(std::span<const float> acc, std::span<int16_t> out,
                 float master) {
   const std::size_t n = std::min(acc.size(), out.size());
@@ -174,11 +216,136 @@ bool Mixer::post(std::size_t slot, uint32_t flags) {
   return true;
 }
 
-bool Mixer::play(std::size_t slot, bool loop) {
-  return post(slot, PLAY_BIT | (loop ? LOOP_BIT : 0u));
+bool Mixer::play(std::size_t slot, bool loop, Placement place) {
+  if (slot >= effect_count()) {
+    return false;
+  }
+  const std::lock_guard lock(bank_mutex_);
+  // Another variant than last time, all others equally likely.
+  std::size_t variant = 0;
+  const EffectBank* bank = current_bank_.get();
+  if (bank && bank->slots[slot]) {
+    const std::size_t n =
+        std::min(bank->slots[slot]->variants.size(), MAX_VARIANTS);
+    if (n > 1) {
+      const std::size_t last = last_variant_[slot] % n;
+      variant = random_.below(n - 1);
+      if (variant >= last) {
+        ++variant;
+      }
+    }
+  }
+  last_variant_[slot] = variant;
+  const float gain =
+      std::isfinite(place.gain) ? std::clamp(place.gain, 0.0f, 1.0f) : 1.0f;
+  const float pan =
+      std::isfinite(place.pan) ? std::clamp(place.pan, -1.0f, 1.0f) : 0.0f;
+  Effect& e = effects_[slot];
+  e.place_left.store(gain * (pan > 0.0f ? 1.0f - pan : 1.0f),
+                     std::memory_order_relaxed);
+  e.place_right.store(gain * (pan < 0.0f ? 1.0f + pan : 1.0f),
+                      std::memory_order_relaxed);
+  return post(slot, PLAY_BIT | (loop ? LOOP_BIT : 0u) |
+                        (static_cast<uint32_t>(variant) << VARIANT_SHIFT));
+}
+
+std::size_t Mixer::last_variant(std::size_t slot) const {
+  return slot < MAX_EFFECTS ? last_variant_[slot] : 0;
+}
+
+void Mixer::seed(uint64_t seed) {
+  const std::lock_guard lock(bank_mutex_);
+  random_.seed(seed);
+}
+
+const Mixer::EffectBank* Mixer::effect_bank() const {
+  const std::lock_guard lock(bank_mutex_);
+  return current_bank_.get();
+}
+
+void Mixer::priority(std::size_t slot, Priority priority) noexcept {
+  if (slot < MAX_EFFECTS) {
+    effects_[slot].priority.store(static_cast<uint8_t>(priority),
+                                  std::memory_order_relaxed);
+  }
+}
+
+Priority Mixer::priority(std::size_t slot) const noexcept {
+  return slot < MAX_EFFECTS
+             ? static_cast<Priority>(
+                   effects_[slot].priority.load(std::memory_order_relaxed))
+             : Priority::AMBIENCE;
+}
+
+Priority Mixer::priority_of(std::size_t slot,
+                            const EffectBank* bank) const noexcept {
+  if (bank && bank->priorities[slot]) {
+    return *bank->priorities[slot];
+  }
+  return priority(slot);
+}
+
+void Mixer::voice_limit(std::size_t limit) noexcept {
+  voice_limit_.store(std::max<std::size_t>(limit, 1),
+                     std::memory_order_relaxed);
+}
+
+std::size_t Mixer::voice_limit() const noexcept {
+  return voice_limit_.load(std::memory_order_relaxed);
+}
+
+void Mixer::ducking(bool enabled) noexcept {
+  ducking_.store(enabled, std::memory_order_relaxed);
+}
+
+bool Mixer::ducking() const noexcept {
+  return ducking_.load(std::memory_order_relaxed);
+}
+
+float Mixer::duck_gain() const noexcept {
+  return duck_seen_.load(std::memory_order_relaxed);
+}
+
+bool Mixer::play_extra(const EffectBank::Sound* sound, Placement place) {
+  const std::lock_guard lock(bank_mutex_);
+  if (!sound || !current_bank_) {
+    return false;
+  }
+  const std::size_t head = extra_head_.load(std::memory_order_relaxed);
+  if (head - extra_tail_.load(std::memory_order_acquire) >= EXTRA_QUEUE) {
+    dropped_voices_.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  const float gain = std::clamp(place.gain, 0.0f, 1.0f);
+  const float pan = std::clamp(place.pan, -1.0f, 1.0f);
+  extra_queue_[head % EXTRA_QUEUE] =
+      ExtraRequest{.sound = sound,
+                   .bank = current_bank_->number,
+                   .left = gain * (pan > 0.0f ? 1.0f - pan : 1.0f),
+                   .right = gain * (pan < 0.0f ? 1.0f + pan : 1.0f)};
+  extra_head_.store(head + 1, std::memory_order_release);
+  return true;
+}
+
+std::size_t Mixer::extra_voices() const noexcept {
+  return extra_count_.load(std::memory_order_relaxed);
+}
+
+uint64_t Mixer::dropped_voices() const noexcept {
+  return dropped_voices_.load(std::memory_order_relaxed);
 }
 
 bool Mixer::stop(std::size_t slot) { return post(slot, 0); }
+
+bool Mixer::playing(std::size_t slot) const noexcept {
+  if (slot >= effect_count()) {
+    return false;
+  }
+  const Effect& e = effects_[slot];
+  const uint32_t request = e.request.load(std::memory_order_acquire);
+  return request != 0 ? (request & PLAY_BIT) != 0
+                      : e.active.load(std::memory_order_acquire);
+}
 
 bool Mixer::any_effect_playing() const noexcept {
   const std::size_t count = effect_count();
@@ -237,13 +404,18 @@ bool Mixer::output_muted() const noexcept {
   return output_muted_.load(std::memory_order_relaxed);
 }
 
-void Mixer::take_request(Effect& e, const Sound& sound) {
+bool Mixer::take_request(std::size_t slot, const EffectBank* bank) {
+  Effect& e = effects_[slot];
   uint32_t request = e.request.load(std::memory_order_acquire);
   if (request == 0) {
-    return;
+    return false;
   }
-  if ((request & PLAY_BIT) != 0) {
-    e.position = sound.start_offset;
+  const bool start = (request & PLAY_BIT) != 0;
+  if (start) {
+    e.variant = (request >> VARIANT_SHIFT) & VARIANT_MASK;
+    e.left = e.place_left.load(std::memory_order_relaxed);
+    e.right = e.place_right.load(std::memory_order_relaxed);
+    e.position = sound_of(slot, bank).start_offset;
     e.playing = true;
     e.loop = (request & LOOP_BIT) != 0;
   }
@@ -254,6 +426,96 @@ void Mixer::take_request(Effect& e, const Sound& sound) {
   // A newer request than this one stays for the next block.
   static_cast<void>(e.request.compare_exchange_strong(
       request, 0, std::memory_order_acq_rel, std::memory_order_relaxed));
+  return start;
+}
+
+std::size_t Mixer::voices_now() const noexcept {
+  std::size_t n = 0;
+  const std::size_t count = effect_count();
+  for (std::size_t i = 0; i < count; ++i) {
+    n += effects_[i].playing ? 1 : 0;
+  }
+  for (const Extra& x : extras_) {
+    n += x.sound ? 1 : 0;
+  }
+  return n;
+}
+
+void Mixer::cut_extras() {
+  std::size_t voices = voices_now();
+  const std::size_t limit = voice_limit();
+  while (voices > limit) {
+    Extra* oldest = nullptr;
+    for (Extra& x : extras_) {
+      if (x.sound && (!oldest || x.started < oldest->started)) {
+        oldest = &x;
+      }
+    }
+    if (!oldest) {
+      return; // the game's own effects are never cut
+    }
+    oldest->sound = nullptr;
+    dropped_voices_.fetch_add(1, std::memory_order_relaxed);
+    --voices;
+  }
+}
+
+void Mixer::start_extras(const EffectBank* bank) {
+  const std::size_t head = extra_head_.load(std::memory_order_acquire);
+  std::size_t tail = extra_tail_.load(std::memory_order_relaxed);
+  std::size_t voices = voices_now();
+  const std::size_t limit = voice_limit();
+  for (; tail != head; ++tail) {
+    const ExtraRequest& r = extra_queue_[tail % EXTRA_QUEUE];
+    // Only sounds of the bank in use; an older bank may be freed.
+    Extra* free_voice = nullptr;
+    if (bank && r.bank == bank->number && voices < limit) {
+      for (Extra& x : extras_) {
+        if (!x.sound) {
+          free_voice = &x;
+          break;
+        }
+      }
+    }
+    if (!free_voice) {
+      dropped_voices_.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+    *free_voice = Extra{.sound = r.sound,
+                        .position = 0,
+                        .left = r.left,
+                        .right = r.right,
+                        .started = blocks_};
+    ++voices;
+  }
+  extra_tail_.store(tail, std::memory_order_release);
+}
+
+void Mixer::mix_extras(std::span<float> acc, float gain_from, float gain_to) {
+  const std::size_t total = acc.size();
+  std::size_t count = 0;
+  for (Extra& x : extras_) {
+    if (!x.sound) {
+      continue;
+    }
+    const std::span<const int16_t> samples = x.sound->samples;
+    const std::size_t n = std::min(total, samples.size() - x.position);
+    const float to =
+        gain_from == gain_to
+            ? gain_to
+            : gain_from + (gain_to - gain_from) * (static_cast<float>(n) /
+                                                   static_cast<float>(total));
+    mix_add_panned(acc.subspan(0, n), samples.subspan(x.position, n), gain_from,
+                   to, x.left, x.right);
+    x.position += n;
+    if (x.position >= samples.size()) {
+      x.sound = nullptr;
+    }
+    else {
+      ++count;
+    }
+  }
+  extra_count_.store(count, std::memory_order_relaxed);
 }
 
 void Mixer::mix_effect(Effect& e, const Sound& sound, std::span<float> acc,
@@ -280,8 +542,8 @@ void Mixer::mix_effect(Effect& e, const Sound& sound, std::span<float> acc,
       }
     }
     const std::size_t n = std::min(total - done, samples.size() - e.position);
-    mix_add(acc.subspan(done, n), samples.subspan(e.position, n), gain_at(done),
-            gain_at(done + n));
+    mix_add_panned(acc.subspan(done, n), samples.subspan(e.position, n),
+                   gain_at(done), gain_at(done + n), e.left, e.right);
     e.position += n;
     done += n;
   }
@@ -292,8 +554,11 @@ void Mixer::mix_effect(Effect& e, const Sound& sound, std::span<float> acc,
 }
 
 Mixer::Sound Mixer::sound_of(std::size_t slot, const EffectBank* bank) const {
-  if (bank && bank->slots[slot]) {
-    const EffectBank::Sound& r = *bank->slots[slot];
+  if (bank && bank->slots[slot] && !bank->slots[slot]->variants.empty()) {
+    const auto& variants = bank->slots[slot]->variants;
+    // A bank with fewer variants plays its first.
+    const std::size_t v = effects_[slot].variant;
+    const EffectBank::Sound& r = variants[v < variants.size() ? v : 0];
     return Sound{.samples = r.samples, .start_offset = r.start_offset};
   }
   const Effect& e = effects_[slot];
@@ -301,6 +566,8 @@ Mixer::Sound Mixer::sound_of(std::size_t slot, const EffectBank* bank) const {
 }
 
 void Mixer::effect_bank(std::unique_ptr<EffectBank> bank) {
+  const std::lock_guard lock(bank_mutex_);
+  last_variant_.fill(0);
   // Every bank handed over gets a higher number, the originals (null)
   // included, so the audio thread can say which ones it has moved past.
   ++banks_made_;
@@ -319,6 +586,7 @@ bool Mixer::has_effect_bank() const noexcept {
 }
 
 void Mixer::collect_banks(bool no_callback) {
+  const std::lock_guard lock(bank_mutex_);
   const uint64_t seen = bank_seen_.load(std::memory_order_acquire);
   // The audio thread picked up a bank made after these, and banks only move
   // forward, so it never uses them again.
@@ -339,8 +607,12 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
   }
   if (bank != playing_bank_) {
     // Sounds that play on switch over in place; past the new sound's end a
-    // loop goes back to its start and a one-shot ends.
+    // loop goes back to its start and a one-shot ends. Ambience one-shots
+    // belong to their bank and end with it.
     playing_bank_ = bank;
+    for (Extra& x : extras_) {
+      x.sound = nullptr;
+    }
     const std::size_t n = effect_count();
     for (std::size_t i = 0; i < n; ++i) {
       Effect& e = effects_[i];
@@ -354,28 +626,59 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
     }
   }
 
+  // Requests first: what starts this block decides the voices and the duck.
+  const std::size_t count = effect_count();
+  bool cut = false;
+  bool alert = false;
+  for (std::size_t i = 0; i < count; ++i) {
+    const bool started = take_request(i, bank);
+    const Priority p = priority_of(i, bank);
+    cut = cut || (started && p != Priority::AMBIENCE);
+    alert = alert || (effects_[i].playing && p == Priority::ALERT);
+  }
+  if (cut) {
+    cut_extras();
+  }
+  start_extras(bank);
+  ++blocks_;
+
+  // Under an alert the music dips; it moves at most one step a block, in a
+  // straight line, and the block's gain ramp smooths that step.
+  const float frames = static_cast<float>(out.size() / MIX_CHANNELS);
+  const float duck_target = alert && ducking() ? DUCK_GAIN : 1.0f;
+  if (duck_ > duck_target) {
+    duck_ = std::max(duck_target,
+                     duck_ - (1.0f - DUCK_GAIN) * frames /
+                                 (DUCK_ATTACK_S * static_cast<float>(RATE)));
+  }
+  else if (duck_ < duck_target) {
+    duck_ = std::min(duck_target,
+                     duck_ + (1.0f - DUCK_GAIN) * frames /
+                                 (DUCK_RELEASE_S * static_cast<float>(RATE)));
+  }
+  duck_seen_.store(duck_, std::memory_order_relaxed);
+
   // The master volume and the mute fold into both gains, so they ramp too.
   const float master = output_muted() ? 0.0f : master_volume();
   const float music_target =
-      music_enabled() ? music_volume_.load(std::memory_order_relaxed) * master
-                      : 0.0f;
+      music_enabled()
+          ? music_volume_.load(std::memory_order_relaxed) * master * duck_
+          : 0.0f;
   mix_add(acc, music, music_gain_, music_target);
   music_gain_ = music_target;
 
   const float sound_target =
       sound_volume_.load(std::memory_order_relaxed) * master;
-  const std::size_t count = effect_count();
   for (std::size_t i = 0; i < count; ++i) {
     Effect& e = effects_[i];
-    const Sound sound = sound_of(i, bank);
-    take_request(e, sound);
     if (e.playing) {
-      mix_effect(e, sound, acc, sound_gain_, sound_target);
+      mix_effect(e, sound_of(i, bank), acc, sound_gain_, sound_target);
       if (!e.playing) {
         e.active.store(false, std::memory_order_release);
       }
     }
   }
+  mix_extras(acc, sound_gain_, sound_target);
   sound_gain_ = sound_target;
 
   mix_to_s16(acc, out, MASTER_VOLUME);
@@ -435,7 +738,16 @@ void AudioManager::ADLMIDIDeleter::operator()(ADL_MIDIPlayer* p) {
 #endif
 
 AudioManager::AudioManager()
-    : music_data_(static_cast<size_t>(MusicId::COUNT)) {}
+    : music_data_(static_cast<size_t>(MusicId::COUNT)) {
+  for (std::size_t i = 0; i < static_cast<std::size_t>(SoundId::COUNT); ++i) {
+    mixer_.priority(i, default_priority(static_cast<SoundId>(i)));
+  }
+  // Variants and ambience differ from one run to the next.
+  const uint64_t seed =
+      (uint64_t{std::random_device{}()} << 32) ^ std::random_device{}();
+  mixer_.seed(seed);
+  ambience_random_.seed(~seed);
+}
 
 AudioManager::~AudioManager() {
   // Stops the callback before any member it uses goes away.
@@ -721,6 +1033,83 @@ void AudioManager::play_sound(SoundId id, LoopMode loop) {
   if (!mixer_.play(slot, loop == LoopMode::Loop)) {
     Logger::warn("Sound slot {} out of range (have {} sounds)", slot,
                  mixer_.effect_count());
+  }
+}
+
+void AudioManager::play_sound_at(SoundId id, Placement place, LoopMode loop) {
+  if (!audio_enabled_) {
+    return;
+  }
+  const auto slot = static_cast<size_t>(id);
+  if (!mixer_.play(slot, loop == LoopMode::Loop, place)) {
+    Logger::warn("Sound slot {} out of range (have {} sounds)", slot,
+                 mixer_.effect_count());
+  }
+}
+
+void AudioManager::ducking(bool enabled) { mixer_.ducking(enabled); }
+
+void AudioManager::voice_limit(std::size_t limit) { mixer_.voice_limit(limit); }
+
+void AudioManager::effects_seed(uint64_t seed) {
+  mixer_.seed(seed);
+  const std::lock_guard lock(effects_mutex_);
+  ambience_random_.seed(~seed);
+}
+
+void AudioManager::tick(uint32_t dt_ms) {
+  const std::lock_guard lock(effects_mutex_);
+  now_ms_ += dt_ms;
+  const Mixer::EffectBank* bank = mixer_.effect_bank();
+  if (!bank || bank->scenes.empty()) {
+    ambience_.clear();
+    ambience_bank_ = 0;
+    return;
+  }
+  if (bank->number != ambience_bank_) {
+    ambience_bank_ = bank->number;
+    ambience_.assign(bank->scenes.size(), {});
+    for (std::size_t s = 0; s < bank->scenes.size(); ++s) {
+      ambience_[s].assign(bank->scenes[s].layers.size(), LayerClock{});
+    }
+  }
+  for (std::size_t s = 0; s < bank->scenes.size(); ++s) {
+    const Mixer::EffectBank::Scene& scene = bank->scenes[s];
+    const bool bed = mixer_.playing(scene.bed);
+    for (std::size_t l = 0; l < scene.layers.size(); ++l) {
+      const Mixer::EffectBank::Layer& layer = scene.layers[l];
+      LayerClock& clock = ambience_[s][l];
+      if (!bed || layer.variants.empty()) {
+        clock.armed = false; // starts again from a full interval
+        continue;
+      }
+      const auto interval = [&] {
+        return ambience_random_.between(layer.min_interval_ms,
+                                        layer.max_interval_ms);
+      };
+      if (!clock.armed) {
+        clock.armed = true;
+        clock.due_ms = now_ms_ + interval();
+        continue;
+      }
+      if (now_ms_ < clock.due_ms) {
+        continue;
+      }
+      // One at a time: a long frame never brings a burst.
+      std::size_t v = 0;
+      const std::size_t n = layer.variants.size();
+      if (n > 1) {
+        v = ambience_random_.below(n - 1);
+        if (v >= clock.last_variant % n) {
+          ++v;
+        }
+      }
+      clock.last_variant = v;
+      static_cast<void>(mixer_.play_extra(
+          &layer.variants[v], Placement{.pan = ambience_random_.uniform(
+                                            layer.min_pan, layer.max_pan)}));
+      clock.due_ms = now_ms_ + interval();
+    }
   }
 }
 

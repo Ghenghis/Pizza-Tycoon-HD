@@ -41,7 +41,7 @@ change only with `version`.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `format`, `version` | yes | `pthd-sfx-overrides`, `1`. Anything else: the whole pack is refused. |
+| `format`, `version` | yes | `pthd-sfx-overrides`, `1` or `2`. Anything else: the whole pack is refused. |
 | `pack.id`, `pack.revision` | no | Shown and logged; the pack's identity. |
 | `event` | yes | The stable event id (below). Entries are keyed by event, never by position. |
 | `slot` | no | When given, it must equal the event's slot number, as a check. |
@@ -58,6 +58,77 @@ change only with `version`.
 Files: WAV (PCM 8/16/24/32-bit, float) or MP3, decoded to 44100 Hz stereo with the same checks as
 music (header first, then the decoder). Limits per file: 16 MiB, 120 s; per pack: 64 MiB decoded,
 256 entries, a 1 MiB manifest.
+
+## Version 2: variants, priorities, ambience
+
+Everything above holds; version 1 packs read exactly as before, and the fields below are read only
+when `version` is `2`.
+
+```json
+{
+  "format": "pthd-sfx-overrides",
+  "version": 2,
+  "effects": [
+    {
+      "event": "phone-pickup",
+      "source_sha256": "<64 hex>",
+      "gain_db": -2,
+      "priority": "feedback",
+      "variants": [
+        { "file": "phone/pickup-a.wav", "sha256": "<64 hex>" },
+        { "file": "phone/pickup-b.wav", "sha256": "<64 hex>", "gain_db": -3.5, "trim_end_ms": 40 }
+      ]
+    }
+  ],
+  "ambience": [
+    {
+      "with": "restaurant-noise-1",
+      "layers": [
+        {
+          "name": "cutlery",
+          "variants": [
+            { "file": "room/cutlery-1.wav", "sha256": "<64 hex>" },
+            { "file": "room/cutlery-2.wav", "sha256": "<64 hex>" }
+          ],
+          "gain_db": -9,
+          "interval_ms": [2500, 7000],
+          "pan": [-0.6, 0.6]
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `variants` | Instead of `file`/`sha256`: 1 to 8 sounds, each with its own `file` and `sha256`, and optionally its own `gain_db`, `trim_start_ms`, `trim_end_ms`, `loop_start_ms`; the entry's values are the defaults. Each play picks one at random, never the one played last for that event, with the engine's own generator (never the game's random streams). A variant that is refused is left out with its reason (`variant 2: ...`) and the others play; with none left the event keeps its original. |
+| `priority` | `alert`, `feedback` or `ambience`, for an entry that is replaced. Without it: `phone-ringing` and `police-siren` are alerts; `restaurant-noise-1..3`, `traffic-1..2` ambience; the rest feedback. Anything else refuses the entry. |
+| `ambience` | Up to 8 scenes. A scene's `with` names its bed: an event (original or replaced) that the game loops. While the bed plays, each of its up to 8 layers plays one of its variants (rules as above) every `interval_ms` [least, most] (250 to 600000 ms, random in between), panned at random within `pan` [left, right] (-1 to 1, default [0, 0]). A layer starts its first interval when the bed starts, and stops when it stops. A layer that is refused (no name, unknown bed, bad interval or pan, no variant that loads) is reported in the outcomes with `layer` set, and the others play. |
+
+How it plays:
+
+- **Voices.** At most 16 sounds at once by default. The game's own events always play; ambience
+  one-shots take the voices left. One that finds none is left out, and one that is playing is cut
+  (oldest first) when feedback or an alert starts while the voices are full. So alerts and feedback
+  are never lost to ambience.
+- **Placement.** `AudioManager::play_sound_at(id, screen_placement(x, y, 640, 400))` pans by the
+  screen x (at most 0.8 to a side) and, off the screen, lowers the gain with the distance, to 0.3 a
+  screen width away. Panning only lowers the far channel, so a placed sound is never louder than in
+  the middle. Ambience layers are panned the same way.
+- **Ducking.** While an alert plays, the music goes down 5 dB in 0.08 s and comes back over 0.6 s,
+  in straight lines with no step. On by default; **Music Ducking** in the audio options (config
+  `duck_music`) turns it off.
+- Switching packs ends the old pack's ambience one-shots at once; the next scene starts from a
+  full interval.
+
+## Loudness
+
+`python tools/audio/loudness_check.py <pack folder>` measures what the game plays (after `gain_db`
+and trims) per sound: integrated loudness (ITU-R BS.1770-4, gated), true peak (4x oversampled), and
+sample peak. Ambience beds (ambience-priority events) must be -23 LUFS integrated, within 2 LU;
+every sound must stay at or under -1 dBTP. `--json` writes the report as JSON; it exits 1 when a
+sound fails. WAV is read directly; MP3 needs `ffmpeg` on the PATH.
 
 ## Event ids (slot numbers never change)
 

@@ -165,6 +165,8 @@ struct GameOptions {
   bool mute_unfocused = false;
   // The enhanced sound pack's effects instead of the 1994 ones.
   bool enhanced_effects = false;
+  // Music dips a little under alerts (the phone, the police).
+  bool duck_music = true;
   // Show the day's turnover report when the turn ends.
   bool automatic_report = true;
   // Mouse and UI modernizations:

@@ -53,6 +53,7 @@ private:
   bool ok_ = false;
 };
 
+#if PLEGACY_ENABLE_MUSIC
 // A standard MIDI file: one note held for ten seconds (20 beats at 120 a
 // minute), so the song's position can be watched.
 std::vector<uint8_t> long_note_midi() {
@@ -78,6 +79,7 @@ double wait_for_music(const AudioManager& am, double seconds,
   }
   return am.music_position();
 }
+#endif
 
 SDL_Event device_event(SDL_EventType type, uint32_t which,
                        bool recording = false) {

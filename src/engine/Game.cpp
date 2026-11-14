@@ -512,6 +512,8 @@ int Game::run() {
     if (music_) {
       music_->tick();
     }
+    // The enhanced pack's ambience one-shots.
+    audio_manager_->tick(context.clock.dt_ms);
     // An enhanced sound pack that was refused says so, once.
     if (overlays) {
       if (std::string problem = audio_manager_->take_effects_problem();
@@ -990,6 +992,7 @@ bool Game::init(int display_height, const GameOptions& options) {
   audio_manager_->music_enabled(options.music);
   audio_manager_->master_volume(options.master_volume);
   audio_manager_->mute_when_unfocused(options.mute_unfocused);
+  audio_manager_->ducking(options.duck_music);
   // The enhanced effects, when chosen: applied once the effects are loaded.
   audio_manager_->effects_pack(
       std::filesystem::path(platform_paths::data_dir()) / "sfx" / "enhanced");

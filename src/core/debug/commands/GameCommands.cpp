@@ -440,6 +440,13 @@ static const OptionDef option_defs[] = {
          [](GameState& state, GameContext& context) {
            context.audio->mute_when_unfocused(state.options().mute_unfocused);
          }},
+    {.name = "duck_music",
+     .member = &GameOptions::duck_music,
+     .description = "Dip the music a little under alerts",
+     .apply =
+         [](GameState& state, GameContext& context) {
+           context.audio->ducking(state.options().duck_music);
+         }},
     {.name = "crt_aspect_ratio",
      .member = &GameOptions::crt_aspect_ratio,
      .description = "Show 640x480 (4:3) rather than 640x400",

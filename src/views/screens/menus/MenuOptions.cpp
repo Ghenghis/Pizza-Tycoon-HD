@@ -261,6 +261,15 @@ void MenuOptions::build_audio(GameState& state) {
             mark_dirty();
           }))
       .help_text("Silence the game while another window is in front.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Music Ducking", state.options().duck_music,
+                    [&state, this] {
+                      state.options().duck_music = !state.options().duck_music;
+                      context_.audio->ducking(state.options().duck_music);
+                      mark_dirty();
+                    }))
+      .help_text("The music dips a little while the phone rings or the "
+                 "police come, and comes back smoothly.");
 }
 
 std::string to_string(HdResolution r) {

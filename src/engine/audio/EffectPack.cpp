@@ -24,7 +24,8 @@ namespace audio {
 namespace {
 
 constexpr std::string_view manifest_format = "pthd-sfx-overrides";
-constexpr int manifest_version = 1;
+constexpr int oldest_version = 1;
+constexpr int manifest_version = 2; // variants, priorities, ambience
 constexpr int rate = 44100;
 
 constexpr std::array<std::string_view, static_cast<std::size_t>(SoundId::COUNT)>
@@ -44,6 +45,9 @@ bool is_hex64(std::string_view s) {
            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
          });
 }
+
+constexpr std::array<std::string_view, 3> priority_names = {
+    "ambience", "feedback", "alert"};
 
 std::string text(const json& j, const char* key) {
   const auto it = j.find(key);
@@ -87,10 +91,18 @@ std::optional<fs::path> contained(const fs::path& folder,
   return full;
 }
 
-// The entry's sound, or the reason it is refused.
+// A sound's own field, else the entry's (the defaults of its variants).
+double field(const json& spec, const json& entry, const char* key,
+             double fallback) {
+  return number(spec, key, number(entry, key, fallback));
+}
+
+// The sound spec names (an entry, or one of its variants, with the entry's
+// fields as defaults), or the reason it is refused.
 std::unique_ptr<Mixer::EffectBank::Sound>
-load_sound(const json& entry, const fs::path& file, const EffectLimits& limits,
-           std::uint64_t& pack_bytes, std::string& why) {
+load_sound(const json& spec, const json& entry, const fs::path& file,
+           const EffectLimits& limits, std::uint64_t& pack_bytes,
+           std::string& why) {
   std::error_code ec;
   const std::uintmax_t size = fs::file_size(file, ec);
   if (ec) {
@@ -108,7 +120,7 @@ load_sound(const json& entry, const fs::path& file, const EffectLimits& limits,
     why = "its file cannot be read";
     return nullptr;
   }
-  if (core::content::Sha256::hex(*bytes) != text(entry, "sha256")) {
+  if (core::content::Sha256::hex(*bytes) != text(spec, "sha256")) {
     why = "its file does not match its sha256";
     return nullptr;
   }
@@ -149,8 +161,8 @@ load_sound(const json& entry, const fs::path& file, const EffectLimits& limits,
     return static_cast<std::size_t>(std::max(ms, 0.0) * rate / 1000.0);
   };
   const std::size_t total = sound->samples.size() / 2;
-  const std::size_t head = frames_of(number(entry, "trim_start_ms", 0));
-  const std::size_t tail = frames_of(number(entry, "trim_end_ms", 0));
+  const std::size_t head = frames_of(field(spec, entry, "trim_start_ms", 0));
+  const std::size_t tail = frames_of(field(spec, entry, "trim_end_ms", 0));
   if (head + tail >= total) {
     why = "its trims leave no sound";
     return nullptr;
@@ -161,13 +173,15 @@ load_sound(const json& entry, const fs::path& file, const EffectLimits& limits,
   sound->samples.erase(sound->samples.begin(),
                        sound->samples.begin() +
                            static_cast<std::ptrdiff_t>(head * 2));
-  const std::size_t loop_start = frames_of(number(entry, "loop_start_ms", 0));
+  const std::size_t loop_start =
+      frames_of(field(spec, entry, "loop_start_ms", 0));
   if (loop_start >= sound->samples.size() / 2) {
     why = "its loop starts after its end";
     return nullptr;
   }
   sound->start_offset = loop_start * 2;
-  const double gain_db = std::clamp(number(entry, "gain_db", 0.0), -60.0, 12.0);
+  const double gain_db =
+      std::clamp(field(spec, entry, "gain_db", 0.0), -60.0, 12.0);
   if (gain_db != 0.0) {
     const double g = std::pow(10.0, gain_db / 20.0);
     for (int16_t& s : sound->samples) {
@@ -185,7 +199,112 @@ load_sound(const json& entry, const fs::path& file, const EffectLimits& limits,
   return sound;
 }
 
+// The sounds an entry or a layer names: its variants (version 2), or the
+// entry itself. Loads every one; returns those that load, with the reasons
+// of the others in refused (by variant number, from 1) or, for a single
+// sound, in why.
+std::vector<Mixer::EffectBank::Sound>
+load_variants(const json& entry, bool has_variants, const fs::path& folder,
+              const EffectLimits& limits, std::uint64_t& pack_bytes,
+              std::string& why, std::string& refused) {
+  std::vector<Mixer::EffectBank::Sound> sounds;
+  const auto one = [&](const json& spec, std::string& reason) {
+    if (!is_hex64(text(spec, "sha256"))) {
+      reason = "it has no sha256";
+      return;
+    }
+    if (const auto file = contained(folder, text(spec, "file"), reason)) {
+      if (auto sound =
+              load_sound(spec, entry, *file, limits, pack_bytes, reason)) {
+        sounds.push_back(std::move(*sound));
+      }
+    }
+  };
+  if (!has_variants) {
+    one(entry, why);
+    return sounds;
+  }
+  const json& list = entry["variants"];
+  for (std::size_t i = 0; i < list.size(); ++i) {
+    std::string reason;
+    if (!list[i].is_object()) {
+      reason = "not a variant";
+    }
+    else {
+      const std::size_t before = sounds.size();
+      one(list[i], reason);
+      if (sounds.size() > before) {
+        continue;
+      }
+    }
+    refused += (refused.empty() ? "" : "; ") + std::string("variant ") +
+               std::to_string(i + 1) + ": " + reason;
+  }
+  if (sounds.empty()) {
+    why = refused;
+  }
+  return sounds;
+}
+
+// Why an entry's variants list cannot be used, if so.
+std::string bad_variants(const json& entry) {
+  const json& list = entry["variants"];
+  if (!list.is_array() || list.empty()) {
+    return "its variants must be a list of sounds";
+  }
+  if (list.size() > Mixer::MAX_VARIANTS) {
+    return "it has more than " + std::to_string(Mixer::MAX_VARIANTS) +
+           " variants";
+  }
+  return {};
+}
+
+// [lo, hi] from a two-number list, if it is one.
+std::optional<std::pair<double, double>> range(const json& j, const char* key) {
+  const auto it = j.find(key);
+  if (it == j.end() || !it->is_array() || it->size() != 2 ||
+      !(*it)[0].is_number() || !(*it)[1].is_number()) {
+    return std::nullopt;
+  }
+  const double lo = (*it)[0].get<double>();
+  const double hi = (*it)[1].get<double>();
+  if (!std::isfinite(lo) || !std::isfinite(hi) || lo > hi) {
+    return std::nullopt;
+  }
+  return std::pair{lo, hi};
+}
+
 } // namespace
+
+Priority default_priority(SoundId id) {
+  switch (id) {
+  case SoundId::PHONE_RINGING:
+  case SoundId::POLICE_SIREN:
+    return Priority::ALERT;
+  case SoundId::RESTAURANT_NOISE_1:
+  case SoundId::RESTAURANT_NOISE_2:
+  case SoundId::RESTAURANT_NOISE_3:
+  case SoundId::TRAFFIC_1:
+  case SoundId::TRAFFIC_2:
+    return Priority::AMBIENCE;
+  default:
+    return Priority::FEEDBACK;
+  }
+}
+
+std::string_view priority_name(Priority priority) {
+  const auto i = static_cast<std::size_t>(priority);
+  return i < priority_names.size() ? priority_names[i] : std::string_view{};
+}
+
+std::optional<Priority> priority_from_name(std::string_view name) {
+  for (std::size_t i = 0; i < priority_names.size(); ++i) {
+    if (priority_names[i] == name) {
+      return static_cast<Priority>(i);
+    }
+  }
+  return std::nullopt;
+}
 
 std::string to_string(EffectsSet set) {
   return set == EffectsSet::ENHANCED ? "Enhanced" : "Original";
@@ -233,9 +352,12 @@ load_effect_pack(const fs::path& folder,
   }
   const auto version = doc->find("version");
   if (version == doc->end() || !version->is_number_integer() ||
-      *version != manifest_version) {
+      *version < oldest_version || *version > manifest_version) {
     return refuse("its manifest.json has a version this game does not read");
   }
+  // Variants, priorities and ambience are read from version 2 on; a
+  // version 1 pack reads as it always did.
+  const bool v2 = *version >= 2;
   const auto effects = doc->find("effects");
   if (effects == doc->end() || !effects->is_array()) {
     return refuse("its manifest.json lists no effects");
@@ -243,6 +365,30 @@ load_effect_pack(const fs::path& folder,
   if (effects->size() > limits.max_entries) {
     return refuse("its manifest.json lists more than " +
                   std::to_string(limits.max_entries) + " effects");
+  }
+  const json no_scenes = json::array();
+  const json* scenes = &no_scenes;
+  if (const auto it = doc->find("ambience"); v2 && it != doc->end()) {
+    if (!it->is_array()) {
+      return refuse("its manifest.json has an ambience that is not a list");
+    }
+    if (it->size() > limits.max_scenes) {
+      return refuse("its manifest.json lists more than " +
+                    std::to_string(limits.max_scenes) + " ambience scenes");
+    }
+    for (const json& scene : *it) {
+      const auto layers =
+          scene.is_object() ? scene.find("layers") : scene.end();
+      if (!scene.is_object() || layers == scene.end() || !layers->is_array()) {
+        return refuse("its manifest.json has an ambience scene without layers");
+      }
+      if (layers->size() > limits.max_layers) {
+        return refuse(
+            "its manifest.json has an ambience scene with more than " +
+            std::to_string(limits.max_layers) + " layers");
+      }
+    }
+    scenes = &*it;
   }
 
   EffectPack pack;
@@ -284,8 +430,16 @@ load_effect_pack(const fs::path& folder,
                !fb.empty() && fb != "original") {
         reason = "its fallback must be \"original\"";
       }
-      else if (!is_hex64(text(entry, "sha256"))) {
+      else if (const bool listed = v2 && entry.contains("variants");
+               listed && !bad_variants(entry).empty()) {
+        reason = bad_variants(entry);
+      }
+      else if (!listed && !is_hex64(text(entry, "sha256"))) {
         reason = "it has no sha256";
+      }
+      else if (const std::string p = text(entry, "priority");
+               v2 && entry.contains("priority") && !priority_from_name(p)) {
+        reason = "its priority must be alert, feedback or ambience";
       }
       else if (!is_hex64(text(entry, "source_sha256"))) {
         reason = "it has no source_sha256";
@@ -296,16 +450,92 @@ load_effect_pack(const fs::path& folder,
       else if (original_sha256[i] != text(entry, "source_sha256")) {
         reason = "it was made for a different original";
       }
-      else if (const auto file =
-                   contained(folder, text(entry, "file"), reason)) {
-        if (auto sound = load_sound(entry, *file, limits, pack_bytes, reason)) {
-          pack.bank->slots[i] = std::move(sound);
+      else {
+        std::string refused;
+        auto sounds =
+            load_variants(entry, v2 && entry.contains("variants"), folder,
+                          limits, pack_bytes, reason, refused);
+        if (!sounds.empty()) {
           outcome.replaced = true;
+          outcome.variants = sounds.size();
+          auto pool = std::make_unique<Mixer::EffectBank::Pool>();
+          pool->variants = std::move(sounds);
+          pack.bank->slots[i] = std::move(pool);
+          if (v2) {
+            pack.bank->priorities[i] =
+                priority_from_name(text(entry, "priority"));
+          }
+          reason = refused;
         }
       }
     }
-    outcome.reason = outcome.replaced ? std::string{} : reason;
+    outcome.reason = reason;
     pack.outcomes.push_back(std::move(outcome));
+  }
+
+  // Ambience: one-shots over a bed, which is one of the events.
+  for (const json& scene : *scenes) {
+    const std::string bed = music::clean_text(text(scene, "with"), 64);
+    const auto bed_id = effect_from_event(bed);
+    Mixer::EffectBank::Scene made;
+    made.bed = bed_id ? static_cast<std::size_t>(*bed_id) : 0;
+    for (const json& layer : scene["layers"]) {
+      EffectOutcome outcome;
+      outcome.event = bed;
+      outcome.slot = bed_id ? static_cast<int>(*bed_id) : -1;
+      std::string reason;
+      const auto interval = layer.is_object()
+                                ? range(layer, "interval_ms")
+                                : std::optional<std::pair<double, double>>{};
+      const auto pan = layer.is_object() && layer.contains("pan")
+                           ? range(layer, "pan")
+                           : std::optional{std::pair{0.0, 0.0}};
+      if (!layer.is_object()) {
+        reason = "not a layer";
+      }
+      else if ((outcome.layer = music::clean_text(text(layer, "name"), 64))
+                   .empty()) {
+        reason = "it has no name";
+      }
+      else if (!bed_id) {
+        reason = "no such event";
+      }
+      else if (!layer.contains("variants") || !bad_variants(layer).empty()) {
+        reason = layer.contains("variants") ? bad_variants(layer)
+                                            : "it has no variants";
+      }
+      else if (!interval || interval->first < limits.min_interval_ms ||
+               interval->second > limits.max_interval_ms) {
+        reason = "its interval_ms must be [least, most], from " +
+                 std::to_string(limits.min_interval_ms) + " to " +
+                 std::to_string(limits.max_interval_ms);
+      }
+      else if (!pan || pan->first < -1.0 || pan->second > 1.0) {
+        reason = "its pan must be [left, right], from -1 to 1";
+      }
+      else {
+        std::string refused;
+        auto sounds = load_variants(layer, true, folder, limits, pack_bytes,
+                                    reason, refused);
+        if (!sounds.empty()) {
+          outcome.replaced = true;
+          outcome.variants = sounds.size();
+          made.layers.push_back(Mixer::EffectBank::Layer{
+              .name = outcome.layer,
+              .variants = std::move(sounds),
+              .min_interval_ms = static_cast<std::uint32_t>(interval->first),
+              .max_interval_ms = static_cast<std::uint32_t>(interval->second),
+              .min_pan = static_cast<float>(pan->first),
+              .max_pan = static_cast<float>(pan->second)});
+          reason = refused;
+        }
+      }
+      outcome.reason = reason;
+      pack.outcomes.push_back(std::move(outcome));
+    }
+    if (!made.layers.empty()) {
+      pack.bank->scenes.push_back(std::move(made));
+    }
   }
   return pack;
 }

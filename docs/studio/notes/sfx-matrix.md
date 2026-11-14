@@ -129,6 +129,89 @@ On the owner's PC, `<work>/audio-candidates/pack-v0/` holds:
 
 The output channel added a C2PA chunk to each delivered WAV. The copies on the PC were put back to the built bytes (the fmt and data chunks only), and all manifest hashes match there.
 
+## Variation pools and layers (proposal for manifest v2)
+
+None of these is attached to anything. Every pool below that is not the bed of an existing event "needs new trigger", and all review columns are open.
+
+* The candidates are in `<cloud-work>/sfx-candidates/pools-v0/`. `pools.json` lists, per file:
+  * the staged source and its sha256;
+  * the decoded master and its sha256;
+  * provenance and licence;
+  * trim, fade and gain;
+  * measured peak and loudness.
+* Sources are bounded single-file copies: Kenney CC0 (Impact Sounds and RPG Audio, with each `License.txt`), PC3 loose files, and PC3 clips (byte ranges of the hash-checked `resources.resource`). Their receipt is in `sources-20261114/`.
+* `build_pools.py` (numpy edits, ffmpeg decoding and measurement) rebuilds the pools byte for byte.
+
+One-shots are trimmed to 2 ms before the onset (-40 dB from the peak) and 20 ms after the tail (-50 dB), with a 10 ms fade-out. They are levelled on active RMS (the frames within 30 dB of the peak), because ebur128 gating does not work on sounds this short. Peaks are capped at -3 dBFS.
+
+| Pool | Scene | Variants | Source | Level (active RMS) |
+|---|---|---|---|---|
+| cutlery | restaurant | 5 | Kenney impactMetal_light | -27 dBFS |
+| plates | restaurant | 5 | Kenney impactPlate_light | -26 dBFS |
+| glasses | restaurant | 5 | Kenney impactGlass_light | -28 dBFS |
+| door-open | restaurant | 3 | Kenney doorOpen_1/2 + PC3 Scooter_DoorBell (shop bell) | -22 dBFS |
+| door-close | restaurant | 4 | Kenney doorClose_1..4 | -22 dBFS |
+| payment | restaurant | 3 | Kenney handleCoins/2 + PC3 Bank_Select_activity | -24 dBFS |
+| chatter | restaurant | 4 | 2.5 s excerpts of PC3 GuestRoom high/mid, outside pack-v0's bed windows | -30 LUFS |
+| oven-door | kitchen | 5 | Kenney metalLatch/metalClick + impactMetal_heavy | -22 dBFS |
+| pots | kitchen | 3 | Kenney metalPot1..3 | -24 dBFS |
+| kitchen-busy | kitchen | bed | PC3 Kitchen_activity, 48 s loop | -30 LUFS |
+| kitchen-idle | kitchen | bed | PC3 Kitchen_noactivity, 48 s loop | -34 LUFS |
+
+Gaps:
+
+* **Cash register:** there is no recording of one, so coins and a bank cue stand in.
+* **Door-open:** only two door-open recordings exist; the PC3 shop bell is the third variant.
+* **Sizzle:** there are no dedicated sizzle one-shots. The kitchen beds carry the kitchen, still unheard.
+* **Voice lines:** PC3 Citizens/Employees lines are intelligible speech. They are a lead only, not chatter.
+
+### Layer plan per scene
+
+Pools pick their variants with a cosmetic random state of their own, never the simulation RNG. The same variant never plays twice in a row, each pool has a voice limit of 1 (chatter 2), each play gets ±1.5 dB of random gain, and there is no pitch shifting unless the engine offers it. Pools duck by 6 dB while a phone or alert cue plays.
+
+**Restaurant, dining room** (open, not the kitchen view, jukebox off; the same conditions as the crowd today):
+
+* Bed: `restaurant-noise-1/2/3` by seating utilization (the existing events).
+* Pool gain follows the level: -6 dB at level 1, -3 dB at level 2, 0 dB at level 3.
+
+| Pool | Level 1 | Level 2 | Level 3 |
+|---|---|---|---|
+| cutlery | every 4–10 s | every 2–6 s | every 1–4 s |
+| plates | 8–20 s | 5–12 s | 3–8 s |
+| glasses | 10–25 s | 6–15 s | 4–10 s |
+| chatter | off | 10–25 s | 6–15 s |
+
+Event-bound one-shots, each needing a new trigger:
+
+| One-shot | Trigger |
+|---|---|
+| door-open | guest enters (`GuestWalkScene::spawn_guest`) |
+| door-close | 0.6–1.2 s after the door-open |
+| door-open, then door-close | guest leaves (`spawn_guest_departure`) |
+| payment | guest leaves |
+| plates | pizza served (`waiter_delivered`), one variant |
+
+At least 1.5 s apart per pool.
+
+**Restaurant, kitchen view** (the crowd is off):
+
+* Bed: `kitchen-busy` while open with utilization > 21 %, otherwise `kitchen-idle`.
+* Pools: oven-door every 20–45 s (latch, then a door impact 150–300 ms later); pots every 8–20 s.
+
+**City view:**
+
+* Beds: `traffic-1` (close) and `traffic-2` (medium), as today.
+* No pools are proposed yet. Horns and engines are not staged.
+
+**North Pole village** (once the village emits events). It is staged only, in `<cloud-work>/sfx-candidates/north-pole/candidates.json`.
+
+* Bed: an outdoor night bed (PC3 Generic_Ambience_Night or Coastal_Night). It is unheard, so it is not known to be wind.
+* Second bed: distant workshop at -40 LUFS (PC3 Factory_Idle_activity or construction_ambience).
+* Pools: workshop taps every 6–15 s (Kenney impactWood_light / impactPlank_medium); bells rarely, every 30–90 s (PC3 Church_Idle_activity excerpts; Kenney impactBell_heavy only as a softened layer).
+* Gaps:
+  * No dedicated wind recording in the approved sources. The Drive leads are R6 and BAR data, which are not approved.
+  * No light sleigh or jingle bells.
+
 ## Open
 
 * **The sirens:** the PC3 chirps do not fit a 7.5 s looping siren as they are.
