@@ -499,6 +499,16 @@ class ComfySettings:
     denoise: float | None = None  # overrides every prompt rule when set
     wait_gpu: int | None = None  # nvidia-smi index of a GPU to wait for
     wait_below: int = 70  # ...until its utilisation (%) is below this
+    # Pictures this small (original pixels, width x height) hold too little
+    # detail for a diffusion model, which turns them to mush. They go through
+    # small_workflow instead (model upscaling only). 0 turns the split off.
+    small_workflow: dict[str, Any] | None = None
+    small_area: int = 4096
+
+    def workflow_for(self, asset: Asset) -> dict[str, Any]:
+        if self.small_workflow is not None and asset.width * asset.height < self.small_area:
+            return self.small_workflow
+        return self.workflow
 
 
 def gpu_utilisation(index: int) -> int | None:
@@ -596,15 +606,19 @@ def comfy_pack(
         seed = rng.randrange(2**31)
         if dry_run:
             values = comfy_values(asset, settings, "<upload>", seed)
-            fill_template(settings.workflow, values)  # catches placeholder errors
-            log(f"[{n}/{len(todo)}] would generate {asset.file} at {values['width']}x{values['height']}")
+            workflow = settings.workflow_for(asset)
+            fill_template(workflow, values)  # catches placeholder errors
+            path = "upscale only" if workflow is not settings.workflow else "diffusion"
+            log(f"[{n}/{len(todo)}] would generate {asset.file} at {values['width']}x{values['height']} ({path})")
             continue
         if settings.wait_gpu is not None:
             wait_for_gpu(settings.wait_gpu, settings.wait_below, log)
         try:
             started = time.monotonic()
             uploaded = client.upload_image(export_dir / asset.file, asset.file.replace("/", "_"))
-            prompt = fill_template(copy.deepcopy(settings.workflow), comfy_values(asset, settings, uploaded, seed))
+            prompt = fill_template(
+                copy.deepcopy(settings.workflow_for(asset)), comfy_values(asset, settings, uploaded, seed)
+            )
             entry = client.wait(client.queue(prompt), settings.job_timeout)
             data = client.first_image(entry)
             from io import BytesIO
@@ -712,6 +726,10 @@ def cmd_comfy(args: argparse.Namespace) -> int:
         denoise=args.denoise,
         wait_gpu=args.wait_gpu,
         wait_below=args.wait_below,
+        small_workflow=(
+            json.loads(Path(args.small_workflow).read_text(encoding="utf-8")) if args.small_area > 0 else None
+        ),
+        small_area=args.small_area,
     )
     client = ComfyClient(args.server)
     return _print_counts(
@@ -772,6 +790,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--workflow", default=defaults["workflow"], help="ComfyUI workflow in API format with {{placeholders}}"
     )
     co.add_argument("--prompts", default=defaults["prompts"])
+    co.add_argument(
+        "--small-workflow",
+        default=str(HERE / "workflows" / "upscale_only_api.json"),
+        help="workflow for pictures smaller than --small-area (default: model upscaling only)",
+    )
+    co.add_argument(
+        "--small-area",
+        type=int,
+        default=4096,
+        help="original width x height below which --small-workflow is used (default 4096, 0 = never)",
+    )
     co.add_argument("--checkpoint", default="", help="checkpoint file name as ComfyUI lists it")
     co.add_argument("--upscale-model", default="", help="upscale model file name as ComfyUI lists it")
     co.add_argument("--scale", type=int, default=6, help="output size, times the original (default 6)")

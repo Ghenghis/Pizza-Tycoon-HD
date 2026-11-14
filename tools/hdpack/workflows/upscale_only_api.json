@@ -32,7 +32,7 @@
    "height": "{{height}}",
    "crop": "disabled",
    "image": [
-    "3",
+    "6",
     0
    ]
   }
@@ -43,6 +43,19 @@
    "filename_prefix": "{{prefix}}",
    "images": [
     "4",
+    0
+   ]
+  }
+ },
+ "6": {
+  "class_type": "ImageUpscaleWithModel",
+  "inputs": {
+   "upscale_model": [
+    "2",
+    0
+   ],
+   "image": [
+    "3",
     0
    ]
   }

@@ -1,3 +1,12 @@
+Unreleased
+
+* `hdpack.py comfy`: pictures under 4096 original pixels (`--small-area`)
+  skip SDXL and use model upscaling only (`--small-workflow`); a first GPU
+  test showed SDXL turns tiny sprites and portrait sheets to mush.
+* Both shipped workflows end with a model upscale before the final resize,
+  so `--scale 12` (3840x2400, 4K) stays sharp instead of being stretched
+  from the ~1 megapixel diffusion output.
+
 Pizza Tycoon HD 1.0.0 (2026-11-13)
 
 Based on Pizza Legacy 1.0.0-beta.2.

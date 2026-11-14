@@ -214,3 +214,69 @@ def test_comfy_unreachable_server_stops_cleanly(small_export: Path, tmp_path: Pa
     client = hdpack.ComfyClient("http://127.0.0.1:9", timeout=2)
     counts = hdpack.comfy_pack(client, small_export, tmp_path / "p", settings, log=lambda *_: None)
     assert counts.failed == 1 and "cannot reach ComfyUI" in counts.errors[0]
+
+
+def _wf(name: str) -> dict:
+    return json.loads((HERE / "workflows" / name).read_text())
+
+
+def test_shipped_workflows_finish_with_a_model_pass() -> None:
+    # 4K targets are far above what the diffusion step samples at, so the
+    # last resize must start from a model upscale, never straight from the
+    # VAE output; tiny sprites get two model passes (16x) for 12x targets.
+    for name, passes in (("sdxl_refine_api.json", 2), ("upscale_only_api.json", 2)):
+        wf = _wf(name)
+        ups = {k for k, n in wf.items() if n["class_type"] == "ImageUpscaleWithModel"}
+        assert len(ups) == passes, name
+        save = next(n for n in wf.values() if n["class_type"] == "SaveImage")
+        final_scale = wf[save["inputs"]["images"][0]]
+        assert final_scale["class_type"] == "ImageScale"
+        assert final_scale["inputs"]["image"][0] in ups, name
+
+
+def test_small_pictures_skip_the_diffusion_model(small_export: Path) -> None:
+    prompts = hdpack.load_prompts(HERE / "prompts.json")
+    big, small = _wf("sdxl_refine_api.json"), _wf("upscale_only_api.json")
+    assets = {a.file: a for a in hdpack.load_manifest(small_export)}
+    settings = hdpack.ComfySettings(big, prompts, 12, "c", "u", 1, 1.0, 5, small_workflow=small, small_area=100)
+    assert settings.workflow_for(assets["gfx/back1.png"]) is big  # 20x10 = 200
+    assert settings.workflow_for(assets["gfx/k0.png"]) is small  # 12x4 = 48
+    assert settings.workflow_for(assets["bob/moebel/0000.png"]) is small  # 6x8 = 48
+    off = hdpack.ComfySettings(big, prompts, 12, "c", "u", 1, 1.0, 5, small_workflow=None)
+    assert off.workflow_for(assets["bob/moebel/0000.png"]) is big
+
+
+def test_comfy_routes_each_picture_to_its_workflow(small_export: Path, tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeComfy)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _FakeComfy.queued = []
+        settings = hdpack.ComfySettings(
+            _wf("upscale_only_api.json"),
+            hdpack.load_prompts(HERE / "prompts.json"),
+            12,
+            "",
+            "4x.pth",
+            3,
+            0.0,
+            30,
+            small_workflow=_wf("upscale_only_api.json"),
+            small_area=100,
+        )
+        client = hdpack.ComfyClient(f"http://127.0.0.1:{server.server_port}")
+        pack = tmp_path / "pack"
+        counts = hdpack.comfy_pack(client, small_export, pack, settings, log=lambda *_: None)
+        assert (counts.written, counts.failed) == (4, 0)
+        with Image.open(pack / "gfx/back1.png") as out:
+            assert out.size == (240, 120)  # 12x for 4K
+        assert hdpack.validate_pack(small_export, pack).errors == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_cli_parses_small_workflow_options() -> None:
+    args = hdpack.build_parser().parse_args(["comfy", "e", "p", "--small-area", "0", "--scale", "12"])
+    assert (args.small_area, args.scale) == (0, 12)
+    assert args.small_workflow.endswith("upscale_only_api.json")

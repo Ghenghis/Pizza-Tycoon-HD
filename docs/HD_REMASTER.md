@@ -159,13 +159,25 @@ custom nodes are needed for the shipped workflows.
 
 Workflows (`tools/hdpack/workflows/`, ComfyUI API format with `{{placeholders}}`):
 
-* `upscale_only_api.json`: model upscale only. Fast and faithful; no new
-  detail is invented.
+* `upscale_only_api.json`: two model upscale passes (16x), then a resize to
+  the target. Fast and faithful; no new detail is invented.
 * `sdxl_refine_api.json` (default): model upscale, then SDXL img2img at a low
-  denoise so the layout stays and the detail is redrawn. Small sprites are
+  denoise so the layout stays and the detail is redrawn, then a second model
+  upscale so the final resize to 4K starts from a sharp picture. Sprites are
   sampled with the long side at 1024 or more and scaled down afterwards,
   because diffusion models make poor pictures far below their training size.
   The original's transparency is put back on every sprite.
+
+Pictures smaller than 4096 original pixels (width x height, so about 64x64)
+skip the diffusion model and go through `--small-workflow` (by default
+`upscale_only_api.json`). A first test on an RTX 3060 showed why: a 9x11
+sprite or a 64x46 sheet of portrait frames carries too little detail, and
+SDXL turned faces and figures to mush. Change the limit with `--small-area`;
+`--small-area 0` sends everything through the main workflow.
+
+For 4K, use `--scale 12`: the originals are 320x200, the engine's logical
+screen is 640x400, and 12x the original is 3840x2400. The default 6x is
+1920x1200.
 
 To use your own workflow, export it from ComfyUI with *Save (API Format)* and
 put these strings where the values go: `{{input_image}}`, `{{positive}}`,
