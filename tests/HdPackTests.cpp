@@ -143,3 +143,71 @@ TEST_CASE("real VGA and BOB loads pick up pack art", "[hd][pack][game]") {
   CHECK(frame0.hd()->width == 21 * 2 * 2);
   CHECK_FALSE(moebel->frame(1).has_hd());
 }
+
+TEST_CASE("warm list round trip and background prefetch", "[hd][pack]") {
+  ScopedHdScale scale(2);
+  PackReset reset;
+  TempDir dir;
+  const auto root = dir.path() / "pack";
+  // Three pictures of 8x4 engine pixels (4x2 originals doubled), 16x8 texels.
+  for (const char* name : {"gfx/a.png", "gfx/b.png", "z/c.png"}) {
+    REQUIRE(save_png(HdImage(16, 8, pack_rgba(10, 20, 30, 255)), root / name));
+  }
+  auto& pack = HdPack::instance();
+  pack.configure(root);
+
+  // A session uses two of them; the list keeps the order of first use.
+  const Size engine{8, 4};
+  REQUIRE(pack.vga("gfx/b", engine));
+  REQUIRE(pack.vga("gfx/a", engine));
+  CHECK_FALSE(pack.vga("gfx/missing", engine));
+  const auto used = pack.used();
+  REQUIRE(used.size() == 2);
+  CHECK(used[0].relative == "gfx/b.png");
+  REQUIRE(HdPack::save_warm_list(dir.path() / "warm.txt", used));
+
+  // Unsafe lines are skipped.
+  {
+    std::ofstream extra(dir.path() / "warm.txt", std::ios::app);
+    extra << "8 4 ../outside.png\n0 4 gfx/a.png\nnot a line\n8 4 z/c.png\n";
+  }
+  const auto list = HdPack::load_warm_list(dir.path() / "warm.txt");
+  REQUIRE(list.size() == 3);
+  CHECK(list[2].relative == "z/c.png");
+
+  // Next session: everything on the list is decoded in the background, and
+  // later loads come straight from the cache.
+  pack.configure(root);
+  pack.prefetch(list, 1 << 30);
+  pack.wait_for_prefetch();
+  CHECK(pack.stats().loaded == 3);
+  const auto a = pack.vga("gfx/a", engine);
+  REQUIRE(a);
+  CHECK(a->at(0, 0) == pack_rgba(10, 20, 30, 255));
+  CHECK(pack.stats().loaded == 3); // no second decode
+
+  // The budget stops the prefetch early.
+  pack.configure(root);
+  pack.prefetch(list, 1);
+  pack.wait_for_prefetch();
+  CHECK(pack.stats().loaded == 1);
+}
+
+TEST_CASE("a load waits for a prefetch already decoding the file",
+          "[hd][pack]") {
+  ScopedHdScale scale(2);
+  PackReset reset;
+  TempDir dir;
+  const auto root = dir.path() / "pack";
+  // A big picture, so the prefetch is still busy when the load comes in.
+  REQUIRE(save_png(HdImage(2048, 1024, pack_rgba(1, 2, 3, 255)),
+                   root / "gfx/big.png"));
+  auto& pack = HdPack::instance();
+  pack.configure(root);
+  pack.prefetch({{"gfx/big.png", Size{1024, 512}}}, 1 << 30);
+  const auto img = pack.vga("gfx/big", Size{1024, 512});
+  REQUIRE(img);
+  pack.wait_for_prefetch();
+  CHECK(pack.stats().loaded == 1); // decoded once, by whoever came first
+  CHECK(pack.vga("gfx/big", Size{1024, 512}) == img);
+}

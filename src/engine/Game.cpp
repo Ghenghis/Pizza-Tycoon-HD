@@ -194,6 +194,15 @@ int Game::run() {
   }
 
   configure_hd(loaded_options);
+  // HD art the last session used is decoded in the background while the
+  // intro plays, so screens open without a pause (see HdPack.h).
+  const std::filesystem::path hd_warm_list =
+      std::filesystem::path(effective_config).parent_path() / "hd_warm.txt";
+  if (resources::HdPack::instance().enabled()) {
+    constexpr std::size_t warm_budget = std::size_t{1536} << 20; // 1.5 GiB
+    resources::HdPack::instance().prefetch(
+        resources::HdPack::load_warm_list(hd_warm_list), warm_budget);
+  }
 
   resources::upscaling({
       .pictures = loaded_options.smoothing == Smoothing::TextAndGraphics
@@ -388,7 +397,12 @@ int Game::run() {
 
   // Batch mode: run the script and leave without ever opening the loop.
   if (exec_script_) {
-    return run_exec_script(debug_console, state);
+    const int rc = run_exec_script(debug_console, state);
+    if (resources::HdPack::instance().enabled()) {
+      resources::HdPack::save_warm_list(hd_warm_list,
+                                        resources::HdPack::instance().used());
+    }
+    return rc;
   }
 
   auto owned_pending_fade = std::make_unique<PendingFade>();
@@ -641,6 +655,10 @@ int Game::run() {
   // option on, so don't write the config if this flag was passed.
   if (!crt_mode_override_) {
     configManager.save_options(state.options());
+  }
+  if (resources::HdPack::instance().enabled()) {
+    resources::HdPack::save_warm_list(hd_warm_list,
+                                      resources::HdPack::instance().used());
   }
 
   // Make sure to reset view which might use GameState in their destructor:
@@ -925,6 +943,14 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   SDL_SetRenderVSync(sdl_.renderer.get(), SDL_RENDERER_VSYNC_DISABLED);
   std::vector<double> ms;
   ms.reserve(static_cast<std::size_t>(frames));
+  // In a real session the intro gives the background warm-up time to finish;
+  // measure that state rather than a race against it.
+  resources::HdPack::instance().wait_for_prefetch();
+  double first_ms = 0;
+  double first_pack_ms = 0;
+  double first_upload_ms = 0;
+  std::size_t first_files = 0;
+  const auto pack_before = resources::HdPack::instance().stats();
   constexpr int warmup = 10;
   for (int i = 0; i < frames + warmup; ++i) {
     const uint64_t t0 = SDL_GetPerformanceCounter();
@@ -933,6 +959,21 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
     renderer.redraw_all();
     renderer.render();
     const uint64_t t1 = SDL_GetPerformanceCounter();
+    if (i == 0) {
+      // Opening the screen: HD art goes to the GPU on first use.
+      first_ms = static_cast<double>(t1 - t0) * 1000.0 /
+                 static_cast<double>(SDL_GetPerformanceFrequency());
+      const auto& after = resources::HdPack::instance().stats();
+      first_pack_ms = after.load_ms - pack_before.load_ms;
+      first_files = after.loaded - pack_before.loaded;
+      first_upload_ms =
+          renderer.compositor() ? renderer.compositor()->upload_ms() : 0.0;
+      for (std::size_t s = pack_before.slow.size(); s < after.slow.size();
+           ++s) {
+        std::cout << "  slow pack file: " << after.slow[s].first << " "
+                  << after.slow[s].second << " ms\n";
+      }
+    }
     if (i >= warmup) {
       ms.push_back(static_cast<double>(t1 - t0) * 1000.0 /
                    static_cast<double>(SDL_GetPerformanceFrequency()));
@@ -958,11 +999,12 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   return compat::format(
       "{} frames at {}x{} ({}, {} compositing): avg {:.2f} ms ({:.0f} fps), "
       "median {:.2f}, p95 {:.2f}, p99 {:.2f}, worst {:.2f} ms; "
-      "{} HD textures, {} MB",
+      "first frame {:.2f} ms (pack files {} in {:.1f} ms, GPU upload {:.1f} "
+      "ms); {} HD textures, {} MB",
       ms.size(), renderer.frame_width(), renderer.frame_height(), backend,
       comp ? "GPU" : "CPU", avg, 1000.0 / avg, pct(0.5), pct(0.95), pct(0.99),
-      sorted.back(), comp ? comp->texture_count() : 0,
-      comp ? comp->texture_bytes() >> 20 : 0);
+      sorted.back(), first_ms, first_files, first_pack_ms, first_upload_ms,
+      comp ? comp->texture_count() : 0, comp ? comp->texture_bytes() >> 20 : 0);
 }
 
 bool Game::capture_screenshot(GameState& gs, const std::string& path) {

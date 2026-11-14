@@ -7,6 +7,7 @@
 #include "engine/HdCompositor.h"
 
 #include <algorithm>
+#include <thread>
 #include "engine/Fatal.h"
 #include "engine/Logger.h"
 #include "engine/gfx/HdList.h"
@@ -74,6 +75,7 @@ HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
                  img->width, img->height, max_texture_size_);
     return nullptr;
   }
+  const uint64_t started = SDL_GetPerformanceCounter();
   SDL_Texture* tex =
       SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888,
                         SDL_TEXTUREACCESS_STATIC, img->width, img->height);
@@ -82,10 +84,34 @@ HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
     return nullptr;
   }
   scratch_.resize(img->pixels.size());
-  std::transform(img->pixels.begin(), img->pixels.end(), scratch_.begin(),
-                 premultiply);
+  // Big pictures (a 4K screen is 9 million texels) are split across cores.
+  const std::size_t n = img->pixels.size();
+  const unsigned workers =
+      n < 1'000'000
+          ? 1u
+          : std::min(8u, std::max(1u, std::thread::hardware_concurrency()));
+  {
+    std::vector<std::jthread> pool;
+    const std::size_t step = (n + workers - 1) / workers;
+    for (unsigned w = 1; w < workers; ++w) {
+      const std::size_t a = std::min(n, w * step);
+      const std::size_t b = std::min(n, a + step);
+      pool.emplace_back([&, a, b] {
+        std::transform(img->pixels.begin() + static_cast<std::ptrdiff_t>(a),
+                       img->pixels.begin() + static_cast<std::ptrdiff_t>(b),
+                       scratch_.begin() + static_cast<std::ptrdiff_t>(a),
+                       premultiply);
+      });
+    }
+    std::transform(img->pixels.begin(),
+                   img->pixels.begin() +
+                       static_cast<std::ptrdiff_t>(std::min(n, step)),
+                   scratch_.begin(), premultiply);
+  }
   SDL_UpdateTexture(tex, nullptr, scratch_.data(), img->width * 4);
   SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+  upload_ms_ += static_cast<double>(SDL_GetPerformanceCounter() - started) *
+                1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
   Entry e;
   e.img = img;
   e.tex = tex;

@@ -65,6 +65,8 @@ public:
     std::size_t base_runs = 0; // indexed pixel runs redrawn between them
   };
   [[nodiscard]] const Stats& last_stats() const noexcept { return stats_; }
+  // Time spent preparing and uploading textures, since construction.
+  [[nodiscard]] double upload_ms() const noexcept { return upload_ms_; }
 
 private:
   struct Entry {
@@ -94,5 +96,6 @@ private:
   std::size_t bytes_ = 0;
   std::size_t budget_ = std::size_t{1536} << 20; // 1.5 GiB of textures
   int max_texture_size_ = 16384;
+  double upload_ms_ = 0;
   Stats stats_;
 };
