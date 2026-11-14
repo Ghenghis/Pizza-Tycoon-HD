@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -23,6 +25,9 @@
 #include "engine/input/InputManager.h"
 #include "engine/input/ListenerToken.h"
 #include "views/base/MainPanelView.h"
+#include "views/hd/CityMapHd.h"
+#include "views/hd/MediumMapHd.h"
+#include "views/hd/WaterCycleHd.h"
 #include "views/helpers/camera/CameraController.h"
 #include "views/helpers/camera/RmbDragScroller.h"
 #include "views/helpers/camera/ScrollEdges.h"
@@ -127,6 +132,12 @@ private:
   template <typename T, typename... Args>
   void ui_push_store_position(CityViewReentryMode mode, Args&&... args);
 
+  // HD pictures built off the frame (views/hd): picks up the ones that are
+  // ready and redraws with them.
+  void poll_hd_jobs();
+  // The city's tile types, row-major.
+  [[nodiscard]] std::vector<uint8_t> city_types() const;
+
   // Animation
   void update_water_palette(const RenderContext& ctx);
   void setup_water_animation();
@@ -193,4 +204,13 @@ private:
   bool hold_district_hover_ = false;
   std::optional<ViewPoint> held_hover_pos_;
   input::ListenerToken listener_;
+  // Workers for the HD maps; last, so they are stopped and joined first.
+  // The far map's picture goes into far_map_cache_ and the medium map
+  // replaces medium_map_cache_ when ready; until then the indexed ones show.
+  views::hd::PictureJob far_hd_job_;
+  views::hd::SurfaceJob medium_hd_job_;
+  views::hd::WaterJob water_hd_job_;
+  // The HD water cycle at CLOSE zoom, once built.
+  std::shared_ptr<const views::hd::WaterFrames> water_frames_;
+  bool water_hd_requested_ = false;
 };

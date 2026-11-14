@@ -37,6 +37,7 @@
 #include "core/tutorial/Tutorial.h"
 #include "core/tutorial/TutorialStep.h"
 #include "core/util/Constants.h"
+#include "engine/Logger.h"
 #include "engine/Random.h"
 #include "engine/audio/AudioManager.h"
 #include "engine/geom/Spaces.h"
@@ -48,6 +49,8 @@
 #include "engine/ui/ICursorManager.h"
 #include "views/base/ViewDefs.h"
 #include "views/hd/CityMapHd.h"
+#include "views/hd/MediumMapHd.h"
+#include "views/hd/WaterCycleHd.h"
 #include "views/screens/StatusDisplay.h"
 #include "views/screens/city_view/ZoomConfig.h"
 #include "views/ui/popups/ConfirmPopup.h"
@@ -678,6 +681,7 @@ void CityView::handle_mouse_click_zoom_close(WorldPoint p) {
 }
 
 void CityView::tick() {
+  poll_hd_jobs();
   if (camctrl_.tick()) {
     // During scrolling, we just stop everything:
     mark_dirty();
@@ -703,6 +707,45 @@ void CityView::tick() {
       mark_dirty();
     }
   }
+}
+
+void CityView::poll_hd_jobs() {
+  // Each job is keyed on what it was started for; a result that comes back
+  // was built for the map shown now (older ones were dropped).
+  if (far_map_cache_ && !far_map_cache_->has_hd()) {
+    if (auto picture = far_hd_job_.take()) {
+      if (views::hd::attach_far_map_picture(*far_map_cache_,
+                                            std::move(picture))) {
+        mark_dirty();
+      }
+    }
+  }
+  if (auto map = medium_hd_job_.take()) {
+    if (medium_map_cache_) {
+      medium_map_cache_.emplace(std::move(*map));
+      mark_dirty();
+    }
+  }
+  if (!water_frames_) {
+    if (auto frames = water_hd_job_.take()) {
+      // Once per city view: what the HD water costs (see WaterCycleHd.h).
+      Logger::debug("HD water cycle: {} tile types with water, {:.1f} MB",
+                    frames->water_tiles(),
+                    static_cast<double>(frames->bytes()) / (1 << 20));
+      water_frames_ = std::move(frames);
+      if (zoom_ == ZoomLevel::CLOSE) {
+        mark_dirty();
+      }
+    }
+  }
+}
+
+std::vector<uint8_t> CityView::city_types() const {
+  std::vector<uint8_t> types(static_cast<std::size_t>(city_->data_length()));
+  for (int i = 0; i < city_->data_length(); ++i) {
+    types[static_cast<std::size_t>(i)] = city_->type(i);
+  }
+  return types;
 }
 
 void CityView::render(const RenderContext& ctx) {
@@ -767,6 +810,29 @@ void CityView::render_map_zoom_close(const RenderContext& ctx) {
 
   const auto& landsym = context_.vga->get("gfx/landsym");
 
+  // HD: the water follows the palette cycle (views/hd/WaterCycleHd.h). The
+  // pictures are built once, on a worker; until they are there the water
+  // stands still, as before.
+  if (!water_hd_requested_ && gfx::hd_scale() > 1) {
+    water_hd_requested_ = true;
+    if (auto input = views::hd::water_cycle_input(
+            landsym, season_palette_, water_indices_, water_cycles_)) {
+      views::hd::start_water_frames(water_hd_job_, std::move(*input));
+    }
+  }
+  const int water_step = water_animation_.frame_index;
+  const views::hd::WaterFrames* water =
+      water_frames_ && water_animation_.is_active() &&
+              water_frames_->has_step(water_step)
+          ? water_frames_.get()
+          : nullptr;
+  // Drawn after all the tiles, so the tiles' quads (one texture) and the
+  // water's (another) each stay one batch. The tiles do not overlap, so the
+  // texels are the same. With the debug labels on, right after each tile,
+  // so the labels stay on top.
+  const bool labels = show_cell_borders_ || show_cell_type_;
+  std::vector<std::pair<uint8_t, ViewPoint>> water_tiles;
+
   for (int ty = 0; ty < tiles_y; ++ty) {
     const int map_y = first_ty + ty;
     if (map_y >= MAP_TILES_PER_COLUMN) {
@@ -792,6 +858,14 @@ void CityView::render_map_zoom_close(const RenderContext& ctx) {
       const ViewPoint dest_pos = camera_.world_to_view(tile_world_pos);
 
       ctx.surface->blit(landsym, src, dest_pos);
+      if (water && water->has_water(type)) {
+        if (labels) {
+          water->overlay(*ctx.surface, type, dest_pos, water_step);
+        }
+        else {
+          water_tiles.emplace_back(type, dest_pos);
+        }
+      }
 
       if (show_cell_borders_) {
         if (i >= 0 && i < 1'000'000) {
@@ -812,6 +886,9 @@ void CityView::render_map_zoom_close(const RenderContext& ctx) {
       }
     }
   }
+  for (const auto& [type, pos] : water_tiles) {
+    water->overlay(*ctx.surface, type, pos, water_step);
+  }
 }
 
 void CityView::render_map_zoom_medium(const RenderContext& ctx) {
@@ -821,13 +898,19 @@ void CityView::render_map_zoom_medium(const RenderContext& ctx) {
     Surface medium_map({MAP_TILES_PER_ROW * BASE_MAP_TILE_WIDTH,
                         MAP_TILES_PER_COLUMN * BASE_MAP_TILE_HEIGHT},
                        palette_);
-    for (int i = 0; i < city_->data_length(); ++i) {
-      const uint8_t type = city_->type(i);
-      const ViewPoint pos{(i % MAP_TILES_PER_ROW) * BASE_MAP_TILE_WIDTH,
-                          (i / MAP_TILES_PER_ROW) * BASE_MAP_TILE_HEIGHT};
-      medium_map.blit(tiles_medium_, landsym_source_rect(type), pos);
-    }
+    const std::vector<uint8_t> types = city_types();
+    views::hd::draw_medium_map(medium_map, tiles_medium_, types,
+                               MAP_TILES_PER_ROW);
     medium_map_cache_ = std::move(medium_map);
+    // HD: the same map with tiles made from HD landsym (M6), built on a
+    // worker; it replaces this one when ready (poll_hd_jobs).
+    if (gfx::hd_scale() > 1) {
+      if (auto input = views::hd::medium_map_input(
+              tiles_medium_, context_.vga->get("gfx/landsym"), types,
+              MAP_TILES_PER_ROW, MAP_TILES_PER_COLUMN, palette_)) {
+        views::hd::start_medium_map(medium_hd_job_, std::move(*input));
+      }
+    }
   }
 
   // One cache pixel covers zoom_multiplier world pixels.
@@ -893,8 +976,13 @@ void CityView::render_map_zoom_far(const RenderContext& ctx) {
       }
     }
     if (hd) {
-      views::hd::attach_far_map(far_map, hd_tiles, MAP_TILES_PER_ROW,
-                                MAP_TILES_PER_COLUMN, 2, season_palette_);
+      // Cached: at once. Otherwise painted on a worker (~0.1 s at 4K) while
+      // the indexed map shows; poll_hd_jobs() attaches it when ready.
+      if (auto picture = views::hd::far_map_picture_soon(
+              far_hd_job_, hd_tiles, MAP_TILES_PER_ROW, MAP_TILES_PER_COLUMN, 2,
+              season_palette_)) {
+        views::hd::attach_far_map_picture(far_map, std::move(picture));
+      }
     }
     far_map_cache_ = std::move(far_map);
   }

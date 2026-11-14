@@ -5,13 +5,16 @@
  */
 
 #include "views/hd/CityMapHd.h"
+#include "views/hd/PictureCache.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <mutex>
+#include <optional>
+#include <stop_token>
 #include <utility>
+#include <vector>
 
 namespace views::hd {
 
@@ -56,70 +59,6 @@ uint32_t hash32(uint32_t x) {
   x *= 0x846ca68bU;
   x ^= x >> 16;
   return x;
-}
-
-// FNV-1a over the bytes of the inputs, for the caches.
-class KeyHash {
-public:
-  void add(const void* data, std::size_t n) {
-    const auto* p = static_cast<const unsigned char*>(data);
-    for (std::size_t i = 0; i < n; ++i) {
-      h_ = (h_ ^ p[i]) * 0x100000001b3ULL;
-    }
-  }
-  template <typename T> void add(const T& v) { add(&v, sizeof v); }
-  [[nodiscard]] uint64_t value() const { return h_; }
-
-private:
-  uint64_t h_ = 0xcbf29ce484222325ULL;
-};
-
-// A small cache of pictures by key, dropping the oldest past a byte budget.
-class PictureCache {
-public:
-  explicit PictureCache(std::size_t budget_bytes) : budget_(budget_bytes) {}
-
-  std::shared_ptr<const gfx::HdImage> find(uint64_t key) {
-    std::lock_guard lock(mutex_);
-    for (const auto& [k, img] : entries_) {
-      if (k == key) {
-        return img;
-      }
-    }
-    return nullptr;
-  }
-
-  void add(uint64_t key, std::shared_ptr<const gfx::HdImage> img) {
-    std::lock_guard lock(mutex_);
-    bytes_ += bytes_of(*img);
-    entries_.emplace_back(key, std::move(img));
-    while (bytes_ > budget_ && entries_.size() > 1) {
-      bytes_ -= bytes_of(*entries_.front().second);
-      entries_.erase(entries_.begin());
-    }
-  }
-
-private:
-  static std::size_t bytes_of(const gfx::HdImage& img) {
-    return img.pixels.size() * sizeof(uint32_t);
-  }
-
-  std::mutex mutex_;
-  std::vector<std::pair<uint64_t, std::shared_ptr<const gfx::HdImage>>>
-      entries_;
-  std::size_t bytes_ = 0;
-  std::size_t budget_;
-};
-
-PictureCache& far_map_cache() {
-  // A few cities and seasons in one session; 4K far maps are ~11 MB each.
-  static PictureCache cache(std::size_t{96} << 20);
-  return cache;
-}
-
-PictureCache& hatch_cache() {
-  static PictureCache cache(std::size_t{64} << 20);
-  return cache;
 }
 
 // Value noise on a lattice of one point per engine pixel, in -1..1.
@@ -182,9 +121,13 @@ public:
     }
   }
 
-  gfx::HdImage paint() const {
+  // Nothing when `stop` was asked for before the last row.
+  std::optional<gfx::HdImage> paint(std::stop_token stop = {}) const {
     gfx::HdImage img(columns_ * t_, rows_ * t_);
     for (int j = 0; j < rows_; ++j) {
+      if (stop.stop_requested()) {
+        return std::nullopt;
+      }
       for (int i = 0; i < columns_; ++i) {
         paint_tile(img, i, j);
       }
@@ -338,14 +281,20 @@ int mod8(int v) { return ((v % 8) + 8) % 8; }
 
 } // namespace
 
-std::shared_ptr<const gfx::HdImage>
-far_map_picture(std::span<const FarMapTile> tiles, int columns, int rows,
-                int tile_px, const std::vector<gfx::Color>& colors) {
-  const int k = gfx::hd_scale();
-  if (k <= 1 || columns <= 0 || rows <= 0 || tile_px <= 0 ||
-      tiles.size() != static_cast<std::size_t>(columns) * rows) {
-    return nullptr;
-  }
+namespace {
+
+bool far_map_input_fits(int k, std::span<const FarMapTile> tiles, int columns,
+                        int rows, int tile_px) {
+  return k > 1 && columns > 0 && rows > 0 && tile_px > 0 &&
+         tiles.size() == static_cast<std::size_t>(columns) * rows;
+}
+
+// Everything the picture depends on: scale, layout, and per tile its class
+// and the colour it is drawn in (so a season or ownership change is a new
+// key).
+uint64_t far_map_key(int k, std::span<const FarMapTile> tiles, int columns,
+                     int rows, int tile_px,
+                     const std::vector<gfx::Color>& colors) {
   KeyHash key;
   key.add(k);
   key.add(columns);
@@ -357,14 +306,73 @@ far_map_picture(std::span<const FarMapTile> tiles, int columns, int rows,
     const Rgb c = rgb(colors, t.color);
     key.add(c);
   }
-  const uint64_t id = key.value();
-  if (auto hit = far_map_cache().find(id)) {
+  return key.value();
+}
+
+std::shared_ptr<const gfx::HdImage>
+paint_far_map(uint64_t id, std::span<const FarMapTile> tiles, int columns,
+              int rows, int tile_px, int k,
+              const std::vector<gfx::Color>& colors, std::stop_token stop) {
+  auto painted =
+      FarMapPainter(tiles, columns, rows, tile_px, k, colors).paint(stop);
+  if (!painted) {
+    return nullptr;
+  }
+  auto img = std::make_shared<const gfx::HdImage>(std::move(*painted));
+  prefill_opacity(*img, k);
+  return map_picture_cache().add(id, std::move(img));
+}
+
+} // namespace
+
+std::shared_ptr<const gfx::HdImage>
+far_map_picture(std::span<const FarMapTile> tiles, int columns, int rows,
+                int tile_px, const std::vector<gfx::Color>& colors) {
+  const int k = gfx::hd_scale();
+  if (!far_map_input_fits(k, tiles, columns, rows, tile_px)) {
+    return nullptr;
+  }
+  const uint64_t id = far_map_key(k, tiles, columns, rows, tile_px, colors);
+  if (auto hit = map_picture_cache().find(id)) {
     return hit;
   }
-  auto img = std::make_shared<const gfx::HdImage>(
-      FarMapPainter(tiles, columns, rows, tile_px, k, colors).paint());
-  far_map_cache().add(id, img);
-  return img;
+  return paint_far_map(id, tiles, columns, rows, tile_px, k, colors, {});
+}
+
+std::shared_ptr<const gfx::HdImage>
+far_map_picture_soon(PictureJob& job, std::span<const FarMapTile> tiles,
+                     int columns, int rows, int tile_px,
+                     const std::vector<gfx::Color>& colors) {
+  const int k = gfx::hd_scale();
+  if (!far_map_input_fits(k, tiles, columns, rows, tile_px)) {
+    return nullptr;
+  }
+  const uint64_t id = far_map_key(k, tiles, columns, rows, tile_px, colors);
+  if (auto hit = map_picture_cache().find(id)) {
+    job.cancel(); // whatever it was painting is not wanted any more
+    return hit;
+  }
+  // The worker gets copies: the caller's tiles and palette may change or go
+  // away while it paints.
+  job.start(id,
+            [id, columns, rows, tile_px, k,
+             own_tiles = std::vector<FarMapTile>(tiles.begin(), tiles.end()),
+             own_colors = colors](std::stop_token stop) {
+              return paint_far_map(id, own_tiles, columns, rows, tile_px, k,
+                                   own_colors, stop);
+            });
+  return nullptr;
+}
+
+bool attach_far_map_picture(gfx::Surface& map,
+                            std::shared_ptr<const gfx::HdImage> picture) {
+  const int k = gfx::hd_scale();
+  if (k <= 1 || !picture || picture->width != map.width() * k ||
+      picture->height != map.height() * k) {
+    return false;
+  }
+  map.attach_hd(std::move(picture));
+  return true;
 }
 
 bool attach_far_map(gfx::Surface& map, std::span<const FarMapTile> tiles,
@@ -374,12 +382,8 @@ bool attach_far_map(gfx::Surface& map, std::span<const FarMapTile> tiles,
       map.height() != rows * tile_px) {
     return false;
   }
-  auto img = far_map_picture(tiles, columns, rows, tile_px, colors);
-  if (!img) {
-    return false;
-  }
-  map.attach_hd(std::move(img));
-  return true;
+  return attach_far_map_picture(
+      map, far_map_picture(tiles, columns, rows, tile_px, colors));
 }
 
 std::shared_ptr<const gfx::HdImage>
@@ -393,7 +397,7 @@ hatch_picture(gfx::Color base, gfx::Color line, int size_px, int k) {
   key.add(size_px);
   key.add(k);
   const uint64_t id = key.value();
-  if (auto hit = hatch_cache().find(id)) {
+  if (auto hit = hatch_picture_cache().find(id)) {
     return hit;
   }
   const int n = size_px * k;
@@ -418,8 +422,8 @@ hatch_picture(gfx::Color base, gfx::Color line, int size_px, int k) {
     }
   }
   auto shared = std::make_shared<const gfx::HdImage>(std::move(img));
-  hatch_cache().add(id, shared);
-  return shared;
+  prefill_opacity(*shared, k);
+  return hatch_picture_cache().add(id, std::move(shared));
 }
 
 void hatch_cell(gfx::Surface& map, ViewRect cell, int phase_x, int phase_y,

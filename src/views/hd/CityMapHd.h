@@ -14,6 +14,7 @@
 #include "engine/gfx/Color.h"
 #include "engine/gfx/HdImage.h"
 #include "engine/gfx/Surface.h"
+#include "views/hd/BackgroundJob.h"
 
 // HD pictures for the city view's map screens, drawn procedurally at
 // gfx::hd_scale() texels per engine pixel. They go into the surfaces' HD
@@ -45,6 +46,26 @@ struct FarMapTile {
 [[nodiscard]] std::shared_ptr<const gfx::HdImage>
 far_map_picture(std::span<const FarMapTile> tiles, int columns, int rows,
                 int tile_px, const std::vector<gfx::Color>& colors);
+
+// Builds a picture off the game thread (see BackgroundJob.h).
+using PictureJob = BackgroundJob<const gfx::HdImage>;
+
+// far_map_picture() without the wait (a far map takes ~0.1 s at 4K): the
+// picture at once when it is cached; otherwise null, and `job` paints it on
+// a worker (unless it is already painting this very input). The caller shows
+// the indexed map meanwhile, picks the picture up on a later frame with
+// job.take() and attaches it with attach_far_map_picture(). Asking for other
+// input (another city, season or ownership) stops the old painting, and its
+// picture is never handed over. Null and no job at hd_scale 1.
+[[nodiscard]] std::shared_ptr<const gfx::HdImage>
+far_map_picture_soon(PictureJob& job, std::span<const FarMapTile> tiles,
+                     int columns, int rows, int tile_px,
+                     const std::vector<gfx::Color>& colors);
+
+// Attaches a far-map picture to `map` when it fits (hd_scale > 1, exactly
+// map's size in texels). Leaves the indexed pixels alone.
+bool attach_far_map_picture(gfx::Surface& map,
+                            std::shared_ptr<const gfx::HdImage> picture);
 
 // Attaches far_map_picture() to `map` (which must be columns * tile_px by
 // rows * tile_px engine pixels). Leaves the indexed pixels alone. Returns
