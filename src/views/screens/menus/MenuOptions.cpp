@@ -18,10 +18,12 @@
 #include "core/state/UIState.h"
 #include "core/util/ConfigManager.h"
 #include "engine/DisplayConstants.h"
+#include "engine/Logger.h"
 #include "engine/audio/AudioManager.h"
 #include "engine/input/Action.h"
 #include "engine/input/InputManager.h"
 #include "engine/input/Key.h"
+#include "engine/music/MusicSystem.h"
 #include "resources/FontTypes.h"
 #include "resources/HdTypeface.h"
 #include "views/ui/PopupManager.h"
@@ -153,12 +155,70 @@ void MenuOptions::build_audio(GameState& state) {
                       mark_dirty();
                     }))
       .help_text("Background sounds inside a restaurant.");
+  if (context_.music) {
+    // What plays, live: the game goes on, effects are untouched, and the
+    // FM song is where it was when Original comes back. Saved in the music
+    // settings, not here.
+    music_mode_ = context_.music->mode();
+    add_menu_item(std::make_unique<EnumMenuItem<music::Mode>>(
+                      context_, "Music", music_mode_,
+                      std::vector{music::Mode::ORIGINAL,
+                                  music::Mode::CHRISTMAS_BACKGROUND,
+                                  music::Mode::JUKEBOX, music::Mode::OFF},
+                      [this] {
+                        context_.music->set_mode(music_mode_);
+                        mark_dirty();
+                      },
+                      face))
+        .help_text("Original plays the 1994 songs; Christmas Background and "
+                   "Jukebox play your own music; Off plays none. Effects stay "
+                   "as they are.");
+  }
+  effects_set_ = context_.audio->effects();
+  add_menu_item(
+      std::make_unique<EnumMenuItem<audio::EffectsSet>>(
+          context_, "Sound Effects", effects_set_,
+          std::vector{audio::EffectsSet::ORIGINAL, audio::EffectsSet::ENHANCED},
+          [&state, this] {
+            if (const auto done = context_.audio->select_effects(effects_set_);
+                !done) {
+              Logger::warn("Enhanced effects not used: {}", done.error);
+            }
+            effects_set_ = context_.audio->effects();
+            state.options().enhanced_effects =
+                effects_set_ == audio::EffectsSet::ENHANCED;
+            mark_dirty();
+          },
+          face))
+      .help_text("Enhanced plays the remaster's sound pack where it has a "
+                 "sound; every other effect stays the original.");
+  add_menu_item(std::make_unique<TextMenuItem>(
+                    context_, "Restore Original Audio",
+                    [&state, this] {
+                      if (context_.music) {
+                        context_.music->restore_original();
+                        music_mode_ = context_.music->mode();
+                      }
+                      static_cast<void>(context_.audio->select_effects(
+                          audio::EffectsSet::ORIGINAL));
+                      effects_set_ = context_.audio->effects();
+                      state.options().enhanced_effects = false;
+                      state.options().music = true;
+                      context_.audio->music_enabled(true);
+                      mark_dirty();
+                    },
+                    face))
+      .help_text("The 1994 music and effects, at once and without a restart. "
+                 "Your music folders and playlists stay.");
   add_menu_item(std::make_unique<ToggleMenuItem>(
-      context_, "Music", state.options().music, [&state, this] {
-        state.options().music = !state.options().music;
-        context_.audio->music_enabled(state.options().music);
-        mark_dirty();
-      }));
+                    context_, "Music Sound", state.options().music,
+                    [&state, this] {
+                      state.options().music = !state.options().music;
+                      context_.audio->music_enabled(state.options().music);
+                      mark_dirty();
+                    }))
+      .help_text("Silences the music, which plays on underneath; Off above "
+                 "stops it.");
   add_menu_item(std::make_unique<SliderMenuItem>(
       context_, "Sound Volume", state.options().sound_volume,
       [this](float v) { context_.audio->sound_volume(v); }));

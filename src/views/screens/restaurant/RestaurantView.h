@@ -194,6 +194,8 @@ private:
   int top_rows_consumed_{0};
   int interior_start_row_{0};
   std::optional<audio::SoundId> current_restaurant_noise_;
+  // MusicPlayback::ambience_suppressed() as of the last tick.
+  bool ambience_suppressed_ = false;
   StatusController status_controller_;
   input::ListenerToken listener_;
   // For weapon and sabotage picker:

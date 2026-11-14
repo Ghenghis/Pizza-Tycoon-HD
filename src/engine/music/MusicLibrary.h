@@ -25,35 +25,50 @@ namespace music {
 // A folder the player's music comes from. Its subfolders are collections.
 // The songs are only ever read, never changed, moved or copied.
 struct MusicRoot {
-  std::string key;            // "game", or "folder:<16 hex>" for a chosen one
+  std::string key;            // FolderChoice::id
   std::filesystem::path path; // absolute
-  std::string name;           // the folder's own name, for display
+  std::string name;           // the player's label, or the folder's name
+  bool include_subfolders = true;
 };
 
-// A folder the player chose, as the settings keep it.
+// A folder the player chose, as the settings keep it. Any folder, by any
+// name; "Xmas" beside the game is only a suggestion.
 struct FolderChoice {
-  std::string path; // UTF-8, absolute; device-local
+  // root:<slug>, fixed when the folder is added, so relinking a moved folder
+  // keeps its collections' ids (and so their labels).
+  std::string id;
+  // UTF-8, device-local. Inside the game's folder it is kept relative to it
+  // as "@game/...", so a portable install can move.
+  std::string path;
+  std::string label; // empty: the folder's own name
   bool enabled = true;
+  bool include_subfolders = true;
+  bool operator==(const FolderChoice&) const = default;
 };
 
-// The "Xmas" folder beside the game's executable (game_dir), when there is
-// one.
-[[nodiscard]] std::optional<MusicRoot>
-game_music_root(const std::filesystem::path& game_dir);
+// path for the settings: "@game/<relative>" inside game_dir, else absolute.
+[[nodiscard]] std::string stored_path(const std::filesystem::path& folder,
+                                      const std::filesystem::path& game_dir);
+// The other way round.
+[[nodiscard]] std::filesystem::path
+resolve_path(std::string_view stored, const std::filesystem::path& game_dir);
+// A new choice for folder, with a fresh id.
+[[nodiscard]] FolderChoice new_folder(const std::filesystem::path& folder,
+                                      const std::filesystem::path& game_dir);
+[[nodiscard]] MusicRoot root_of(const FolderChoice& folder,
+                                const std::filesystem::path& game_dir);
+// A root for folder whose key follows from its path (for tools and tests).
 [[nodiscard]] MusicRoot chosen_root(const std::filesystem::path& folder);
-
-// The folders to scan: the chosen ones that are enabled, plus the game's
-// Xmas folder when use_game_folder says so. Left unset, the Xmas folder is
-// used only while no folder is chosen: a chosen folder takes precedence and
-// is never silently merged with it (game_folder_offered() tells the menu to
-// let the player pick or combine).
+// The enabled folders, as roots.
 [[nodiscard]] std::vector<MusicRoot>
-active_roots(const std::vector<FolderChoice>& chosen,
-             std::optional<bool> use_game_folder,
-             const std::optional<MusicRoot>& game);
-[[nodiscard]] bool game_folder_offered(const std::vector<FolderChoice>& chosen,
-                                       std::optional<bool> use_game_folder,
-                                       const std::optional<MusicRoot>& game);
+active_roots(const std::vector<FolderChoice>& folders,
+             const std::filesystem::path& game_dir);
+// The suggested folders: the player's own Music folder (user_music, as the
+// system names it) and an "Xmas" folder beside the game, each when it is
+// there. Used until the player saves a folder list of their own.
+[[nodiscard]] std::vector<FolderChoice>
+default_folders(const std::filesystem::path& user_music,
+                const std::filesystem::path& game_dir);
 
 // Where a copy of a track is: a root and a path below it.
 struct TrackSource {

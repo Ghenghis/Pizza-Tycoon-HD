@@ -19,6 +19,7 @@
 #include "engine/DisplayConstants.h"
 #include "engine/SDLContext.h"
 #include "engine/input/GlobalActionHandler.h"
+#include "engine/music/MusicSystem.h"
 #include "engine/ui/CursorManager.h"
 #include "engine/ui/InteractionManager.h"
 #include "engine/ui/PointerTracker.h"
@@ -116,6 +117,8 @@ private:
   std::unique_ptr<views::ui::PointerTracker> pointer_;
   std::unique_ptr<input::InputManager> input_manager_{nullptr};
   std::unique_ptr<audio::AudioManager> audio_manager_;
+  // After the AudioManager, so it is destroyed first.
+  std::unique_ptr<music::MusicSystem> music_;
   std::unique_ptr<View> current_view_{nullptr};
   std::unique_ptr<GlobalActionHandler> global_actions_;
   TutorialLayer* tutorial_layer_{nullptr};

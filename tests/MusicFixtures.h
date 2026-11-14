@@ -27,6 +27,11 @@
 #include <vector>
 
 #include "engine/SDL_include.h"
+#include "engine/audio/AudioManager.h"
+
+#if PLEGACY_ENABLE_MUSIC
+#include <adlmidi.h>
+#endif
 
 namespace music_test {
 
@@ -257,5 +262,156 @@ inline bool wait_until(const std::function<bool()>& done,
   }
   return true;
 }
+
+// A standard MIDI file: one note held for ten seconds.
+inline std::vector<std::uint8_t> long_note_midi() {
+  return {
+      'M',  'T',  'h',  'd',  0,    0,    0,    6,    0,    0,    0,    1,
+      0,    96,   'M',  'T',  'r',  'k',  0,    0,    0,    23,   0x00, 0xFF,
+      0x51, 0x03, 0x07, 0xA1, 0x20, 0x00, 0xC0, 0x00, 0x00, 0x90, 0x3C, 0x64,
+      0x8F, 0x00, 0x80, 0x3C, 0x40, 0x00, 0xFF, 0x2F, 0x00,
+  };
+}
+
+// An M container of VOC sounds, one per level: each a constant 8-bit
+// level, so a sound's share of the output is one known value. They fill the
+// effect slots from 0, as the game's own m0 to m11 do.
+inline std::vector<std::uint8_t>
+effects_m(const std::vector<std::uint8_t>& levels) {
+  std::vector<std::vector<std::uint8_t>> vocs;
+  for (const std::uint8_t level : levels) {
+    std::vector<std::uint8_t> voc(std::begin("Creative Voice File\x1A"),
+                                  std::end("Creative Voice File\x1A") - 1);
+    const std::uint16_t version = 0x010A;
+    const auto check = static_cast<std::uint16_t>(~version + 0x1234);
+    for (const std::uint16_t v : {std::uint16_t{26}, version, check}) {
+      voc.push_back(static_cast<std::uint8_t>(v));
+      voc.push_back(static_cast<std::uint8_t>(v >> 8));
+    }
+    constexpr std::uint32_t samples = 22050;
+    voc.push_back(1); // sound data
+    const std::uint32_t size = samples + 2;
+    voc.push_back(static_cast<std::uint8_t>(size));
+    voc.push_back(static_cast<std::uint8_t>(size >> 8));
+    voc.push_back(static_cast<std::uint8_t>(size >> 16));
+    voc.push_back(256 - 45); // 22222 Hz
+    voc.push_back(0);        // 8-bit, uncompressed
+    voc.insert(voc.end(), samples, level);
+    voc.push_back(0); // end
+    vocs.push_back(std::move(voc));
+  }
+  std::vector<std::uint8_t> m;
+  const auto u32 = [&m](std::uint32_t v) {
+    for (int i = 0; i < 4; ++i) {
+      m.push_back(static_cast<std::uint8_t>(v >> (8 * i)));
+    }
+  };
+  u32(static_cast<std::uint32_t>(vocs.size()));
+  std::uint32_t offset = 4 + 12 * static_cast<std::uint32_t>(vocs.size());
+  for (const auto& voc : vocs) {
+    u32(2); // VOC
+    u32(offset);
+    u32(static_cast<std::uint32_t>(voc.size()));
+    offset += static_cast<std::uint32_t>(voc.size());
+  }
+  for (const auto& voc : vocs) {
+    m.insert(m.end(), voc.begin(), voc.end());
+  }
+  return m;
+}
+
+inline std::vector<std::uint8_t> constant_effect_m(std::uint8_t level) {
+  return effects_m({level});
+}
+
+// An AudioManager on the dummy driver whose device is paused, so the test
+// thread is the only one that mixes (see AudioManager::fill_block()).
+struct PausedAudio {
+  DummyAudio sdl;
+  audio::AudioManager am;
+  bool ok = false;
+  PausedAudio() {
+    if (!sdl.ok()) {
+      return;
+    }
+    am.init();
+    ok = am.has_device() && SDL_PauseAudioDevice(am.device());
+  }
+};
+
+inline std::vector<std::int16_t> fill(audio::AudioManager& am) {
+  std::vector<std::int16_t> out(audio::MIX_BLOCK_SAMPLES, std::int16_t{0});
+  am.fill_block(out);
+  return out;
+}
+
+// The output level of a constant effect sample value at the default
+// volumes, as the Mixer makes it.
+inline std::int16_t effect_level(std::int16_t value) {
+  audio::Mixer m;
+  const auto slot =
+      m.add_effect(std::vector<std::int16_t>(audio::MIX_BLOCK_SAMPLES, value));
+  m.play(*slot, true);
+  std::vector<std::int16_t> out(audio::MIX_BLOCK_SAMPLES);
+  m.render(out);
+  m.render(out);
+  return out.front();
+}
+
+#if PLEGACY_ENABLE_MUSIC
+// The FM music as AudioManager made it before the music route existed:
+// libADLMIDI set up the same way, the same boost, the same mixer. Effects,
+// when given, play along from the first block, as in the game's mixer.
+class FmReference {
+public:
+  explicit FmReference(const std::vector<std::uint8_t>& song)
+      : player_(adl_init(44100)) {
+    adl_setVolumeRangeModel(player_, ADLMIDI_VolumeModel_CMF);
+    adl_setNumChips(player_, 1);
+    adl_reset(player_);
+    adl_openData(player_, song.data(), static_cast<unsigned long>(song.size()));
+  }
+  ~FmReference() { adl_close(player_); }
+  FmReference(const FmReference&) = delete;
+  FmReference& operator=(const FmReference&) = delete;
+
+  // A looping constant effect in the reference mix.
+  void effect(std::int16_t value) {
+    const auto slot = mixer_.add_effect(
+        std::vector<std::int16_t>(audio::MIX_BLOCK_SAMPLES, value));
+    mixer_.play(*slot, true);
+  }
+
+  // The next music block, as render_music() makes it.
+  std::vector<std::int16_t> music() {
+    std::vector<std::int16_t> b(audio::MIX_BLOCK_SAMPLES, std::int16_t{0});
+    const int count = static_cast<int>(b.size());
+    const int got = std::max(adl_play(player_, count, b.data()), 0);
+    for (int i = 0; i < got; ++i) {
+      const auto at = static_cast<std::size_t>(i);
+      b[at] = static_cast<std::int16_t>(
+          std::clamp(static_cast<float>(b[at]) * 6.0f, -32768.0f, 32767.0f));
+    }
+    return b;
+  }
+  // The next output block.
+  std::vector<std::int16_t> output() {
+    std::vector<std::int16_t> m = music();
+    std::vector<std::int16_t> out(audio::MIX_BLOCK_SAMPLES);
+    mixer_.render(out, m);
+    return out;
+  }
+  // The next output block with the FM player not run.
+  std::vector<std::int16_t> output_without_music() {
+    std::vector<std::int16_t> out(audio::MIX_BLOCK_SAMPLES);
+    mixer_.render(out);
+    return out;
+  }
+
+private:
+  ADL_MIDIPlayer* player_;
+  audio::Mixer mixer_;
+};
+#endif
 
 } // namespace music_test

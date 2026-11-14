@@ -492,6 +492,10 @@ int Game::run() {
     input_manager_->advance_key_repeat(context.clock.dt_ms);
     tooltip_manager_->advance(context.clock.dt_ms);
 
+    if (music_) {
+      music_->tick();
+    }
+
     // Logic runs independent of FPS
     const int time_scale = state.time_scale();
     tick_accumulator_ms += context.clock.dt_ms * time_scale;
@@ -950,6 +954,21 @@ bool Game::init(int display_height, const GameOptions& options) {
   audio_manager_->music_enabled(options.music);
   audio_manager_->master_volume(options.master_volume);
   audio_manager_->mute_when_unfocused(options.mute_unfocused);
+  // The enhanced effects, when chosen: applied once the effects are loaded.
+  audio_manager_->effects_pack(
+      std::filesystem::path(platform_paths::data_dir()) / "sfx" / "enhanced");
+  audio_manager_->select_effects(options.enhanced_effects
+                                     ? audio::EffectsSet::ENHANCED
+                                     : audio::EffectsSet::ORIGINAL);
+  // The player's music: settings, folders and the music owner.
+  music_ = std::make_unique<music::MusicSystem>(
+      *audio_manager_,
+      music::MusicSystem::Paths{
+          .profile = music::path_from_utf8(platform_paths::music_dir()),
+          .game_dir = music::path_from_utf8(platform_paths::game_dir()),
+          .user_music =
+              music::path_from_utf8(platform_paths::user_music_dir())});
+  context.music = music_.get();
 
   auto [win_w, win_h] = window_size_for(options.double_size, display_height);
   SDL_Window* window = nullptr;

@@ -94,6 +94,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/newspaper/NewspaperEventSystem.cpp
     src/core/restaurant/AIEconomy.cpp
     src/core/restaurant/Furniture.cpp
+    src/core/restaurant/FurniturePlacement.cpp
     src/core/restaurant/ManagerFeedback.cpp
     src/core/restaurant/ManagerRoutine.cpp
     src/core/restaurant/PizzaDemand.cpp
@@ -321,6 +322,7 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/RendererManager.cpp
     src/engine/Screenshot.cpp
     src/engine/audio/AudioManager.cpp
+    src/engine/audio/EffectPack.cpp
     src/engine/audio/VocDecoder.cpp
     src/engine/debug/ScreenCommands.cpp
     src/engine/geom/Camera.cpp
@@ -349,6 +351,7 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/music/MusicLibrary.cpp
     src/engine/music/MusicPlayback.cpp
     src/engine/music/MusicSettings.cpp
+    src/engine/music/MusicSystem.cpp
     src/engine/music/MusicTypes.cpp
     src/engine/music/PcmRing.cpp
     src/engine/music/TrackDecoder.cpp
@@ -508,6 +511,7 @@ set(PLEGACY_HEADERS
     src/core/restaurant/FloorPattern.h
     src/core/restaurant/Furniture.h
     src/core/restaurant/FurnitureBatch.h
+    src/core/restaurant/FurniturePlacement.h
     src/core/restaurant/ManagerFeedback.h
     src/core/restaurant/ManagerRoutine.h
     src/core/restaurant/Menu.h
@@ -614,6 +618,7 @@ set(PLEGACY_HEADERS
     src/engine/TypedPoint.h
     src/engine/adapters/SDLRectAdapter.h
     src/engine/audio/AudioManager.h
+    src/engine/audio/EffectPack.h
     src/engine/audio/VocDecoder.h
     src/engine/debug/ScreenCommands.h
     src/engine/geom/Camera.h
@@ -658,6 +663,7 @@ set(PLEGACY_HEADERS
     src/engine/music/MusicLibrary.h
     src/engine/music/MusicPlayback.h
     src/engine/music/MusicSettings.h
+    src/engine/music/MusicSystem.h
     src/engine/music/MusicTypes.h
     src/engine/music/PcmRing.h
     src/engine/music/TrackDecoder.h

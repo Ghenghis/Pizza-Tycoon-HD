@@ -148,6 +148,20 @@ std::string_view mode_name(Mode mode) {
   return mode_names[static_cast<std::size_t>(mode)];
 }
 
+std::string to_string(Mode mode) {
+  switch (mode) {
+  case Mode::ORIGINAL:
+    return "Original";
+  case Mode::CHRISTMAS_BACKGROUND:
+    return "Christmas Background";
+  case Mode::JUKEBOX:
+    return "Jukebox";
+  case Mode::OFF:
+    break;
+  }
+  return "Off";
+}
+
 std::optional<Mode> mode_from_name(std::string_view name) {
   for (std::size_t i = 0; i < mode_names.size(); ++i) {
     if (mode_names[i] == name) {

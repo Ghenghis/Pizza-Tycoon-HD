@@ -9,6 +9,8 @@
 #include <functional>
 #include <string>
 #include "core/state/UIState.h"
+#include "engine/audio/AudioManager.h"
+#include "engine/music/MusicTypes.h"
 #include "views/base/Menu.h"
 
 // The HD render scale choices on the graphics options screen (the value is
@@ -49,4 +51,7 @@ private:
 
   std::string title_;
   HdResolution hd_resolution_ = HdResolution::Auto;
+  // What the audio screen's choices show.
+  music::Mode music_mode_ = music::Mode::ORIGINAL;
+  audio::EffectsSet effects_set_ = audio::EffectsSet::ORIGINAL;
 };

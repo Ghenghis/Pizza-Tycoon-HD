@@ -100,10 +100,11 @@ public:
     if (!all) {
       return fail(error, "libVLC is too old (it lacks " + missing + ")");
     }
-    // No interface, no video output (so no window, not even for cover art),
-    // nothing looked up on the network.
-    const std::array<const char*, 4> args = {"--intf=dummy", "--no-video",
-                                             "--quiet",
+    // As Fling-Studio's VlcMusicPlayer ("--no-video", "--quiet",
+    // "--no-osd"), plus no interface and nothing looked up on the network.
+    // No video output means no window, not even for cover art.
+    const std::array<const char*, 5> args = {"--intf=dummy", "--no-video",
+                                             "--quiet", "--no-osd",
                                              "--no-metadata-network-access"};
     instance = create(static_cast<int>(args.size()), args.data());
     if (!instance) {

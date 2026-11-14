@@ -23,17 +23,19 @@
 #include "TestSupport.h"
 #include "engine/audio/AudioManager.h"
 
-#if PLEGACY_ENABLE_MUSIC
-#include <adlmidi.h>
-#endif
-
 using audio::AudioManager;
 using audio::MIX_BLOCK_FRAMES;
 using audio::MIX_BLOCK_SAMPLES;
 using audio::Mixer;
 using music::PcmRing;
 using music::Source;
+using music_test::constant_effect_m;
 using music_test::DummyAudio;
+#if PLEGACY_ENABLE_MUSIC
+using music_test::FmReference;
+#endif
+using music_test::long_note_midi;
+using music_test::PausedAudio;
 using namespace std::chrono_literals;
 
 namespace {
@@ -48,115 +50,12 @@ Block fill(AudioManager& am) {
   return out;
 }
 
-// A standard MIDI file: one note held for ten seconds.
-std::vector<uint8_t> long_note_midi() {
-  return {
-      'M',  'T',  'h',  'd',  0,    0,    0,    6,    0,    0,    0,    1,
-      0,    96,   'M',  'T',  'r',  'k',  0,    0,    0,    23,   0x00, 0xFF,
-      0x51, 0x03, 0x07, 0xA1, 0x20, 0x00, 0xC0, 0x00, 0x00, 0x90, 0x3C, 0x64,
-      0x8F, 0x00, 0x80, 0x3C, 0x40, 0x00, 0xFF, 0x2F, 0x00,
-  };
-}
-
-// An M container holding one VOC sound: a constant level, so the effect's
-// share of the output is one known value.
-std::vector<uint8_t> constant_effect_m(uint8_t level) {
-  std::vector<uint8_t> voc(std::begin("Creative Voice File\x1A"),
-                           std::end("Creative Voice File\x1A") - 1);
-  const uint16_t version = 0x010A;
-  const uint16_t check = static_cast<uint16_t>(~version + 0x1234);
-  for (const uint16_t v : {uint16_t{26}, version, check}) {
-    voc.push_back(static_cast<uint8_t>(v));
-    voc.push_back(static_cast<uint8_t>(v >> 8));
-  }
-  constexpr uint32_t samples = 22050;
-  voc.push_back(1); // sound data
-  const uint32_t size = samples + 2;
-  voc.push_back(static_cast<uint8_t>(size));
-  voc.push_back(static_cast<uint8_t>(size >> 8));
-  voc.push_back(static_cast<uint8_t>(size >> 16));
-  voc.push_back(256 - 45); // 22222 Hz
-  voc.push_back(0);        // 8-bit, uncompressed
-  voc.insert(voc.end(), samples, level);
-  voc.push_back(0); // end
-
-  std::vector<uint8_t> m;
-  const auto u32 = [&m](uint32_t v) {
-    for (int i = 0; i < 4; ++i) {
-      m.push_back(static_cast<uint8_t>(v >> (8 * i)));
-    }
-  };
-  u32(1);
-  u32(2); // VOC
-  u32(16);
-  u32(static_cast<uint32_t>(voc.size()));
-  m.insert(m.end(), voc.begin(), voc.end());
-  return m;
-}
-
-// An AudioManager on the dummy driver whose device is paused, so this
-// thread is the only one that mixes.
-struct PausedAudio {
-  DummyAudio sdl;
-  AudioManager am;
-  bool ok = false;
-  PausedAudio() {
-    if (!sdl.ok()) {
-      return;
-    }
-    am.init();
-    ok = am.has_device() && SDL_PauseAudioDevice(am.device());
-  }
-};
-
 void write_constant(PcmRing& ring, int16_t value, std::size_t frames,
                     uint32_t generation) {
   const std::vector<int16_t> samples(frames * 2, value);
   ring.write(samples,
              PcmRing::Tag{.generation = generation, .track = 1, .frame = 0});
 }
-
-#if PLEGACY_ENABLE_MUSIC
-// The FM music as AudioManager made it before the music route existed:
-// libADLMIDI set up the same way, the same boost, the same mixer.
-class FmReference {
-public:
-  explicit FmReference(const std::vector<uint8_t>& song)
-      : player_(adl_init(44100)) {
-    adl_setVolumeRangeModel(player_, ADLMIDI_VolumeModel_CMF);
-    adl_setNumChips(player_, 1);
-    adl_reset(player_);
-    adl_openData(player_, song.data(), static_cast<unsigned long>(song.size()));
-  }
-  ~FmReference() { adl_close(player_); }
-  FmReference(const FmReference&) = delete;
-  FmReference& operator=(const FmReference&) = delete;
-
-  // The next music block, as render_music() makes it.
-  Block music() {
-    Block b = block();
-    const int count = static_cast<int>(b.size());
-    const int got = std::max(adl_play(player_, count, b.data()), 0);
-    for (int i = 0; i < got; ++i) {
-      b[static_cast<std::size_t>(i)] = static_cast<int16_t>(
-          std::clamp(static_cast<float>(b[static_cast<std::size_t>(i)]) * 6.0f,
-                     -32768.0f, 32767.0f));
-    }
-    return b;
-  }
-  // The next output block with no effects playing.
-  Block output() {
-    Block music_block = music();
-    Block out = block();
-    mixer_.render(out, music_block);
-    return out;
-  }
-
-private:
-  ADL_MIDIPlayer* player_;
-  Mixer mixer_;
-};
-#endif
 
 } // namespace
 

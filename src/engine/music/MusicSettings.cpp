@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <fstream>
 
 namespace fs = std::filesystem;
 using nlohmann::json;
@@ -33,8 +34,12 @@ E enum_from(const std::array<std::string_view, N>& names, const json& j,
   if (it == j.end() || !it->is_string()) {
     return fallback;
   }
+  std::string value = it->get<std::string>();
+  std::transform(value.begin(), value.end(), value.begin(), [](char c) {
+    return static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+  });
   for (std::size_t i = 0; i < N; ++i) {
-    if (names[i] == it->get<std::string>()) {
+    if (names[i] == value) {
       return static_cast<E>(i);
     }
   }
@@ -90,7 +95,11 @@ json playlist_json(const Playlist& p) {
 json settings_json(const MusicSettings& s) {
   json folders = json::array();
   for (const FolderChoice& f : s.folders) {
-    folders.push_back({{"path", f.path}, {"enabled", f.enabled}});
+    folders.push_back({{"id", f.id},
+                       {"path", f.path},
+                       {"label", f.label},
+                       {"enabled", f.enabled},
+                       {"include_subfolders", f.include_subfolders}});
   }
   json collections = json::array();
   for (const CollectionPrefs& c : s.collections) {
@@ -104,16 +113,16 @@ json settings_json(const MusicSettings& s) {
   return {
       {"mode", std::string(mode_name(s.mode))},
       {"folders", std::move(folders)},
-      {"use_game_folder",
-       s.use_game_folder ? json(*s.use_game_folder) : json(nullptr)},
+      {"folders_saved", s.folders_saved},
       {"collections", std::move(collections)},
       {"playlists", std::move(playlists)},
       {"playlist", s.playlist},
       {"queue_collections", s.queue_collections},
-      {"resume", {{"track", s.resume_track}, {"seconds", s.resume_seconds}}},
+      {"last_track", s.last_track},
+      {"resume_seconds", s.resume_seconds},
       {"repeat", std::string(enum_name(repeat_names, s.repeat))},
       {"shuffle", s.shuffle},
-      {"collapsed", s.collapsed},
+      {"bar_collapsed", s.bar_collapsed},
       {"north_pole",
        {{"autostart", s.autostart_north_pole},
         {"keep_everywhere", s.keep_everywhere},
@@ -134,16 +143,27 @@ MusicSettings settings_from(const json& j) {
       if (s.folders.size() == SettingsStore::MAX_FOLDERS) {
         break;
       }
-      if (v.is_object() && v.contains("path") && v["path"].is_string()) {
-        s.folders.push_back(FolderChoice{.path = v["path"].get<std::string>(),
-                                         .enabled = flag(v, "enabled", true)});
+      if (!v.is_object()) {
+        continue;
+      }
+      FolderChoice c{.id = text(v, "id", 128),
+                     .path = {},
+                     .label = text(v, "label", MAX_NAME_BYTES),
+                     .enabled = flag(v, "enabled", true),
+                     .include_subfolders = flag(v, "include_subfolders", true)};
+      const auto path = v.find("path");
+      if (path != v.end() && path->is_string()) {
+        c.path = path->get<std::string>().substr(0, 4096);
+      }
+      const bool unique = std::none_of(
+          s.folders.begin(), s.folders.end(),
+          [&](const FolderChoice& other) { return other.id == c.id; });
+      if (is_key_of(c.id, "root") && !c.path.empty() && unique) {
+        s.folders.push_back(std::move(c));
       }
     }
   }
-  if (const auto g = j.find("use_game_folder");
-      g != j.end() && g->is_boolean()) {
-    s.use_game_folder = g->get<bool>();
-  }
+  s.folders_saved = flag(j, "folders_saved", false);
   if (const auto c = j.find("collections"); c != j.end() && c->is_array()) {
     for (const json& v : *c) {
       if (v.is_object() && is_key_of(text(v, "id", 128), "col")) {
@@ -182,20 +202,18 @@ MusicSettings settings_from(const json& j) {
     s.playlist.clear();
   }
   s.queue_collections = keys(j, "queue_collections", "col", 1000);
-  if (const auto r = j.find("resume"); r != j.end() && r->is_object()) {
-    s.resume_track = text(*r, "track", 128);
-    if (!is_key_of(s.resume_track, "trk")) {
-      s.resume_track.clear();
-    }
-    const auto sec = r->find("seconds");
-    if (sec != r->end() && sec->is_number()) {
-      const double v = sec->get<double>();
-      s.resume_seconds = std::isfinite(v) && v > 0.0 ? v : 0.0;
-    }
+  s.last_track = text(j, "last_track", 128);
+  if (!is_key_of(s.last_track, "trk")) {
+    s.last_track.clear();
+  }
+  if (const auto sec = j.find("resume_seconds");
+      sec != j.end() && sec->is_number()) {
+    const double v = sec->get<double>();
+    s.resume_seconds = std::isfinite(v) && v > 0.0 ? v : 0.0;
   }
   s.repeat = enum_from(repeat_names, j, "repeat", s.repeat);
   s.shuffle = flag(j, "shuffle", s.shuffle);
-  s.collapsed = flag(j, "collapsed", s.collapsed);
+  s.bar_collapsed = flag(j, "bar_collapsed", s.bar_collapsed);
   if (const auto n = j.find("north_pole"); n != j.end() && n->is_object()) {
     s.autostart_north_pole = flag(*n, "autostart", false);
     s.keep_everywhere = flag(*n, "keep_everywhere", false);
@@ -229,6 +247,15 @@ SettingsStore::SettingsStore(fs::path file)
 
 bool SettingsStore::load(std::vector<std::string>* problems) {
   std::vector<std::string> found;
+  locked_ = false;
+  {
+    // There, but not readable: someone else holds it.
+    std::error_code ec;
+    if (fs::exists(doc_.file(), ec)) {
+      std::ifstream probe(doc_.file(), std::ios::binary);
+      locked_ = !probe;
+    }
+  }
   const auto loaded = doc_.load(&found);
   if (problems) {
     *problems = found;
@@ -244,6 +271,11 @@ bool SettingsStore::load(std::vector<std::string>* problems) {
 }
 
 SaveResult SettingsStore::write(const MusicSettings& next) {
+  if (locked_) {
+    return SaveResult{.error = "music-settings.json could not be read at the "
+                               "start, so it is not written this session",
+                      .revision = 0};
+  }
   std::error_code ec;
   fs::create_directories(doc_.file().parent_path(), ec);
   if (const auto written = doc_.save(settings_json(next)); !written) {

@@ -162,6 +162,7 @@ const auto option_defs = std::to_array({
     float_option<&GameOptions::master_volume>("master_volume", {},
                                               "0.0 to 1.0, music and effects"),
     bool_option<&GameOptions::mute_unfocused>("mute_unfocused"),
+    bool_option<&GameOptions::enhanced_effects>("enhanced_effects"),
 
     bool_option<&GameOptions::rmb_drag_inverted>("rmb_drag_inverted", "Input"),
     bool_option<&GameOptions::scroll_wheel_inverted>("scroll_wheel_inverted"),

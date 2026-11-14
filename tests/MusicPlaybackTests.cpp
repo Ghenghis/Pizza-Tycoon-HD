@@ -370,10 +370,10 @@ TEST_CASE("the North Pole starts and ends the Christmas music by policy",
   // Until the player has chosen Christmas music once, nothing starts.
   mp.on_region(true);
   CHECK(mp.mode() == Mode::ORIGINAL);
-  mp.set_mode(Mode::CHRISTMAS_BACKGROUND);
+  mp.on_region(false);
+  mp.set_mode(Mode::CHRISTMAS_BACKGROUND); // chosen outside the region
   CHECK(mp.policy().autostart_north_pole);
   mp.set_mode(Mode::ORIGINAL);
-  mp.on_region(false);
 
   mp.on_region(true);
   CHECK(mp.mode() == Mode::CHRISTMAS_BACKGROUND);
@@ -394,6 +394,14 @@ TEST_CASE("the North Pole starts and ends the Christmas music by policy",
   mp.set_mode(Mode::OFF);
   mp.on_region(true);
   CHECK(mp.mode() == Mode::OFF);
+
+  // A manual choice inside the North Pole beats the automation from then on.
+  mp.set_mode(Mode::CHRISTMAS_BACKGROUND);
+  mp.set_mode(Mode::ORIGINAL);
+  CHECK_FALSE(mp.policy().autostart_north_pole);
+  mp.on_region(false);
+  mp.on_region(true);
+  CHECK(mp.mode() == Mode::ORIGINAL);
 }
 
 TEST_CASE("the queue can change while a song plays on", "[music][playback]") {

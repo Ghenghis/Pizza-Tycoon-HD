@@ -30,5 +30,8 @@ std::string recipes_dir();
 std::string missions_dir();
 // The player's music settings, playlists and track cache: never the songs.
 std::string music_dir();
+// The player's own Music folder as the system names it (Windows' known
+// folder, XDG on Linux); empty when there is none.
+std::string user_music_dir();
 
 } // namespace platform_paths

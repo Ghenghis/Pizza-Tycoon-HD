@@ -10,8 +10,10 @@
 #include <cmath>
 #include <cstdlib>
 
+#include "core/content/Sha256.h"
 #include "engine/Logger.h"
 #include "engine/SDL_include.h"
+#include "engine/audio/EffectPack.h"
 #include "engine/audio/VocDecoder.h"
 #include "resources/MFileLoader.h"
 
@@ -234,13 +236,13 @@ bool Mixer::output_muted() const noexcept {
   return output_muted_.load(std::memory_order_relaxed);
 }
 
-void Mixer::take_request(Effect& e) {
+void Mixer::take_request(Effect& e, const Sound& sound) {
   uint32_t request = e.request.load(std::memory_order_acquire);
   if (request == 0) {
     return;
   }
   if ((request & PLAY_BIT) != 0) {
-    e.position = e.start_offset;
+    e.position = sound.start_offset;
     e.playing = true;
     e.loop = (request & LOOP_BIT) != 0;
   }
@@ -253,10 +255,10 @@ void Mixer::take_request(Effect& e) {
       request, 0, std::memory_order_acq_rel, std::memory_order_relaxed));
 }
 
-void Mixer::mix_effect(Effect& e, std::span<float> acc, float gain_from,
-                       float gain_to) {
+void Mixer::mix_effect(Effect& e, const Sound& sound, std::span<float> acc,
+                       float gain_from, float gain_to) {
   const std::size_t total = acc.size();
-  const std::span<const int16_t> samples(e.samples);
+  const std::span<const int16_t> samples = sound.samples;
   // The block's gain ramp, at a sample position within the block.
   const auto gain_at = [&](std::size_t at) {
     return gain_from == gain_to ? gain_to
@@ -268,8 +270,8 @@ void Mixer::mix_effect(Effect& e, std::span<float> acc, float gain_from,
   while (e.playing && done < total) {
     if (e.position >= samples.size()) {
       // Loop without a gap, back to the start offset, in the same block.
-      if (e.loop && e.start_offset < samples.size()) {
-        e.position = e.start_offset;
+      if (e.loop && sound.start_offset < samples.size()) {
+        e.position = sound.start_offset;
       }
       else {
         e.playing = false;
@@ -288,9 +290,68 @@ void Mixer::mix_effect(Effect& e, std::span<float> acc, float gain_from,
   }
 }
 
+Mixer::Sound Mixer::sound_of(std::size_t slot, const EffectBank* bank) const {
+  if (bank && bank->slots[slot]) {
+    const EffectBank::Sound& r = *bank->slots[slot];
+    return Sound{.samples = r.samples, .start_offset = r.start_offset};
+  }
+  const Effect& e = effects_[slot];
+  return Sound{.samples = e.samples, .start_offset = e.start_offset};
+}
+
+void Mixer::effect_bank(std::unique_ptr<EffectBank> bank) {
+  // Every bank handed over gets a higher number, the originals (null)
+  // included, so the audio thread can say which ones it has moved past.
+  ++banks_made_;
+  if (bank) {
+    bank->number = banks_made_;
+  }
+  if (current_bank_) {
+    retired_banks_.push_back(std::move(current_bank_));
+  }
+  current_bank_ = std::move(bank);
+  bank_.store(current_bank_.get(), std::memory_order_release);
+}
+
+bool Mixer::has_effect_bank() const noexcept {
+  return bank_.load(std::memory_order_acquire) != nullptr;
+}
+
+void Mixer::collect_banks(bool no_callback) {
+  const uint64_t seen = bank_seen_.load(std::memory_order_acquire);
+  // The audio thread picked up a bank made after these, and banks only move
+  // forward, so it never uses them again.
+  std::erase_if(retired_banks_, [&](const std::unique_ptr<EffectBank>& b) {
+    return no_callback || b->number < seen;
+  });
+}
+
 void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
   const std::span<float> acc(acc_.data(), out.size());
   std::fill(acc.begin(), acc.end(), 0.0f);
+
+  // The effect sounds of this block. Returning to the originals (null) frees
+  // nothing the audio thread holds: retired banks wait for a newer number.
+  const EffectBank* bank = bank_.load(std::memory_order_acquire);
+  if (bank) {
+    bank_seen_.store(bank->number, std::memory_order_release);
+  }
+  if (bank != playing_bank_) {
+    // Sounds that play on switch over in place; past the new sound's end a
+    // loop goes back to its start and a one-shot ends.
+    playing_bank_ = bank;
+    const std::size_t n = effect_count();
+    for (std::size_t i = 0; i < n; ++i) {
+      Effect& e = effects_[i];
+      const Sound sound = sound_of(i, bank);
+      e.position -= e.position % MIX_CHANNELS;
+      if (e.playing && e.position >= sound.samples.size()) {
+        e.position = sound.start_offset;
+        e.playing = e.loop && sound.start_offset < sound.samples.size();
+        e.active.store(e.playing, std::memory_order_release);
+      }
+    }
+  }
 
   // The master volume and the mute fold into both gains, so they ramp too.
   const float master = output_muted() ? 0.0f : master_volume();
@@ -305,9 +366,10 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
   const std::size_t count = effect_count();
   for (std::size_t i = 0; i < count; ++i) {
     Effect& e = effects_[i];
-    take_request(e);
+    const Sound sound = sound_of(i, bank);
+    take_request(e, sound);
     if (e.playing) {
-      mix_effect(e, acc, sound_gain_, sound_target);
+      mix_effect(e, sound, acc, sound_gain_, sound_target);
       if (!e.playing) {
         e.active.store(false, std::memory_order_release);
       }
@@ -527,6 +589,67 @@ void AudioManager::load_default_assets() {
   load_m_container("sound/m9");  // Hoover (VOC)
   load_m_container("sound/m10"); // Break-in music + burglary sounds (CMF + VOC)
   load_m_container("sound/m11"); // Break-in music (CMF)
+
+  // A selection made before the effects were there takes effect now.
+  const std::lock_guard lock(effects_mutex_);
+  effects_loaded_ = true;
+  if (wanted_effects_ != effects_) {
+    if (const EffectsChange done = apply_effects(); !done) {
+      Logger::warn("Enhanced effects not used: {}", done.error);
+    }
+  }
+}
+
+void AudioManager::effects_pack(std::filesystem::path folder) {
+  const std::lock_guard lock(effects_mutex_);
+  effects_pack_ = std::move(folder);
+}
+
+AudioManager::EffectsChange AudioManager::select_effects(EffectsSet set) {
+  const std::lock_guard lock(effects_mutex_);
+  const EffectsSet before = wanted_effects_;
+  wanted_effects_ = set;
+  if (!effects_loaded_ && mixer_.effect_count() == 0) {
+    return {}; // applied by load_default_assets()
+  }
+  EffectsChange done = apply_effects();
+  if (!done) {
+    wanted_effects_ = before;
+  }
+  return done;
+}
+
+AudioManager::EffectsChange AudioManager::apply_effects() {
+  EffectsChange done;
+  if (wanted_effects_ == EffectsSet::ORIGINAL) {
+    mixer_.effect_bank(nullptr);
+    effects_ = EffectsSet::ORIGINAL;
+  }
+  else {
+    std::optional<EffectPack> pack = load_effect_pack(
+        effects_pack_, effect_sources_, EffectLimits{}, &done.error);
+    if (!pack) {
+      // The previous selection stays as it was.
+      wanted_effects_ = effects_;
+      return done;
+    }
+    done.outcomes = std::move(pack->outcomes);
+    mixer_.effect_bank(std::move(pack->bank));
+    effects_ = EffectsSet::ENHANCED;
+  }
+  mixer_.collect_banks(audio_stream_ == nullptr);
+  return done;
+}
+
+EffectsSet AudioManager::effects() const {
+  const std::lock_guard lock(effects_mutex_);
+  return effects_;
+}
+
+std::string AudioManager::effect_source_sha256(SoundId id) const {
+  const std::lock_guard lock(effects_mutex_);
+  const auto i = static_cast<std::size_t>(id);
+  return i < effect_sources_.size() ? effect_sources_[i] : std::string{};
 }
 
 void AudioManager::load_m_container(const std::string& m_file_path) {
@@ -562,9 +685,18 @@ void AudioManager::load_m_container(const std::string& m_file_path) {
           chopper && voc_audio.samples.size() > chopper_skip_samples
               ? chopper_skip_samples
               : 0;
+      const std::size_t slot = mixer_.effect_count();
       if (!mixer_.add_effect(std::move(voc_audio.samples), start_offset)) {
         Logger::warn("Too many sound effects, ignoring VOC from {}",
                      m_file_path);
+      }
+      else if (slot < effect_sources_.size()) {
+        // What an enhanced pack names as the original it replaces.
+        const std::string hash = core::content::Sha256::hex(
+            std::string_view(reinterpret_cast<const char*>(asset.data.data()),
+                             asset.data.size()));
+        const std::lock_guard lock(effects_mutex_);
+        effect_sources_[slot] = hash;
       }
     }
   }

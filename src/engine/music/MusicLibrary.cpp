@@ -133,16 +133,11 @@ std::optional<TrackInfo> track_from_json(const json& j) {
 
 /* Roots */
 
-std::optional<MusicRoot> game_music_root(const fs::path& game_dir) {
-  std::error_code ec;
-  const fs::path folder = game_dir / "Xmas";
-  if (game_dir.empty() || !fs::is_directory(folder, ec)) {
-    return std::nullopt;
-  }
-  return MusicRoot{.key = "game", .path = folder, .name = "Xmas"};
+namespace {
+constexpr std::string_view game_prefix = "@game/";
 }
 
-MusicRoot chosen_root(const fs::path& folder) {
+std::string stored_path(const fs::path& folder, const fs::path& game_dir) {
   std::error_code ec;
   fs::path path = fs::absolute(folder, ec);
   if (ec) {
@@ -153,38 +148,79 @@ MusicRoot chosen_root(const fs::path& folder) {
       path.parent_path() != path) {
     path = path.parent_path();
   }
-  return MusicRoot{.key = "folder:" + hex16(utf8_path(path)),
-                   .path = path,
-                   .name =
-                       clean_text(utf8_path(path.filename()), MAX_NAME_BYTES)};
-}
-
-std::vector<MusicRoot> active_roots(const std::vector<FolderChoice>& chosen,
-                                    std::optional<bool> use_game_folder,
-                                    const std::optional<MusicRoot>& game) {
-  std::vector<MusicRoot> roots;
-  std::set<std::string> keys;
-  for (const FolderChoice& c : chosen) {
-    if (c.enabled && !c.path.empty()) {
-      MusicRoot root = chosen_root(path_from_utf8(c.path));
-      if (keys.insert(root.key).second) {
-        roots.push_back(std::move(root));
-      }
+  if (!game_dir.empty()) {
+    fs::path base = fs::absolute(game_dir, ec).lexically_normal();
+    if (!base.has_filename() && base.has_parent_path()) {
+      base = base.parent_path();
+    }
+    const fs::path rel = path.lexically_relative(base);
+    if (!rel.empty() && *rel.begin() != ".." && rel != ".") {
+      return std::string(game_prefix) + generic(rel);
     }
   }
-  if (game && use_game_folder.value_or(roots.empty())) {
-    roots.push_back(*game);
+  return utf8_path(path);
+}
+
+fs::path resolve_path(std::string_view stored, const fs::path& game_dir) {
+  if (stored.substr(0, game_prefix.size()) == game_prefix) {
+    return (game_dir / path_from_utf8(stored.substr(game_prefix.size())))
+        .lexically_normal();
+  }
+  return path_from_utf8(stored);
+}
+
+FolderChoice new_folder(const fs::path& folder, const fs::path& game_dir) {
+  return FolderChoice{.id = random_key("root"),
+                      .path = stored_path(folder, game_dir),
+                      .label = {},
+                      .enabled = true,
+                      .include_subfolders = true};
+}
+
+MusicRoot root_of(const FolderChoice& folder, const fs::path& game_dir) {
+  const fs::path path = resolve_path(folder.path, game_dir);
+  return MusicRoot{
+      .key = folder.id,
+      .path = path,
+      .name = folder.label.empty()
+                  ? clean_text(utf8_path(path.filename()), MAX_NAME_BYTES)
+                  : folder.label,
+      .include_subfolders = folder.include_subfolders};
+}
+
+MusicRoot chosen_root(const fs::path& folder) {
+  FolderChoice choice = new_folder(folder, {});
+  choice.id = "root:" + hex16(choice.path);
+  return root_of(choice, {});
+}
+
+std::vector<MusicRoot> active_roots(const std::vector<FolderChoice>& folders,
+                                    const fs::path& game_dir) {
+  std::vector<MusicRoot> roots;
+  std::set<std::string> keys;
+  for (const FolderChoice& f : folders) {
+    if (f.enabled && !f.path.empty() && keys.insert(f.id).second) {
+      roots.push_back(root_of(f, game_dir));
+    }
   }
   return roots;
 }
 
-bool game_folder_offered(const std::vector<FolderChoice>& chosen,
-                         std::optional<bool> use_game_folder,
-                         const std::optional<MusicRoot>& game) {
-  return game && !use_game_folder &&
-         std::any_of(chosen.begin(), chosen.end(), [](const FolderChoice& c) {
-           return c.enabled && !c.path.empty();
-         });
+std::vector<FolderChoice> default_folders(const fs::path& user_music,
+                                          const fs::path& game_dir) {
+  std::vector<FolderChoice> out;
+  std::error_code ec;
+  if (!user_music.empty() && fs::is_directory(user_music, ec)) {
+    FolderChoice f = new_folder(user_music, game_dir);
+    f.id = "root:user-music";
+    out.push_back(std::move(f));
+  }
+  if (!game_dir.empty() && fs::is_directory(game_dir / "Xmas", ec)) {
+    FolderChoice f = new_folder(game_dir / "Xmas", game_dir);
+    f.id = "root:game-xmas";
+    out.push_back(std::move(f));
+  }
+  return out;
 }
 
 /* The scan */
@@ -453,7 +489,8 @@ bool MusicLibrary::run_step() {
       }
       const fs::path relative = s.at.relative / entry.path().filename();
       if (fs::is_directory(status)) {
-        if (s.at.depth < bounds_.max_depth) {
+        if (s.at.depth < bounds_.max_depth &&
+            s.roots[s.at.root].include_subfolders) {
           s.dirs.push_back(Scan::Dir{.root = s.at.root,
                                      .relative = relative,
                                      .depth = s.at.depth + 1});

@@ -41,24 +41,27 @@ struct CollectionPrefs {
 struct MusicSettings {
   Mode mode = Mode::ORIGINAL;
   std::vector<FolderChoice> folders;
-  // Unset: the game's Xmas folder is used only while no folder is chosen.
-  std::optional<bool> use_game_folder;
+  // Whether the player saved a folder list. Until then the suggested
+  // folders (default_folders()) are used, and never written over a list
+  // the player saved.
+  bool folders_saved = false;
   std::vector<CollectionPrefs> collections;
   std::vector<Playlist> playlists;
   PlaylistId playlist; // queued; empty for the collections below
-  std::vector<CollectionId> queue_collections;
-  // Where the queue was.
-  TrackId resume_track;
+  std::vector<CollectionId> queue_collections; // empty: all of them
+  // Where the queue was (Fling's LastTrack, by id here, not by path).
+  TrackId last_track;
   double resume_seconds = 0.0;
   Repeat repeat = Repeat::ALL;
   bool shuffle = false;
-  bool collapsed = true; // the mini-player
+  bool bar_collapsed = true; // the mini-player
   // MusicPlayback::Policy
   bool autostart_north_pole = false;
   bool keep_everywhere = false;
   bool background_after_jukebox = false;
   Mode north_pole_mode = Mode::CHRISTMAS_BACKGROUND;
-  Backend backend = Backend::AUTO;
+  // Built-in until libVLC is qualified on the owner's PC.
+  Backend backend = Backend::BUILTIN;
 };
 
 struct SaveResult {
@@ -95,6 +98,9 @@ public:
   // Which copy load() used: "current", "candidate", "backup 1" ... or
   // empty for the defaults.
   [[nodiscard]] const std::string& loaded_from() const { return source_; }
+  // The file was there but could not be read (another program holds it):
+  // nothing is written over it this session, as in Fling's MusicDeck.
+  [[nodiscard]] bool locked() const { return locked_; }
 
   [[nodiscard]] const MusicSettings& settings() const { return settings_; }
   // Saves every setting but the playlists, which keep their own revisions.
@@ -117,6 +123,7 @@ private:
   RevisionedDocument doc_;
   MusicSettings settings_;
   std::string source_;
+  bool locked_ = false;
 };
 
 } // namespace music

@@ -210,6 +210,7 @@ struct MusicPlayback::Worker {
       }
       const std::size_t got = reader.read(chunk);
       if (got > 0) {
+        produced = true;
         ring.write(std::span(chunk).first(got * PcmRing::CHANNELS),
                    PcmRing::Tag{.generation = generation,
                                 .track = serial,
@@ -222,12 +223,23 @@ struct MusicPlayback::Worker {
       if (!reader.at_end()) {
         return; // nothing for now; more comes later
       }
-      const bool damaged = reader.damaged();
-      if (damaged) {
+      // libVLC "plays" a file it cannot read for a few milliseconds and
+      // reports no error (measured for Fling-Studio): a track that ends
+      // without a frame failed.
+      const bool damaged = reader.damaged() || !produced;
+      if (!produced) {
+        notify(Notice::Kind::SKIPPED, current.id,
+               "Skipped " + name_of(current) + ": it holds no playable audio");
+      }
+      else if (damaged) {
         notify(Notice::Kind::SKIPPED, current.id,
                name_of(current) + " stopped early: the file is damaged");
       }
       reader.close();
+      if (!produced && ++failures >= queue.size()) {
+        finish("None of the tracks could be played");
+        continue;
+      }
       advance(damaged);
     }
   }
@@ -263,6 +275,7 @@ struct MusicPlayback::Worker {
       return false;
     }
     current = track;
+    produced = false;
     frame = 0;
     if (start_frame > 0 && reader.seek(start_frame)) {
       frame = start_frame;
@@ -328,11 +341,12 @@ struct MusicPlayback::Worker {
   std::uint32_t dropped = 0;
   std::deque<Details> details;
   std::uint32_t ended_generation = 0;
-  Backend config_backend = Backend::AUTO;
+  // Built-in until libVLC is qualified on the owner's PC.
+  Backend config_backend = Backend::BUILTIN;
   Limits config_limits;
 
   // Worker thread only.
-  Backend backend = Backend::AUTO;
+  Backend backend = Backend::BUILTIN;
   Limits limits;
   std::vector<QueuedTrack> queue;
   Repeat repeat = Repeat::OFF;
@@ -344,7 +358,8 @@ struct MusicPlayback::Worker {
   std::uint64_t frame = 0;
   std::uint32_t serial = 0;
   std::size_t failures = 0;
-  QueuedTrack current; // the track the reader has open
+  QueuedTrack current;   // the track the reader has open
+  bool produced = false; // it gave at least one frame
   TrackReader reader;
   std::vector<std::int16_t> chunk;
   std::shared_ptr<VlcRuntime> vlc;
@@ -480,6 +495,11 @@ void MusicPlayback::switch_mode(Mode mode, bool chosen) {
   }
   else if (chosen) {
     outside_mode_.reset(); // the player chose; nothing to go back to
+    // A manual choice beats the region automation: the North Pole stops
+    // starting the Christmas music until the player picks it again.
+    if (in_north_pole_.value_or(false)) {
+      policy_.autostart_north_pole = false;
+    }
   }
   if (mode == Mode::JUKEBOX) {
     before_jukebox_ = old;

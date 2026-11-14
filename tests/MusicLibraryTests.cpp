@@ -261,33 +261,46 @@ TEST_CASE("a scan can be cancelled, and the last finished one stays",
   }));
 }
 
-TEST_CASE("a chosen folder comes before the game's Xmas folder, never merged "
-          "without asking",
+TEST_CASE("folders of any name, game-relative paths and the suggestions",
           "[music][library]") {
   test_support::TempDir game;
-  fs::create_directories(game.path() / "Xmas");
   test_support::TempDir mine;
-  const auto xmas = music::game_music_root(game.path());
-  REQUIRE(xmas);
-  CHECK(xmas->key == "game");
-  CHECK_FALSE(music::game_music_root(mine.path()));
+  const fs::path inside = game.path() / "My Songs";
+  fs::create_directories(inside);
+  fs::create_directories(game.path() / "Xmas");
 
-  const std::vector<music::FolderChoice> none;
-  const std::vector<music::FolderChoice> chosen = {
-      {.path = music::utf8_path(mine.path()), .enabled = true}};
-  // Only the game's folder: it is used.
-  auto roots = music::active_roots(none, std::nullopt, xmas);
-  REQUIRE(roots.size() == 1);
-  CHECK(roots[0].key == "game");
-  // A chosen folder takes precedence; the menu offers the game's one.
-  roots = music::active_roots(chosen, std::nullopt, xmas);
-  REQUIRE(roots.size() == 1);
-  CHECK(roots[0].path == music::chosen_root(mine.path()).path);
-  CHECK(music::game_folder_offered(chosen, std::nullopt, xmas));
-  // The player combined them, or turned the game's one off.
-  CHECK(music::active_roots(chosen, true, xmas).size() == 2);
-  CHECK_FALSE(music::game_folder_offered(chosen, true, xmas));
-  CHECK(music::active_roots(none, false, xmas).empty());
+  // Inside the game's folder the path is kept relative, so a portable
+  // install can move.
+  const music::FolderChoice local = music::new_folder(inside, game.path());
+  CHECK(local.path == "@game/My Songs");
+  CHECK(music::is_key_of(local.id, "root"));
+  CHECK(music::resolve_path(local.path, game.path()) ==
+        (game.path() / "My Songs").lexically_normal());
+  const music::FolderChoice outside =
+      music::new_folder(mine.path(), game.path());
+  CHECK(music::resolve_path(outside.path, game.path()) ==
+        mine.path().lexically_normal());
+  CHECK(local.id != outside.id);
+
+  // The label is the player's; the folder keeps its name.
+  music::FolderChoice labelled = outside;
+  labelled.label = "Holiday";
+  CHECK(music::root_of(labelled, game.path()).name == "Holiday");
+  CHECK(music::root_of(outside, game.path()).name ==
+        music::utf8_path(mine.path().filename()));
+
+  // Disabled folders are not scanned.
+  music::FolderChoice off = local;
+  off.enabled = false;
+  CHECK(music::active_roots({off, outside}, game.path()).size() == 1);
+
+  // Suggestions: the user's Music folder and an Xmas folder beside the game,
+  // when they are there.
+  const auto defaults = music::default_folders(mine.path(), game.path());
+  REQUIRE(defaults.size() == 2);
+  CHECK(defaults[0].id == "root:user-music");
+  CHECK(defaults[1].path == "@game/Xmas");
+  CHECK(music::default_folders({}, mine.path()).empty());
 }
 
 TEST_CASE("the music worker runs the scans", "[music][library]") {

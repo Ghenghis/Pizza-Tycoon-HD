@@ -61,4 +61,9 @@ std::string missions_dir() { return base_dir_ + "missions/"; }
 
 std::string music_dir() { return base_dir_ + "music/"; }
 
+std::string user_music_dir() {
+  const char* folder = SDL_GetUserFolder(SDL_FOLDER_MUSIC);
+  return folder ? folder : "";
+}
+
 } // namespace platform_paths

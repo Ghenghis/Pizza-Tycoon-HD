@@ -38,6 +38,7 @@
 #include "engine/audio/AudioManager.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Blit.h"
+#include "engine/music/MusicSystem.h"
 #include "engine/ui/ICursorManager.h"
 #include "engine/ui/InteractionEvent.h"
 #include "views/base/BobRenderer.h"
@@ -167,7 +168,14 @@ RestaurantView::RestaurantView(GameContext& context, GameState& state,
     });
   }
 
-  if (const auto music = restaurant_->jukebox_music(); music > 0) {
+  // Through the music owner, so a restaurant never stops or replaces the
+  // player's music; in Original mode it is the same FM call as ever.
+  if (context_.music) {
+    context_.music->playback().on_restaurant_enter(
+        restaurant_->jukebox_music());
+    ambience_suppressed_ = context_.music->playback().ambience_suppressed();
+  }
+  else if (const auto music = restaurant_->jukebox_music(); music > 0) {
     context_.audio->play_music(static_cast<audio::MusicId>(music - 1));
   }
 
@@ -189,7 +197,12 @@ ClockRate RestaurantView::clock_rate() const {
 
 RestaurantView::~RestaurantView() {
   attack_.finish_scene();
-  context_.audio->stop_music();
+  if (context_.music) {
+    context_.music->playback().on_restaurant_leave();
+  }
+  else {
+    context_.audio->stop_music();
+  }
   if (current_restaurant_noise_) {
     context_.audio->stop_sound(*current_restaurant_noise_);
   }
@@ -207,8 +220,11 @@ void RestaurantView::update_restaurant_noise() {
   }
 
   // No noise when closed, in kitchen view, or when jukebox is playing
+  const bool jukebox = context_.music
+                           ? context_.music->playback().ambience_suppressed()
+                           : restaurant_->jukebox_music() > 0;
   if (kitchen_view_ || !restaurant_->is_open(state_.time().time_of_day()) ||
-      restaurant_->jukebox_music() > 0) {
+      jukebox) {
     return;
   }
 
@@ -791,6 +807,16 @@ void RestaurantView::tick() {
 
   if (camctrl_.tick()) {
     mark_dirty();
+  }
+
+  // A music mode change (the jukebox mode starting or stopping) changes
+  // whether the restaurant's ambience plays.
+  if (context_.music) {
+    const bool quiet = context_.music->playback().ambience_suppressed();
+    if (quiet != ambience_suppressed_) {
+      ambience_suppressed_ = quiet;
+      update_restaurant_noise();
+    }
   }
 
   // Tick guest animations

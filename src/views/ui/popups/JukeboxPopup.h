@@ -11,6 +11,9 @@
 namespace audio {
 class AudioManager;
 }
+namespace music {
+class MusicSystem;
+}
 class Restaurant;
 
 class JukeboxPopup : public BasePopup {
@@ -25,6 +28,7 @@ private:
 
   Restaurant* restaurant_;
   audio::AudioManager* audio_;
+  music::MusicSystem* music_;
   int selected_music_; // 0 = OFF, 1-6 = music track index
   int hovered_row_{-1};
 };

@@ -27,6 +27,9 @@ class InputManager;
 namespace audio {
 class AudioManager;
 }
+namespace music {
+class MusicSystem;
+}
 
 class GameContext {
 public:
@@ -42,5 +45,8 @@ public:
   input::InputManager* input{nullptr};
   ConfigManager* config{nullptr};
   audio::AudioManager* audio{nullptr};
+  // The player's music and the one music owner; null where there is none
+  // (tools, tests).
+  music::MusicSystem* music{nullptr};
   UiMode ui_mode{UiMode::Game};
 };

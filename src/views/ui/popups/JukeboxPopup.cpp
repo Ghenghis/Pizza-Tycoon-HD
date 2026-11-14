@@ -12,6 +12,7 @@
 #include "engine/audio/AudioManager.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Draw.h"
+#include "engine/music/MusicSystem.h"
 
 static constexpr std::array<const char*, 7> music_titles = {
     "-------- OFF --------",
@@ -28,7 +29,7 @@ ViewRect JukeboxPopup::row_rect(int i) { return {46, 44 + (i * 20), 220, 22}; }
 
 JukeboxPopup::JukeboxPopup(const GameContext& ctx, Restaurant* restaurant)
     : BasePopup(ctx), restaurant_(restaurant), audio_(ctx.audio),
-      selected_music_(restaurant->jukebox_music()) {}
+      music_(ctx.music), selected_music_(restaurant->jukebox_music()) {}
 
 void JukeboxPopup::add_interactions(views::ui::InteractionContext ictx,
                                     ViewPoint origin) {
@@ -52,7 +53,12 @@ void JukeboxPopup::add_interactions(views::ui::InteractionContext ictx,
 
           case views::ui::InteractionEvent::Type::Click:
             restaurant_->jukebox_music(i);
-            if (i == 0) {
+            if (music_) {
+              // The music owner makes the same FM call, and never touches
+              // the player's music.
+              music_->playback().on_restaurant_jukebox(i);
+            }
+            else if (i == 0) {
               if (audio_) {
                 audio_->stop_music();
               }

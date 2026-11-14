@@ -114,6 +114,8 @@ inline constexpr std::size_t MAX_NAME_BYTES = 100;
 [[nodiscard]] std::optional<Format> format_from_name(std::string_view name);
 
 [[nodiscard]] std::string_view mode_name(Mode mode);
+// For menus: "Original", "Christmas Background", "Jukebox", "Off".
+[[nodiscard]] std::string to_string(Mode mode);
 [[nodiscard]] std::optional<Mode> mode_from_name(std::string_view name);
 
 // A byte count in MiB with one decimal, for messages.

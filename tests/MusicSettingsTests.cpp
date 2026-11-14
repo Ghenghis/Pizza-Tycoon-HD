@@ -41,7 +41,9 @@ TEST_CASE("a first start has the defaults", "[music][settings]") {
   CHECK(problems.empty());
   CHECK(store.loaded_from().empty());
   CHECK(store.settings().mode == music::Mode::ORIGINAL);
-  CHECK(store.settings().collapsed);
+  CHECK(store.settings().bar_collapsed);
+  CHECK(store.settings().backend == music::Backend::BUILTIN);
+  CHECK_FALSE(store.settings().folders_saved);
   CHECK(store.settings().playlists.empty());
 }
 
@@ -55,22 +57,29 @@ TEST_CASE("settings and playlists survive a restart", "[music][settings]") {
     REQUIRE(store.load());
     MusicSettings s = store.settings();
     s.mode = music::Mode::JUKEBOX;
-    s.folders = {{.path = music::utf8_path(
+    s.folders = {{.id = "root:0123456789abcdef",
+                  .path = music::utf8_path(
                       dir.path() / music_test::u8(u8"Caf\u00e9 \u266a")),
-                  .enabled = true},
-                 {.path = "/elsewhere", .enabled = false}};
-    s.use_game_folder = true;
+                  .label = "Weihnachten",
+                  .enabled = true,
+                  .include_subfolders = false},
+                 {.id = "root:game-xmas",
+                  .path = "@game/Xmas",
+                  .label = {},
+                  .enabled = false,
+                  .include_subfolders = true}};
+    s.folders_saved = true;
     s.collections = {
         {.id = "col:0123456789abcdef", .name = "Kids", .hidden = true}};
-    s.resume_track = unknown;
+    s.last_track = unknown;
     s.resume_seconds = 12.5;
     s.repeat = music::Repeat::ONE;
     s.shuffle = true;
-    s.collapsed = false;
+    s.bar_collapsed = false;
     s.autostart_north_pole = true;
     s.keep_everywhere = true;
     s.north_pole_mode = music::Mode::JUKEBOX;
-    s.backend = music::Backend::BUILTIN;
+    s.backend = music::Backend::LIBVLC;
     REQUIRE(store.save_settings(s));
     id = store.create_playlist("Christmas Eve");
     REQUIRE(!id.empty());
@@ -88,19 +97,22 @@ TEST_CASE("settings and playlists survive a restart", "[music][settings]") {
   REQUIRE(s.folders.size() == 2);
   CHECK(s.folders[0].path ==
         music::utf8_path(dir.path() / music_test::u8(u8"Caf\u00e9 \u266a")));
+  CHECK(s.folders[0].label == "Weihnachten");
+  CHECK_FALSE(s.folders[0].include_subfolders);
+  CHECK(s.folders[1].path == "@game/Xmas");
   CHECK_FALSE(s.folders[1].enabled);
-  CHECK(s.use_game_folder == true);
+  CHECK(s.folders_saved);
   REQUIRE(s.collections.size() == 1);
   CHECK(s.collections[0].hidden);
-  CHECK(s.resume_track == unknown);
+  CHECK(s.last_track == unknown);
   CHECK(s.resume_seconds == 12.5);
   CHECK(s.repeat == music::Repeat::ONE);
   CHECK(s.shuffle);
-  CHECK_FALSE(s.collapsed);
+  CHECK_FALSE(s.bar_collapsed);
   CHECK(s.autostart_north_pole);
   CHECK(s.keep_everywhere);
   CHECK(s.north_pole_mode == music::Mode::JUKEBOX);
-  CHECK(s.backend == music::Backend::BUILTIN);
+  CHECK(s.backend == music::Backend::LIBVLC);
   const auto p = again.playlist(id);
   REQUIRE(p);
   CHECK(p->name == "Christmas Eve");

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -122,6 +123,19 @@ enum class MusicId {
   COUNT
 };
 
+// Which effect sounds play: the 1994 ones, or an enhanced pack's
+// replacements (with the original for every event it does not replace).
+enum class EffectsSet : uint8_t { ORIGINAL, ENHANCED };
+[[nodiscard]] std::string to_string(EffectsSet set);
+
+// What became of one entry of an effects pack.
+struct EffectOutcome {
+  std::string event;     // as the manifest names it
+  int slot = -1;         // the SoundId, -1 when the event is unknown
+  bool replaced = false; // false: the original plays, for reason
+  std::string reason;
+};
+
 enum class LoopMode {
   Once,
   Loop,
@@ -194,6 +208,27 @@ public:
   // none, otherwise the same size as out). Any even size works.
   void render(std::span<int16_t> out, std::span<const int16_t> music = {});
 
+  // Replacements for some effect slots (an enhanced sound pack), complete
+  // before they are handed over and never changed afterwards. A slot left
+  // empty plays its original.
+  struct EffectBank {
+    struct Sound {
+      std::vector<int16_t> samples; // interleaved stereo, 44100 Hz
+      std::size_t start_offset = 0; // where playback starts and loops back
+    };
+    std::array<std::unique_ptr<const Sound>, MAX_EFFECTS> slots{};
+    uint64_t number = 0; // set by effect_bank()
+  };
+  // Game thread. Every slot changes over at once, at the next block: bank,
+  // or null for the originals. Effects that are playing carry on in the new
+  // sound. A bank the audio thread may still be using is kept until it has
+  // moved on; the audio thread never frees one.
+  void effect_bank(std::unique_ptr<EffectBank> bank);
+  [[nodiscard]] bool has_effect_bank() const noexcept;
+  // Game thread: frees replaced banks the audio thread is done with. With
+  // no_callback (no device open), all of them.
+  void collect_banks(bool no_callback);
+
 private:
   struct Effect {
     // Written once by add_effect(), before the slot is published.
@@ -209,10 +244,16 @@ private:
     bool loop = false;
   };
 
+  // What a slot plays this block: its original or its replacement.
+  struct Sound {
+    std::span<const int16_t> samples;
+    std::size_t start_offset = 0;
+  };
   bool post(std::size_t slot, uint32_t flags);
-  static void take_request(Effect& e);
-  static void mix_effect(Effect& e, std::span<float> acc, float gain_from,
-                         float gain_to);
+  static void take_request(Effect& e, const Sound& sound);
+  static void mix_effect(Effect& e, const Sound& sound, std::span<float> acc,
+                         float gain_from, float gain_to);
+  [[nodiscard]] Sound sound_of(std::size_t slot, const EffectBank* bank) const;
   void mix_block(std::span<int16_t> out, std::span<const int16_t> music);
 
   std::array<Effect, MAX_EFFECTS> effects_;
@@ -225,6 +266,17 @@ private:
   std::atomic<bool> music_enabled_{true};
   std::atomic<float> master_volume_{1.0f};
   std::atomic<bool> output_muted_{false};
+
+  // The bank in use (null: the originals), and the number of the bank the
+  // audio thread last picked up.
+  std::atomic<const EffectBank*> bank_{nullptr};
+  std::atomic<uint64_t> bank_seen_{0};
+  // Game thread: the current bank and the replaced ones not yet freed.
+  std::unique_ptr<EffectBank> current_bank_;
+  std::vector<std::unique_ptr<EffectBank>> retired_banks_;
+  uint64_t banks_made_ = 0;
+  // Audio thread only: the bank of the last block.
+  const EffectBank* playing_bank_ = nullptr;
 
   // Audio thread only: gains reached at the end of the last block, and the
   // float mix of the current one.
@@ -313,6 +365,26 @@ public:
   // callback is done).
   void fill_block(std::span<int16_t> out);
 
+  // Sound effects. The enhanced pack is read from this folder (its
+  // manifest.json, see docs/studio/notes/sfx-overrides.md). Game thread.
+  void effects_pack(std::filesystem::path folder);
+  struct EffectsChange {
+    std::string error; // empty: the selection is active
+    std::vector<EffectOutcome> outcomes;
+    explicit operator bool() const { return error.empty(); }
+  };
+  // Switches every effect at once, while they play. ENHANCED reads, checks
+  // and decodes the whole pack first, off the audio thread; when the pack
+  // cannot be used at all the selection stays as it was. An entry that is
+  // missing or refused leaves its event on the original, and no other slot
+  // moves. Asked for before the effects are loaded, it is applied once they
+  // are. Game thread (or the thread that loads the assets).
+  EffectsChange select_effects(EffectsSet set);
+  [[nodiscard]] EffectsSet effects() const;
+  // SHA-256 (hex) of each original effect's VOC data as loaded, for packs to
+  // name what they replace; empty for a slot not loaded.
+  [[nodiscard]] std::string effect_source_sha256(SoundId id) const;
+
   // Stores a song (CMF or standard MIDI data) for a music slot.
   void load_music(MusicId id, std::vector<uint8_t> data);
   // Seconds into the current song, as of the last mixed block.
@@ -370,7 +442,18 @@ private:
   // Indexed by MusicId:
   std::vector<std::vector<uint8_t>> music_data_;
 
+  // Applies the wanted effects; effects_mutex_ held.
+  EffectsChange apply_effects();
+
   Mixer mixer_;
+  // Effects selection: game thread and the asset loader, never the callback.
+  mutable std::mutex effects_mutex_;
+  std::filesystem::path effects_pack_;
+  EffectsSet effects_ = EffectsSet::ORIGINAL;
+  EffectsSet wanted_effects_ = EffectsSet::ORIGINAL;
+  bool effects_loaded_ = false;
+  std::array<std::string, static_cast<std::size_t>(SoundId::COUNT)>
+      effect_sources_;
   // Selection for play_sound_if_changed.
   std::optional<SoundId> current_indexed_sound_;
 

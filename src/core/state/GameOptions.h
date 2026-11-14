@@ -163,6 +163,8 @@ struct GameOptions {
   float master_volume = 1.0f;
   // Silence the game while its window is in the background.
   bool mute_unfocused = false;
+  // The enhanced sound pack's effects instead of the 1994 ones.
+  bool enhanced_effects = false;
   // Show the day's turnover report when the turn ends.
   bool automatic_report = true;
   // Mouse and UI modernizations:
