@@ -19,6 +19,7 @@ class FloorPatternFactory {
 public:
   static const std::vector<FloorPattern>& create(SupplierID sid);
 
+  // Before anything reads the table: once it is read, it stays.
   static void preload_from_path(const std::string& kachinfo_path);
 
 private:

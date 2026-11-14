@@ -6,6 +6,7 @@
 #include "core/factories/SupplierFactory.h"
 
 #include "core/factories/DataFile.h"
+#include "core/factories/FillOnce.h"
 #include "core/supply/Supplier.h"
 
 #include <algorithm>
@@ -35,18 +36,21 @@ SupplierData read_supplier(const data_file::json& entry, SupplierID id) {
   };
 }
 
+std::unordered_map<SupplierID, std::unique_ptr<const Supplier>> cache;
+FillOnce filled;
+
+// The data and every supplier made from it, at once.
 void ensure_loaded() {
-  if (!suppliers_.empty()) {
-    return;
-  }
-  suppliers_ = data_file::load<SupplierData, SupplierID>("suppliers.json",
-                                                         read_supplier);
+  filled.ensure([] {
+    suppliers_ = data_file::load<SupplierData, SupplierID>("suppliers.json",
+                                                           read_supplier);
+    for (const auto& [id, data] : suppliers_) {
+      cache.emplace(id, std::make_unique<Supplier>(data));
+    }
+  });
 }
 
 } // namespace
-
-std::unordered_map<SupplierID, std::unique_ptr<const Supplier>>
-    SupplierFactory::cache_ = {};
 
 std::vector<const Supplier*> SupplierFactory::all_suppliers() {
   ensure_loaded();
@@ -82,17 +86,7 @@ SupplierFactory::all_suppliers_by_type(SupplierType type, int current_year) {
 }
 
 const Supplier* SupplierFactory::create_supplier(SupplierID supplier_id) {
-  auto it = cache_.find(supplier_id);
-  if (it != cache_.end()) {
-    return it->second.get();
-  }
-
   ensure_loaded();
-  const auto found = suppliers_.find(supplier_id);
-  if (found == suppliers_.end()) {
-    return nullptr;
-  }
-  auto [pos, _] =
-      cache_.emplace(supplier_id, std::make_unique<Supplier>(found->second));
-  return pos->second.get();
+  const auto it = cache.find(supplier_id);
+  return it == cache.end() ? nullptr : it->second.get();
 }

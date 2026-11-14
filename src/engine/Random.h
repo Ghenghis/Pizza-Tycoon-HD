@@ -30,6 +30,9 @@ uint16_t ansi_rand15();
 // Seed both streams. Called once at startup.
 void seed(uint32_t s);
 
+// Both streams are the calling thread's own: draws, seeds and states on one
+// thread never touch another's.
+
 // Direct state access for serialization.
 uint32_t get_state();
 void set_state(uint32_t s);

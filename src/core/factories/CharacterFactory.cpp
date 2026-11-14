@@ -8,9 +8,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
+#include <cstddef>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -20,8 +23,35 @@
 #include "engine/Logger.h"
 #include "resources/util/FileUtils.h"
 
-std::unordered_map<int, std::unique_ptr<core::character::CharacterData>>
-    CharacterFactory::cache_ = {};
+namespace {
+
+// CharacterData::id is a byte, so no character has an id past this.
+constexpr std::size_t character_slots = 256;
+
+// One character, made once. ready is set only after data is complete, so a
+// reader that sees it needs no lock.
+struct CharacterSlot {
+  std::once_flag once;
+  std::atomic<core::character::CharacterData*> ready{nullptr};
+  std::unique_ptr<core::character::CharacterData> data;
+};
+
+std::array<CharacterSlot, character_slots> characters;
+
+template <typename Make>
+core::character::CharacterData* made_once(int id, Make make) {
+  CharacterSlot& slot = characters[static_cast<std::size_t>(id)];
+  if (auto* ready = slot.ready.load(std::memory_order_acquire)) {
+    return ready;
+  }
+  std::call_once(slot.once, [&] {
+    slot.data = make();
+    slot.ready.store(slot.data.get(), std::memory_order_release);
+  });
+  return slot.ready.load(std::memory_order_acquire);
+}
+
+} // namespace
 
 #pragma pack(push, 1)
 
@@ -117,22 +147,17 @@ static void populate_character_data(core::character::CharacterData* c,
 core::character::CharacterData*
 CharacterFactory::create_character(int id, core::character::JobRole role) {
   assert(id >= 0);
-  auto it = cache_.find(id);
-  if (it != cache_.end()) {
-    return it->second.get();
+  if (id < 0 || static_cast<std::size_t>(id) >= character_slots) {
+    fatal("Character " + std::to_string(id) + " can't exist");
   }
   if (id < core::character::JobMarket::ORIGINAL_SLOTS) {
-    return create_original(id);
+    return made_once(id, [id] { return make_original(id); });
   }
-  return create_double(id, role);
+  return made_once(id, [id, role] { return make_double(id, role); });
 }
 
-core::character::CharacterData* CharacterFactory::create_original(int id) {
-  auto it = cache_.find(id);
-  if (it != cache_.end()) {
-    return it->second.get();
-  }
-
+std::unique_ptr<core::character::CharacterData>
+CharacterFactory::make_original(int id) {
   auto c = std::make_unique<core::character::CharacterData>();
   c->id = static_cast<uint8_t>(id);
 
@@ -152,20 +177,17 @@ core::character::CharacterData* CharacterFactory::create_original(int id) {
       cf.picture_data, cf.picture_data + sizeof(cf.picture_data)));
 
   populate_character_data(c.get(), cf);
-
-  auto* ptr = c.get();
-  cache_[id] = std::move(c);
-  return ptr;
+  return c;
 }
 
-core::character::CharacterData*
-CharacterFactory::create_double(int id, core::character::JobRole role) {
+std::unique_ptr<core::character::CharacterData>
+CharacterFactory::make_double(int id, core::character::JobRole role) {
   // slot is the 0-based index within all doubles
   // base_id is which original portrait/stats to reuse (wraps at
   // ORIGINAL_SLOTS).
   int slot = id - core::character::JobMarket::ORIGINAL_SLOTS;
   int base_id = slot % core::character::JobMarket::ORIGINAL_SLOTS;
-  auto* base = create_original(base_id);
+  auto* base = create_character(base_id);
 
   auto c = std::make_unique<core::character::CharacterData>(*base);
   c->id = static_cast<uint8_t>(id);
@@ -239,8 +261,5 @@ CharacterFactory::create_double(int id, core::character::JobRole role) {
   default:
     break;
   }
-
-  auto* ptr = c.get();
-  cache_[id] = std::move(c);
-  return ptr;
+  return c;
 }

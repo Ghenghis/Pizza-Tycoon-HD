@@ -1517,48 +1517,77 @@ void activate(const SaveSlot& slot, SlotManifest& manifest,
   remove_retired(slot, manifest);
 }
 
-// The worker's half of a timed checkpoint: write the version, check it
-// every way but by building it, and leave it waiting for its load check.
-void write_timed_checkpoint(const fs::path& path, const NewVersion& version,
-                            bool& written, std::string& error) {
-  const SaveSlot slot(path);
-  Staged staged;
-  if (!stage_version(slot, version, staged)) {
-    error = staged.newer ? "a newer build keeps these versions"
-                         : "it could not be written: " + staged.code.message();
+// Before a new timed checkpoint: the slot's file catches up with the
+// version promoted since, which the game thread left to the worker so that
+// promoting stays one small write.
+void bring_slot_file_in_step(const SaveSlot& slot) {
+  const SaveSlot::ManifestRead read = slot.read_manifest();
+  if (!read.manifest || !read.manifest->active) {
     return;
   }
+  const SaveVersion& active = *read.manifest->find(*read.manifest->active);
+  const FileDigest wanted{.size = active.size, .checksum = active.checksum};
+  const FileRead current = read_whole_file(slot.file(), MAX_SAVE_FILE_SIZE);
+  if (current.bytes && digest_of(*current.bytes) == wanted) {
+    return;
+  }
+  const FileRead bytes =
+      read_whole_file(slot.version_path(active.sequence), MAX_SAVE_FILE_SIZE);
+  if (!bytes.bytes || digest_of(*bytes.bytes) != wanted) {
+    return; // loading takes it from the versions anyway
+  }
+  if (const util::AtomicWriteResult refreshed =
+          util::write_file_atomically(slot.file(), *bytes.bytes);
+      !refreshed) {
+    Logger::warn("{} still holds an earlier version ({})", display(slot.file()),
+                 refreshed.error);
+  }
+}
+
+// The worker's half of a timed checkpoint: write the version and check it
+// every way, the build included, then leave it for the game thread to
+// promote. A version that fails a check stays a candidate with the reason.
+void write_timed_checkpoint(const fs::path& path, const NewVersion& version,
+                            const std::function<std::optional<std::string>(
+                                std::string_view, const std::string&)>& build,
+                            CheckpointJob::Shared& shared) {
+  const SaveSlot slot(path);
+  bring_slot_file_in_step(slot);
+  Staged staged;
+  if (!stage_version(slot, version, staged)) {
+    shared.error = staged.newer
+                       ? "a newer build keeps these versions"
+                       : "it could not be written: " + staged.code.message();
+    return;
+  }
+  const std::string name = display(slot.version_path(staged.sequence));
   std::string reason = staged.reason;
   VersionLevel level = VersionLevel::Written;
   if (staged.on_disk) {
-    // As far as can go without building: it decodes, migrates and passes
-    // every structural check to the very document that was captured.
-    LoadProblem problem;
-    std::optional<json> document = read_save_document(
-        *staged.on_disk, display(slot.version_path(staged.sequence)), problem);
-    if (!document) {
-      reason = problem.detail;
+    level = VersionLevel::IntegrityChecked;
+    if (std::optional<std::string> why = build(*staged.on_disk, name)) {
+      reason = std::move(*why);
     }
     else {
-      document->erase("saved_at");
-      const std::string read_back = fingerprint_hash(document->dump());
-      if (read_back == version.expected) {
-        level = VersionLevel::IntegrityChecked;
-        reason = awaiting_load_check;
-      }
-      else {
-        reason = "it reads back as another game: fingerprint " + read_back +
-                 ", not " + version.expected;
-      }
+      level = VersionLevel::LoadVerified;
+      reason = awaiting_promotion;
     }
   }
-  if (!commit_version(slot, staged, level, reason, nullptr)) {
-    error = "its manifest could not be written";
+  SaveVersion& written = *staged.manifest.find(staged.sequence);
+  written.level = level;
+  written.status = VersionStatus::Candidate;
+  written.reason = reason;
+  apply_retention(staged.manifest);
+  if (const util::AtomicWriteResult committed =
+          slot.write_manifest(staged.manifest);
+      !committed) {
+    shared.error = "its manifest could not be written: " + committed.error;
     return;
   }
-  written = level == VersionLevel::IntegrityChecked;
-  if (!written) {
-    error = reason;
+  shared.sequence = staged.sequence;
+  shared.ready = level == VersionLevel::LoadVerified;
+  if (!shared.ready) {
+    shared.error = reason;
   }
 }
 
@@ -1862,7 +1891,7 @@ bool SaveGameManager::save_to_slot(const GameState& state,
 std::optional<std::string>
 SaveGameManager::verify_build(std::string_view bytes, const std::string& name,
                               const std::string& expected_fingerprint,
-                              const GameState& like,
+                              const GameOptions& options,
                               const GameContext& context) {
   LoadProblem problem;
   const std::optional<json> document = read_save_document(bytes, name, problem);
@@ -1874,7 +1903,7 @@ SaveGameManager::verify_build(std::string_view bytes, const std::string& name,
   std::optional<std::string> why;
   try {
     auto scratch = std::make_unique<GameState>();
-    scratch->options() = like.options();
+    scratch->options() = options;
     json_to_state(*document, *scratch, context);
     const std::string built = fingerprint(*scratch, context).hash;
     if (built != expected_fingerprint) {
@@ -1935,7 +1964,7 @@ bool SaveGameManager::save_version(const GameState& state,
     Logger::info("Checking the new save by building it apart from the game");
     if (std::optional<std::string> why = verify_build(
             *staged.on_disk, display(slot.version_path(staged.sequence)),
-            version.expected, state, context)) {
+            version.expected, state.options(), context)) {
       reason = std::move(*why);
     }
     else {
@@ -2033,8 +2062,9 @@ bool SaveGameManager::restore_version(const GameState& state,
       file, FileDigest{.size = version->size, .checksum = version->checksum},
       reason);
   if (bytes) {
-    if (std::optional<std::string> why = verify_build(
-            *bytes, display(file), version->fingerprint, state, context)) {
+    if (std::optional<std::string> why =
+            verify_build(*bytes, display(file), version->fingerprint,
+                         state.options(), context)) {
       reason = std::move(*why);
     }
   }
@@ -2124,7 +2154,7 @@ std::unique_ptr<CheckpointJob> SaveGameManager::start_timed_checkpoint(
     // Unchanged since the newest checkpoint, verified or still waiting.
     for (const SaveVersion& v : read.manifest->versions) {
       const bool usable =
-          v.status == VersionStatus::Working || v.reason == awaiting_load_check;
+          v.status == VersionStatus::Working || v.reason == awaiting_promotion;
       if (usable) {
         if (v.fingerprint == now) {
           report(CheckpointResult::Unchanged);
@@ -2136,12 +2166,22 @@ std::unique_ptr<CheckpointJob> SaveGameManager::start_timed_checkpoint(
   }
 
   auto job = std::make_unique<CheckpointJob>();
-  job->thread_ =
-      std::jthread([shared = job->shared_, path, document = std::move(document),
-                    made_for = std::string(made_for)]() mutable {
+  job->thread_ = std::jthread(
+      [shared = job->shared_, path, document = std::move(document),
+       made_for = std::string(made_for), options = state.options()]() mutable {
+        // The build has this thread's own random streams and reads the
+        // factories' tables without locks; it gets a context of its own, as
+        // nothing in a build may reach the game's.
+        const GameContext own_context;
         try {
           const NewVersion version = capture(std::move(document), made_for);
-          write_timed_checkpoint(path, version, shared->written, shared->error);
+          write_timed_checkpoint(
+              path, version,
+              [&](std::string_view bytes, const std::string& name) {
+                return verify_build(bytes, name, version.expected, options,
+                                    own_context);
+              },
+              *shared);
         }
         catch (const std::exception& e) {
           shared->error = e.what();
@@ -2161,62 +2201,35 @@ std::unique_ptr<CheckpointJob> SaveGameManager::start_timed_checkpoint(
 }
 
 CheckpointResult
-SaveGameManager::verify_pending_checkpoint(const GameState& like,
-                                           const GameContext& context,
-                                           const fs::path& slot_file) {
+SaveGameManager::promote_checkpoint(const CheckpointJob& job,
+                                    const fs::path& slot_file) {
+  if (!job.done()) {
+    return CheckpointResult::Unchanged;
+  }
+  if (!job.ready()) {
+    return CheckpointResult::Failed;
+  }
   const SaveSlot slot(timed_slot(slot_file));
   SaveSlot::ManifestRead read = slot.read_manifest();
-  if (!read.manifest) {
-    return CheckpointResult::Unchanged;
+  SaveVersion* version =
+      read.manifest ? read.manifest->find(job.sequence()) : nullptr;
+  if (version == nullptr || version->level != VersionLevel::LoadVerified ||
+      version->reason != awaiting_promotion) {
+    Logger::warn("Timed checkpoint {} is no longer waiting to be promoted",
+                 job.sequence());
+    return CheckpointResult::Failed;
   }
-  SlotManifest manifest = std::move(*read.manifest);
-  const SaveVersion* newest_working = manifest.newest_working();
-  SaveVersion* pending = nullptr;
-  for (SaveVersion& v : manifest.versions) {
-    if (v.reason == awaiting_load_check &&
-        (newest_working == nullptr || v.sequence > newest_working->sequence)) {
-      pending = &v;
-      break; // newest first
-    }
-  }
-  if (pending == nullptr) {
-    return CheckpointResult::Unchanged;
-  }
-
-  const fs::path file = slot.version_path(pending->sequence);
-  std::string reason;
-  const std::optional<std::string> bytes = check_integrity(
-      file, FileDigest{.size = pending->size, .checksum = pending->checksum},
-      reason);
-  if (bytes) {
-    if (std::optional<std::string> why = verify_build(
-            *bytes, display(file), pending->fingerprint, like, context)) {
-      reason = std::move(*why);
-    }
-  }
-  const std::uint64_t sequence = pending->sequence;
-  if (reason.empty()) {
-    pending->status = VersionStatus::Working;
-    pending->level = VersionLevel::LoadVerified;
-    pending->reason.clear();
-    manifest.active = sequence;
-  }
-  else {
-    pending->reason = reason;
-  }
+  SlotManifest& manifest = *read.manifest;
+  version->status = VersionStatus::Working;
+  version->reason.clear();
+  manifest.active = job.sequence();
   apply_retention(manifest);
   if (const util::AtomicWriteResult committed = slot.write_manifest(manifest);
       !committed) {
     Logger::warn("Checkpoint failed: {}", committed.error);
     return CheckpointResult::Failed;
   }
-  if (!reason.empty()) {
-    Logger::warn("Timed checkpoint {} failed its load check: {}", sequence,
-                 reason);
-    return CheckpointResult::Failed;
-  }
-  activate(slot, manifest, *bytes);
-  Logger::info("Timed checkpoint {} is load-verified", sequence);
+  Logger::info("Timed checkpoint {} is a working version", job.sequence());
   return CheckpointResult::Written;
 }
 
@@ -2294,8 +2307,9 @@ bool SaveGameManager::restore_as_branch(const GameState& state,
       file, FileDigest{.size = version->size, .checksum = version->checksum},
       reason);
   if (bytes) {
-    if (std::optional<std::string> why = verify_build(
-            *bytes, display(file), version->fingerprint, state, context)) {
+    if (std::optional<std::string> why =
+            verify_build(*bytes, display(file), version->fingerprint,
+                         state.options(), context)) {
       reason = std::move(*why);
     }
   }
@@ -2360,6 +2374,7 @@ void TimedCheckpoints::frame(const GameState& state, const GameContext& context,
                              std::chrono::milliseconds time, bool playing) {
   if (job_ && job_->done()) {
     job_->wait();
+    static_cast<void>(SaveGameManager::promote_checkpoint(*job_, slot_file_));
     job_.reset();
   }
   if (playing) {
@@ -2370,12 +2385,6 @@ void TimedCheckpoints::frame(const GameState& state, const GameContext& context,
   if (!due || job_) {
     return;
   }
-  // A day or week begins: the moment the day's start already stops for the
-  // autosave, so the waiting checkpoint gets its load check now.
-  if (timer_.boundary_pending()) {
-    static_cast<void>(
-        SaveGameManager::verify_pending_checkpoint(state, context, slot_file_));
-  }
   job_ = SaveGameManager::start_timed_checkpoint(state, context, *due, nullptr,
                                                  slot_file_);
   timer_.taken();
@@ -2384,6 +2393,7 @@ void TimedCheckpoints::frame(const GameState& state, const GameContext& context,
 void TimedCheckpoints::finish() {
   if (job_) {
     job_->wait();
+    static_cast<void>(SaveGameManager::promote_checkpoint(*job_, slot_file_));
     job_.reset();
   }
 }

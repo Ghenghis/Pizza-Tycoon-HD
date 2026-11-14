@@ -7,6 +7,7 @@
 
 #include "core/Demographics.h"
 #include "core/factories/DataFile.h"
+#include "core/factories/FillOnce.h"
 #include "core/restaurant/Furniture.h"
 #include "core/restaurant/RestaurantTypes.h"
 #include "core/supply/Supplier.h"
@@ -47,18 +48,21 @@ FurnitureData read_furniture(const data_file::json& entry, FurnitureType type) {
   };
 }
 
+std::unordered_map<FurnitureType, std::unique_ptr<const Furniture>> cache;
+FillOnce filled;
+
+// The data and every piece made from it, at once.
 void ensure_loaded() {
-  if (!furniture_.empty()) {
-    return;
-  }
-  furniture_ = data_file::load<FurnitureData, FurnitureType>("furniture.json",
-                                                             read_furniture);
+  filled.ensure([] {
+    furniture_ = data_file::load<FurnitureData, FurnitureType>("furniture.json",
+                                                               read_furniture);
+    for (const auto& [type, data] : furniture_) {
+      cache.emplace(type, std::make_unique<Furniture>(data));
+    }
+  });
 }
 
 } // namespace
-
-std::unordered_map<FurnitureType, std::unique_ptr<const Furniture>>
-    FurnitureFactory::cache_ = {};
 
 std::vector<const Furniture*> FurnitureFactory::all_furniture() {
   ensure_loaded();
@@ -101,17 +105,7 @@ FurnitureFactory::get_furniture_type(const Furniture* item) {
 
 const Furniture*
 FurnitureFactory::create_furniture(FurnitureType furniture_type) {
-  auto it = cache_.find(furniture_type);
-  if (it != cache_.end()) {
-    return it->second.get();
-  }
-
   ensure_loaded();
-  const auto found = furniture_.find(furniture_type);
-  if (found == furniture_.end()) {
-    return nullptr;
-  }
-  auto [pos, _] = cache_.emplace(furniture_type,
-                                 std::make_unique<Furniture>(found->second));
-  return pos->second.get();
+  const auto it = cache.find(furniture_type);
+  return it == cache.end() ? nullptr : it->second.get();
 }

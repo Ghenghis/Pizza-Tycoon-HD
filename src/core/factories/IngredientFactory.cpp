@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "core/factories/DataFile.h"
+#include "core/factories/FillOnce.h"
 #include "core/food/Ingredient.h"
 #include "core/food/IngredientType.h"
 #include "engine/Fatal.h"
@@ -41,13 +42,7 @@ IngredientData read_ingredient(const data_file::json& entry,
   };
 }
 
-void ensure_loaded() {
-  if (!ingredients_.empty()) {
-    return;
-  }
-  ingredients_ = data_file::load<IngredientData, IngredientType>(
-      "ingredients.json", read_ingredient);
-}
+FillOnce filled;
 
 } // namespace
 
@@ -55,18 +50,19 @@ std::unordered_map<int, std::unique_ptr<Ingredient>>
     IngredientFactory::cache_{};
 
 Ingredient* IngredientFactory::create_ingredient(int ingredient_id) {
-  auto it = cache_.find(ingredient_id);
-  if (it != cache_.end()) {
-    return it->second.get();
-  }
-
-  ensure_loaded();
-  const auto found =
-      ingredients_.find(static_cast<IngredientType>(ingredient_id));
-  if (found == ingredients_.end()) {
+  // Every ingredient at once, the first time, so a game being built on a
+  // worker reads the same table the game does, without locks.
+  filled.ensure([] {
+    ingredients_ = data_file::load<IngredientData, IngredientType>(
+        "ingredients.json", read_ingredient);
+    for (const auto& [type, data] : ingredients_) {
+      cache_.emplace(static_cast<int>(type),
+                     std::make_unique<Ingredient>(data));
+    }
+  });
+  const auto it = cache_.find(ingredient_id);
+  if (it == cache_.end()) {
     fatal(compat::format("IngredientId {} is unknown.", ingredient_id));
   }
-  auto [pos, _] = cache_.emplace(ingredient_id,
-                                 std::make_unique<Ingredient>(found->second));
-  return pos->second.get();
+  return it->second.get();
 }

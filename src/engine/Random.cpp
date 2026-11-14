@@ -11,8 +11,12 @@
 namespace engine::random {
 
 namespace {
-uint32_t simulation_state = 1;
-uint32_t presentation_state = 1;
+// One of each stream per thread. The game draws on its own thread only; a
+// worker that builds a game apart from it, to check a save, draws from and
+// restores streams of its own and never moves the game's. A new thread
+// starts at 1, as the program does.
+thread_local uint32_t simulation_state = 1;
+thread_local uint32_t presentation_state = 1;
 
 // An arbitrary offset so the two streams do not start from the same value.
 constexpr uint32_t presentation_seed_offset = 1000001u;

@@ -8,6 +8,7 @@
 
 #include "core/character/Training.h"
 #include "core/factories/DataFile.h"
+#include "core/factories/FillOnce.h"
 #include "core/finance/Money.h"
 #include "engine/Fatal.h"
 
@@ -32,12 +33,14 @@ TrainingData read_training(const data_file::json& entry, TrainingType course) {
   };
 }
 
+FillOnce filled;
+
+// Filled whole once, never changed after: read without locks.
 void ensure_loaded() {
-  if (!trainings_.empty()) {
-    return;
-  }
-  trainings_ = data_file::load<TrainingData, TrainingType>("trainings.json",
-                                                           read_training);
+  filled.ensure([] {
+    trainings_ = data_file::load<TrainingData, TrainingType>("trainings.json",
+                                                             read_training);
+  });
 }
 
 } // namespace

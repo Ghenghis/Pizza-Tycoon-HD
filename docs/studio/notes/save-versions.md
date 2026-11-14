@@ -160,32 +160,40 @@ If the restore is cut short between steps 2 and 3, loading already takes the res
 Every other version stays, so restoring the previous one undoes a restore. The running game is not
 touched.
 
-## Timed checkpoints: `TimedCheckpoints`, `start_timed_checkpoint`, `verify_pending_checkpoint`
+## Timed checkpoints: `TimedCheckpoints`, `start_timed_checkpoint`, `promote_checkpoint`
 
 The game calls `TimedCheckpoints::frame` every frame, telling it whether the game itself ran.
 `CheckpointTimer` asks for a checkpoint after five minutes of play, and when a game day or a game
 week begins. A week counts over a day, and a boundary over the interval. They go to the slot
-`AUTOCHK.plsave`, which nothing else writes.
+`AUTOCHK.plsave`, which nothing else writes. One job runs at a time.
 
 - **On the game thread, at a consistent tick:** capture `state_to_json` and its fingerprint. If the
-  fingerprint equals the newest checkpoint's, working or still waiting, nothing more happens
+  fingerprint equals the newest checkpoint's, working or awaiting promotion, nothing more happens
   (`Unchanged`).
-- **On a worker:** encode, list, write and integrity-check the version (steps 1 to 3 above), then
-  decode, migrate and validate it. The document must read back to the captured fingerprint. The
-  version is then committed as a candidate at `integrity-checked`, with the reason
-  `awaiting its load check`.
-- **On the game thread, when a day or week begins** (the moment the day's start already stops for
-  the autosave): `verify_pending_checkpoint` builds the newest waiting checkpoint apart from the
-  game and promotes it to a working, active version.
+- **On the job's worker:**
+  - bring the slot's file up to the active version;
+  - encode, list, write and integrity-check the new version (steps 1 to 3 above);
+  - build it apart from the game, with the game's options and an empty context, and check its
+    fingerprint.
 
-The load check stays on the game thread for now, for two reasons:
+  It is then committed as a candidate at `load-verified`, with the reason `awaiting promotion`. A
+  failure leaves it a candidate with its reason.
+- **On the game thread, once the job is done:** `promote_checkpoint` makes it working and active.
+  That is one small manifest write. The slot's file catches up on the next job's worker.
 
-- Building a game uses the shared simulation random stream (`engine::random`, a plain global).
-- It fills the factories' caches, which have no locks.
+What makes the build safe on a worker:
 
-Building on a worker would corrupt the running game's sequence. Moving it off the frame needs that
-stream to be per-thread and those caches to be locked. The hidden `[bench][checkpoint]` test
-measures what each step costs.
+- `engine::random`'s simulation and presentation streams are `thread_local`. A worker starts at 1,
+  as the program does, and its `set_state` and draws never touch the game's sequence.
+- The factories' tables are filled once and then only read:
+  - ingredients, suppliers, furniture, trainings and floor patterns are filled whole under
+    `FillOnce` (`std::call_once`, behind an atomic flag);
+  - each character is made once in its own slot, published through an atomic pointer.
+
+  Reads take no lock.
+- The build gets its own `GameContext`, so nothing in it can reach the game's managers.
+
+The hidden `[bench][checkpoint]` case measures what each step costs.
 
 ## Recovery Center model
 

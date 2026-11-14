@@ -12,13 +12,12 @@
 #include <unordered_map>
 #include <vector>
 
+// The table is filled whole the first time it is needed and never changes
+// after, so a game being built on a worker reads it without locks.
 class SupplierFactory {
 public:
   static const Supplier* create_supplier(SupplierID);
   static std::vector<const Supplier*> all_suppliers();
   static std::vector<const Supplier*> all_suppliers_by_type(SupplierType,
                                                             int current_year);
-
-private:
-  static std::unordered_map<SupplierID, std::unique_ptr<const Supplier>> cache_;
 };

@@ -5,6 +5,7 @@
  */
 
 #include "core/factories/FloorPatternFactory.h"
+#include "core/factories/FillOnce.h"
 #include "core/factories/SupplierFactory.h"
 #include "core/supply/Supplier.h"
 #include "engine/Fatal.h"
@@ -24,6 +25,8 @@ inline SupplierID to_supplier_id(uint8_t raw) {
   const auto norm = static_cast<uint8_t>(raw - 1);
   return static_cast<SupplierID>(norm);
 }
+
+FillOnce filled;
 } // namespace
 
 void FloorPatternFactory::preload_from_path(const std::string& path) {
@@ -42,10 +45,12 @@ const std::vector<FloorPattern>& FloorPatternFactory::create(SupplierID sid) {
 }
 
 void FloorPatternFactory::ensure_loaded() {
-  if (by_supplier_.empty()) {
+  // Read once, then never changed: a game being built on a worker reads the
+  // table without locks.
+  filled.ensure([] {
     auto bytes = slurp(kachinfo_path_);
     parse_and_index(bytes);
-  }
+  });
 }
 
 void FloorPatternFactory::parse_and_index(std::span<const uint8_t> bytes) {
