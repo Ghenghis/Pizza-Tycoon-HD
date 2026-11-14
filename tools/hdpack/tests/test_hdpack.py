@@ -280,3 +280,13 @@ def test_cli_parses_small_workflow_options() -> None:
     args = hdpack.build_parser().parse_args(["comfy", "e", "p", "--small-area", "0", "--scale", "12"])
     assert (args.small_area, args.scale) == (0, 12)
     assert args.small_workflow.endswith("upscale_only_api.json")
+
+
+def test_mmpx_pack_is_valid(small_export: Path, tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    counts = hdpack.upscale_pack(small_export, pack, 12, "mmpx")
+    assert (counts.written, counts.failed) == (4, 0)
+    with Image.open(pack / "bob/moebel/0000.png") as out:
+        assert out.size == (72, 96)
+        assert out.getpixel((0, 0))[3] == 0
+    assert hdpack.validate_pack(small_export, pack).errors == []

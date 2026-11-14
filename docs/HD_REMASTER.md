@@ -159,6 +159,12 @@ custom nodes are needed for the shipped workflows.
    `prompts.json` (prompt and `denoise` per group of files), then run the
    rest. Runs resume: files already in the pack are skipped unless `--force`.
 
+Sprites and other small pictures are best done without AI:
+`hdpack.py upscale export/ pack/ --scale 12 --method mmpx --only 'bob/*'`
+magnifies them with MMPX, a pixel-art scaler that keeps edges and colours
+(about 20 s for all 1,554 frames). Diffusion models need more pixels than a
+32x40 sprite has.
+
 Workflows (`tools/hdpack/workflows/`, ComfyUI API format with `{{placeholders}}`):
 
 * `upscale_only_api.json`: two model upscale passes (16x), then a resize to

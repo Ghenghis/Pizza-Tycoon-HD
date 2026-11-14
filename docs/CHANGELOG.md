@@ -16,6 +16,12 @@ Unreleased
   byte-for-byte the same with it on and off.
 * Fix: `GameState::game_mode_` was left uninitialized until a game was set
   up, which made state fingerprints differ between identical runs.
+* `hdpack.py upscale --method mmpx`: pixel-art magnification (MMPX, the
+  engine's own rules, vectorised in `tools/hdpack/pixelart.py` and checked
+  against a line-by-line copy of the C++) to 16x, then an alpha-correct
+  area average to the target. All 1,554 sprite frames take about 20 s at
+  12x; edges stay crisp and no colour is invented, where AI repainting
+  turned small sprites to mush.
 * `bench [frames]` console command: frame times of the current screen,
   worst case (everything redrawn every frame).
 * `--exec` batch runs keep their window hidden.

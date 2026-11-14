@@ -42,6 +42,8 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageFilter
 
+import pixelart
+
 # Must match resources::HdPack::aspect_tolerance in the engine.
 ASPECT_TOLERANCE = 0.02
 MANIFEST_FORMAT = 1
@@ -177,6 +179,9 @@ UPSCALE_METHODS = {
     "nearest": Image.Resampling.NEAREST,
     "lanczos": Image.Resampling.LANCZOS,
     "bicubic": Image.Resampling.BICUBIC,
+    # Pixel-art magnification (pixelart.py): crisp edges, no invented colour.
+    # Best for sprites and small pictures, where AI repainting fails.
+    "mmpx": Image.Resampling.BOX,
 }
 
 
@@ -216,6 +221,8 @@ def upscale_pack(
                 size = asset.target_size(scale)
                 if method == "nearest":
                     out = to_rgba(src).resize(size, Image.Resampling.NEAREST)
+                elif method == "mmpx":
+                    out = pixelart.upscale(src, size)
                 else:
                     out = premultiplied_resize(src, size, UPSCALE_METHODS[method])
             dst.parent.mkdir(parents=True, exist_ok=True)
