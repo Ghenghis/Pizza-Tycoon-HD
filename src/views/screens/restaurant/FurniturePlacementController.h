@@ -13,6 +13,7 @@
 
 #include "core/common/Ids.h"
 #include "core/restaurant/FurnitureBatch.h"
+#include "core/restaurant/FurniturePlacement.h"
 #include "core/supply/Supplier.h"
 #include "engine/geom/Spaces.h"
 
@@ -95,6 +96,8 @@ private:
   void check_placement_complete_and_navigate_back();
 
   void place_cursor_item(WorldPoint p);
+  // Sizes as this view draws them, for the core placement rules.
+  [[nodiscard]] core::restaurant::FurnitureSizeFn drawn_size() const;
   [[nodiscard]] WorldRect candidate_rect(WorldPoint p,
                                          const PlacedFurniture& ghost) const;
   bool can_place_now(WorldPoint p, WorldRect& out_candidate,

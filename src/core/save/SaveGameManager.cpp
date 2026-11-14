@@ -242,6 +242,27 @@ json metadata_from_save_json(const json& j) {
   meta["player_names"] = std::move(names);
   meta["active_player"] = j.value("active_player", -1);
   meta["active_city"] = j.value("active_city", -1);
+  // A location outside the original ten is named by its embedded definition
+  // (location-contract.md section 6.2); Classic saves get no such member.
+  const int active_city = meta["active_city"].get<int>();
+  if (const auto it = j.find("scenario");
+      it != j.end() && it->is_object() && active_city >= 0) {
+    const auto roster = it->find("roster");
+    if (roster != it->end() && roster->is_array() &&
+        static_cast<std::size_t>(active_city) < roster->size()) {
+      const json& entry = (*roster)[static_cast<std::size_t>(active_city)];
+      const auto definition = entry.find("definition");
+      if (definition != entry.end() && definition->is_object()) {
+        const auto display = definition->find("display");
+        if (display != definition->end() && display->is_object()) {
+          const auto name = display->find("name");
+          if (name != display->end() && name->is_string()) {
+            meta["active_city_name"] = *name;
+          }
+        }
+      }
+    }
+  }
   return meta;
 }
 
@@ -1467,6 +1488,7 @@ SaveGameManager::read_save_metadata(const std::string& filename) {
 
     meta.active_player = m.value("active_player", -1);
     meta.active_city = m.value("active_city", -1);
+    meta.active_city_name = m.value("active_city_name", std::string{});
 
     return meta;
   }

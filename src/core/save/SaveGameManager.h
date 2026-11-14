@@ -69,6 +69,10 @@ struct SaveMetadata {
   std::array<std::string, NUMBER_OF_PLAYERS> player_names;
   int active_player = -1;
   int active_city = -1;
+  // The display name of the active location when it is not one of the
+  // original ten (a version 4 save); empty otherwise, and the original name
+  // comes from the city number.
+  std::string active_city_name;
 };
 
 // Highscore files are basically the same as save games, zlib compressed json

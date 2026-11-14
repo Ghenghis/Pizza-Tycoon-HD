@@ -18,6 +18,7 @@
 #include "core/finance/Ledger.h"
 #include "core/finance/Money.h"
 #include "core/restaurant/Furniture.h"
+#include "core/restaurant/FurniturePlacement.h"
 #include "core/restaurant/PlacedFurniture.h"
 #include "core/restaurant/Restaurant.h"
 #include "core/restaurant/RestaurantTypes.h"
@@ -39,16 +40,7 @@ namespace views::screens::restaurant {
 
 namespace {
 
-Rotation rotation_towards(const WorldRect& from, const WorldRect& to) {
-  const WorldPoint fc = from.center();
-  const WorldPoint tc = to.center();
-  const WorldDelta wd = tc - fc;
-
-  if (std::abs(wd.dx) >= std::abs(wd.dy)) {
-    return (wd.dx >= 0) ? Rotation::EAST : Rotation::WEST;
-  }
-  return (wd.dy >= 0) ? Rotation::SOUTH : Rotation::NORTH;
-}
+using core::restaurant::rotation_towards;
 
 } // namespace
 
@@ -200,134 +192,43 @@ void FurniturePlacementController::pick_up(core::FurnitureId id) {
   update_buttons();
 }
 
+// The checks themselves live in core (core/restaurant/FurniturePlacement.h),
+// so scripted runs place furniture by the same rules; the view supplies the
+// sizes it draws with.
+core::restaurant::FurnitureSizeFn
+FurniturePlacementController::drawn_size() const {
+  return [this](const PlacedFurniture& pf) {
+    return view_.bob_renderer_for(pf).size(pf);
+  };
+}
+
 WorldRect FurniturePlacementController::candidate_rect(
     WorldPoint p, const PlacedFurniture& ghost) const {
-  const auto size = view_.bob_renderer_for(ghost).size(ghost);
-  // Furniture top-left should be at the click point
-  return WorldRect{p.x, p.y, size.w, size.h};
+  return core::restaurant::candidate_rect(p, ghost, drawn_size());
 }
 
 bool FurniturePlacementController::intersects_any_blocking_furniture(
     const WorldRect& candidate, const PlacedFurniture& cand,
     const PlacedFurniture*& nearest_table_out,
     WorldRect& nearest_table_rect_out) const {
-
-  nearest_table_out = nullptr;
-  nearest_table_rect_out = {};
-
-  const auto* cand_f = cand.furniture();
-  const auto cand_cat = cand_f->category();
-  const auto cand_layer = cand_f->placement_layer();
-
-  const auto dist_sq = [](WorldPoint a, WorldPoint b) {
-    const int dx = a.x - b.x;
-    const int dy = a.y - b.y;
-    return (dx * dx) + (dy * dy);
-  };
-
-  for (const auto& pf : view_.current_furniture_list()) {
-    const auto other_size = view_.bob_renderer_for(*pf).size(*pf);
-    const WorldRect other{pf->origin(), other_size};
-
-    if (!candidate.intersects(other)) {
-      continue;
-    }
-
-    const auto* other_f = pf->furniture();
-    const auto other_cat = other_f->category();
-
-    // Allowed overlaps
-
-    // CHAIR on TABLE:
-    if (cand_cat == FurnitureCategory::CHAIR &&
-        other_cat == FurnitureCategory::TABLE) {
-      // Disallow if chair center lies inside the table
-      if (other.contains(candidate.center())) {
-        return true; // reject
-      }
-
-      // Track nearest table center
-      if (!nearest_table_out) {
-        nearest_table_out = pf.get();
-        nearest_table_rect_out = other;
-      }
-      else {
-        const WorldPoint best_c = nearest_table_rect_out.center();
-        const WorldPoint this_c = other.center();
-        const WorldPoint cc = candidate.center();
-        if (dist_sq(this_c, cc) < dist_sq(best_c, cc)) {
-          nearest_table_out = pf.get();
-          nearest_table_rect_out = other;
-        }
-      }
-      continue; // allowed overlap; keep checking others
-    }
-
-    // TABLE on CHAIR
-    if (cand_cat == FurnitureCategory::TABLE &&
-        other_cat == FurnitureCategory::CHAIR) {
-      // Disallow if table center lies inside the chair
-      if (other.contains(candidate.center())) {
-        return true; // reject
-      }
-      continue; // allowed overlap; keep checking others
-    }
-
-    // DECOR (Top layer) on TABLE:
-    if (cand_cat == FurnitureCategory::DECOR &&
-        cand_layer == PlacementLayer::Top &&
-        other_cat == FurnitureCategory::TABLE) {
-      continue; // allowed overlap; keep checking others
-    }
-
-    // Default: any other overlap blocks placement
-    return true;
-  }
-
-  // no blocking collisions
-  return false;
+  return core::restaurant::intersects_any_blocking_furniture(
+      candidate, cand, view_.current_furniture_list(), drawn_size(),
+      nearest_table_out, nearest_table_rect_out);
 }
 
 bool FurniturePlacementController::intersects_wall(const WorldRect& r) const {
   const auto room_size = view_.kitchen_view_ ? view_.restaurant_->kitchen_size()
                                              : view_.restaurant_->size();
-
-  // Walls are 1 tile thick on all sides
-  constexpr int tile_w = LegacyConstants::RESTAURANT_TILE_WIDTH;
-  constexpr int tile_h = LegacyConstants::RESTAURANT_TILE_HEIGHT;
-
-  // Interior rectangle in world coordinates
-  const WorldRect interior{
-      tile_w,               // x: after left wall
-      tile_h,               // y: after top wall
-      room_size.w * tile_w, // width: interior tiles only
-      room_size.h * tile_h  // height: interior tiles only
-  };
-
-  return !interior.contains(r);
+  return core::restaurant::intersects_wall(r, room_size);
 }
 
 // Only block against other Top-layer DECOR that sits on (intersects) this
 // table.
 bool FurniturePlacementController::decor_conflicts_on_table(
     const WorldRect& candidate_map, const WorldRect& table_map_rect) const {
-  for (const auto& up : view_.current_furniture_list()) {
-    const auto* of = up->furniture();
-    if (of->category() != FurnitureCategory::DECOR ||
-        of->placement_layer() != PlacementLayer::Top) {
-      continue;
-    }
-    const Size other_sz = view_.bob_renderer_for(*up).size(*up);
-    const WorldRect other_map{up->origin().x, up->origin().y, other_sz.w,
-                              other_sz.h};
-    if (!other_map.intersects(table_map_rect)) {
-      continue; // decor not on this table
-    }
-    if (candidate_map.intersects(other_map)) {
-      return true; // conflicts with decor already on this table
-    }
-  }
-  return false;
+  return core::restaurant::decor_conflicts_on_table(
+      candidate_map, table_map_rect, view_.current_furniture_list(),
+      drawn_size());
 }
 
 void FurniturePlacementController::face_chair_towards_nearest_table_if_any(

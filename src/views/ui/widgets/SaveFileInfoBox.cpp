@@ -103,8 +103,11 @@ void SaveFileInfoBox::draw(Surface& screen, ViewPoint p, bool is_selected) {
 
     context_.font->render_line_onto(
         block,
-        compat::format("Active: {} ({})", player_name,
-                       core::city_name(core::CityId{info_.active_city})),
+        compat::format(
+            "Active: {} ({})", player_name,
+            info_.active_city_name.empty()
+                ? std::string(core::city_name(core::CityId{info_.active_city}))
+                : info_.active_city_name),
         text_pos, FontFace::SUPERSMA, TEXT_COLOR);
   }
 

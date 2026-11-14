@@ -212,6 +212,15 @@ void close_dialogs(GameState& state) {
       }
       closed = s->on_done;
     }
+    else if (auto* s = ui.top_as<RestaurantStatsState>();
+             s && s->automatic_mode) {
+      // The end-of-day report holds the turn until its dismiss button,
+      // which resumes the pipeline (RestaurantStats.cpp:73-77). None of the
+      // scripts below opens a restaurant, so none of them sees it.
+      ui.pop();
+      state.turn().advance_pipeline();
+      continue;
+    }
     ui.pop();
     if (closed) {
       closed();

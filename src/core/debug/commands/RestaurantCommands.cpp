@@ -6,20 +6,27 @@
 
 #include "core/debug/commands/RestaurantCommands.h"
 
+#include <magic_enum/magic_enum.hpp>
+
 #include "core/character/Player.h"
 #include "core/character/Staff.h"
 #include "core/city/City.h"
 #include "core/city/Property.h"
 #include "core/debug/command/CommonArgs.h"
 #include "core/factories/CharacterFactory.h"
+#include "core/factories/FurnitureFactory.h"
 #include "core/factories/PizzaFactory.h"
 #include "core/factories/RestaurantLayoutFactory.h"
 #include "core/finance/Ledger.h"
 #include "core/food/IngredientCategory.h"
 #include "core/food/IngredientCategoryType.h"
 #include "core/food/ToppingSize.h"
+#include "core/restaurant/Furniture.h"
+#include "core/restaurant/FurniturePlacement.h"
+#include "core/restaurant/PlacedFurniture.h"
 #include "core/restaurant/Restaurant.h"
 #include "core/restaurant/RestaurantEconomy.h"
+#include "core/restaurant/RestaurantLayout.h"
 #include "core/state/GameState.h"
 #include "core/state/RealEstate.h"
 #include "core/supply/ActiveContract.h"
@@ -1114,6 +1121,147 @@ Examples:
   };
 }
 
+static CommandDef make_restaurant_place() {
+  return CommandDef{
+      .name = "place",
+      .description = "Buy one piece of furniture and place it",
+      .help_text =
+          R"(Usage: restaurant place <furniture> <x> <y> [rotation] [restaurant_id]
+
+Buys one piece at its shop price and places it the way the placement mode
+does: kitchenware goes in the kitchen, everything else in the dining room;
+walls and other furniture block it, chairs may overlap tables and face the
+nearest one. x and y are the piece's top-left in pixels from the room's
+first interior pixel (one tile is 24 x 22 pixels).
+
+Arguments:
+  furniture     - Furniture name as in furniture.json, e.g. CAPPUCCINO
+  x, y          - Top-left inside the room, in pixels
+  rotation      - south, west, north or east (chairs and tables)
+  restaurant_id - Restaurant ID (@ for active restaurant)
+
+Examples:
+  restaurant place CAPPUCCINO 48 44         # a table
+  restaurant place WOODEN_CHAIR 30 44 east  # a chair facing east
+  restaurant place OVEN_SMALL 0 0           # an oven in the kitchen
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "furniture",
+                  .type = ArgType::String,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Furniture name",
+              },
+              ArgSpec{
+                  .name = "x",
+                  .type = ArgType::Int,
+                  .optional = false,
+                  .description = "Pixels from the left interior edge",
+                  .min_value = 0,
+                  .max_value = 2000,
+              },
+              ArgSpec{
+                  .name = "y",
+                  .type = ArgType::Int,
+                  .optional = false,
+                  .description = "Pixels from the top interior edge",
+                  .min_value = 0,
+                  .max_value = 2000,
+              },
+              ArgSpec{
+                  .name = "rotation",
+                  .type = ArgType::String,
+                  .optional = true,
+                  .default_provider = DefaultProvider::None,
+                  .description = "south, west, north or east",
+              },
+              active_restaurant_arg(),
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        const auto type =
+            magic_enum::enum_cast<FurnitureType>(ctx.string_arg(0));
+        if (!type) {
+          return CommandResult::error(
+              compat::format("No furniture called {}", ctx.string_arg(0)));
+        }
+        const auto* furniture = FurnitureFactory::create_furniture(*type);
+        if (!furniture) {
+          return CommandResult::error("That furniture cannot be bought");
+        }
+        auto* restaurant = ctx.state.restaurant(ctx.restaurant_id(4));
+        auto* player = ctx.state.active_player();
+        if (!restaurant || !player) {
+          return CommandResult::error("No such restaurant");
+        }
+        const auto owner = restaurant->property().owner_or_tenant();
+        if (!owner || *owner != player->id()) {
+          return CommandResult::error(
+              "The restaurant is not the active player's");
+        }
+        if (!ctx.context.bob) {
+          return CommandResult::error("No sprites loaded to measure with");
+        }
+        if (player->cash_balance() < furniture->price()) {
+          return CommandResult::error(
+              compat::format("{} costs {:w}, more than the player has",
+                             furniture->name(), furniture->price()));
+        }
+
+        auto piece = std::make_unique<PlacedFurniture>(
+            furniture, restaurant->layout()->next_furniture_id(),
+            WorldPoint{0, 0}, core::FurnitureId{UNLINKED_FURNITURE}, 0);
+        if (ctx.has_arg(3)) {
+          const std::string r = ctx.string_arg(3);
+          if (r == "south") {
+            piece->rotate(Rotation::SOUTH);
+          }
+          else if (r == "west") {
+            piece->rotate(Rotation::WEST);
+          }
+          else if (r == "north") {
+            piece->rotate(Rotation::NORTH);
+          }
+          else if (r == "east") {
+            piece->rotate(Rotation::EAST);
+          }
+          else {
+            return CommandResult::error(
+                "Rotation is south, west, north or east");
+          }
+        }
+        const auto origin = core::restaurant::interior_origin();
+        const WorldPoint at{origin.x + static_cast<int>(ctx.int_arg(1)),
+                            origin.y + static_cast<int>(ctx.int_arg(2))};
+        const auto size = core::restaurant::furniture_size_fn(*ctx.context.bob);
+        const auto id = piece->id();
+        const bool kitchen = core::restaurant::goes_in_kitchen(*piece);
+        switch (
+            core::restaurant::place_furniture(*restaurant, piece, at, size)) {
+        case core::restaurant::PlaceResult::Wall:
+          return CommandResult::error("It does not fit inside the room there");
+        case core::restaurant::PlaceResult::Blocked:
+          return CommandResult::error("Other furniture is in the way");
+        case core::restaurant::PlaceResult::Placed:
+          break;
+        }
+
+        // Paid and timed like a shop order of one piece, then its placement.
+        (void)ctx.state.spend_cash(kitchen ? MonthlyCategory::Machines
+                                           : MonthlyCategory::Furniture,
+                                   furniture->price(), restaurant->id());
+        restaurant->purchase_furniture(furniture, 1);
+        ctx.state.advance_time_blocks(3 + 1);
+        restaurant->recalculate_economy_metrics(ctx.state);
+        return CommandResult::success().add_message(compat::format(
+            "Placed {} (furniture {}) in the {} at {},{}", furniture->name(),
+            id.value, kitchen ? "kitchen" : "dining room", ctx.int_arg(1),
+            ctx.int_arg(2)));
+      },
+  };
+}
+
 CommandDef make_restaurant_commands() {
   return CommandDef{
       .name = "restaurant",
@@ -1121,7 +1269,7 @@ CommandDef make_restaurant_commands() {
       .description = "Restaurant management commands",
       .help_text =
           "Manage restaurants: info, clear, open, close, shutdown, ai-layout, "
-          "furniture, stock, create, qs, inspection-timer",
+          "furniture, stock, create, qs, place, inspection-timer",
   }
       .add_subcommand(make_restaurant_info())
       .add_subcommand(make_restaurant_clear())
@@ -1134,6 +1282,7 @@ CommandDef make_restaurant_commands() {
       .add_subcommand(make_restaurant_contract())
       .add_subcommand(make_restaurant_create())
       .add_subcommand(make_restaurant_qs())
+      .add_subcommand(make_restaurant_place())
       .add_subcommand(make_restaurant_inspection_timer());
 }
 
