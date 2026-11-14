@@ -239,6 +239,99 @@ TEST_CASE(
   }
 }
 
+TEST_CASE("HD text from glyph sheets matches the per-line pictures") {
+  test_support::ScopedHdScale scale(4);
+  HdTypefaces::set_enabled(true);
+  const int k = 4;
+  const uint32_t green = gfx::pack_rgba(10, 200, 30, 255);
+  const TextStyle style{
+      .color = gfx::ColorIndex{15},
+      .shadow = ShadowStyle{.offset = {1, 1}, .color = gfx::ColorIndex{1}}};
+  auto typeface = chakra();
+  auto draw = [&](bool sheets) {
+    HdTypefaces::set_sheets_enabled(sheets);
+    Surface s(120, 20, gfx::PaletteHandle{0}, 3);
+    s.attach_hd(std::make_shared<HdImage>(120 * k, 20 * k, green));
+    auto font = block_font();
+    font->attach_hd(typeface,
+                    Font::HdMetrics{.cap_top = 0, .baseline = 5, .scale = 2});
+    typeface->wait_for_prewarm();
+    font->render_line_onto(s, "Pizza 42!", {4, 4}, style);
+    HdTypefaces::set_sheets_enabled(true);
+    REQUIRE(s.hd_list());
+    return std::make_pair(s.hd_list()->cmds().size(), *s.hd());
+  };
+  const auto [quads, from_sheet] = draw(true);
+  const auto [pictures, from_picture] = draw(false);
+  // A quad per letter (and per letter of the shadow) against one picture.
+  CHECK(quads > 10);
+  CHECK(pictures == 2); // the green background and the line
+  REQUIRE(from_sheet.pixels.size() == from_picture.pixels.size());
+  int worst = 0;
+  std::size_t different = 0;
+  for (std::size_t i = 0; i < from_sheet.pixels.size(); ++i) {
+    const uint32_t a = from_sheet.pixels[i];
+    const uint32_t b = from_picture.pixels[i];
+    int d = 0;
+    for (int shift = 0; shift < 32; shift += 8) {
+      d = std::max(d, std::abs(static_cast<int>((a >> shift) & 0xFF) -
+                               static_cast<int>((b >> shift) & 0xFF)));
+    }
+    worst = std::max(worst, d);
+    different += d > 2 ? 1 : 0;
+  }
+  // Only where two letters' edges overlap (blended there, the larger
+  // coverage in the picture) may a texel differ.
+  CHECK(different * 200 < from_sheet.pixels.size());
+  INFO("worst " << worst);
+  CHECK(worst <= 128);
+}
+
+TEST_CASE("HD typeface makes its glyph sheet in the background") {
+  auto typeface = chakra();
+  CHECK(typeface->sheet(40.0f) == nullptr);
+  typeface->prewarm(40.0f);
+  typeface->wait_for_prewarm();
+  const auto sheet = typeface->sheet(40.0f);
+  REQUIRE(sheet);
+  REQUIRE(sheet->image);
+  CHECK(sheet->slots.size() == 95 * 2);
+  std::vector<std::shared_ptr<const HdImage>> taken;
+  typeface->take_new_sheets(taken);
+  REQUIRE(taken.size() == 1);
+  CHECK(taken.front() == sheet->image);
+  taken.clear();
+  typeface->take_new_sheets(taken);
+  CHECK(taken.empty());
+  // A line of ASCII lays out from the sheet; letters outside it don't.
+  const auto ascii = typeface->line(U"Pizza", 40.0f, 0.0f, 1e6f);
+  CHECK(ascii.from_sheet);
+  CHECK(ascii.glyphs.size() == 5);
+  for (const auto& g : ascii.glyphs) {
+    const auto& slot = sheet->slots[static_cast<std::size_t>(g.slot)];
+    CHECK(slot.w > 0);
+    CHECK(g.x >= 0);
+    CHECK(g.x + slot.w <= ascii.width);
+  }
+  CHECK_FALSE(typeface->line(U"Pizza", 40.0f, 0.0f, 20.0f).from_sheet);
+}
+
+TEST_CASE("HD typeface moves letters closer before narrowing them") {
+  auto t = chakra();
+  const std::u32string text = U"RESTAURANT POPULARITY";
+  const float natural = t->measure(text, 60, 3);
+  // A little too wide: tighter spacing is enough, letters keep their shape.
+  const auto tight = t->line(text, 60, 3, natural * 0.97f);
+  CHECK(tight.squeeze == 1.0f);
+  CHECK(tight.from_sheet);
+  CHECK(tight.width <= static_cast<int>(natural * 0.97f) + 8);
+  // Far too wide: narrowed as well.
+  const auto narrow = t->line(text, 60, 3, natural * 0.6f);
+  CHECK(narrow.squeeze < 1.0f);
+  CHECK_FALSE(narrow.from_sheet);
+  CHECK(narrow.width <= static_cast<int>(natural * 0.6f) + 8);
+}
+
 TEST_CASE("HD text cost", "[.bench]") {
   test_support::ScopedHdScale scale(6);
   HdTypefaces::set_enabled(true);

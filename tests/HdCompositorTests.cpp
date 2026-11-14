@@ -195,6 +195,101 @@ TEST_CASE("GPU textures are shared and released", "[hd][gpu]") {
   CHECK(comp.preload({a, b}, 1 << 20) == 8 * 8 * 4);
 }
 
+TEST_CASE("tinted coverage (HD text) draws the same on the GPU", "[hd][gpu]") {
+  resources::load_fallback_palette();
+  ScopedHdScale scale(3);
+  std::mt19937 rng(5);
+  // A sheet of white letters: alpha is the coverage.
+  auto sheet = std::make_shared<HdImage>(90, 30, 0u);
+  std::uniform_int_distribution<int> cov(0, 255);
+  for (uint32_t& p : sheet->pixels) {
+    const int a = cov(rng);
+    p = a < 60 ? 0u : pack_rgba(255, 255, 255, static_cast<uint32_t>(a));
+  }
+  Surface layer(80, 40, PaletteHandle{0}, 0);
+  layer.blit_raw(random_sprite(rng, 80, 40, true), ViewPoint{0, 0});
+  for (int i = 0; i < 30; ++i) {
+    HdCmd cmd;
+    cmd.img = sheet;
+    cmd.sx = (i * 7) % 70;
+    cmd.sy = (i * 5) % 20;
+    cmd.sw = 17;
+    cmd.sh = 10;
+    // Anywhere, not on engine pixel edges, some over the surface's edge.
+    cmd.dx = (i * 31) % 250 - 8;
+    cmd.dy = (i * 13) % 125 - 4;
+    cmd.tint = pack_rgba(static_cast<uint32_t>(cov(rng)),
+                         static_cast<uint32_t>(cov(rng)),
+                         static_cast<uint32_t>(cov(rng)), 255);
+    layer.hd_overlay(cmd, 0, 0, 240, 120);
+  }
+  CHECK(layer.hd_list()->cmds().size() > 20);
+  // The GPU multiplies the colour into premultiplied texels: one more
+  // rounding step than the CPU's straight colours.
+  CHECK(compare(layer, 1.0f) <= 3);
+  CHECK(compare(layer, 0.5f) <= 4);
+}
+
+TEST_CASE("small pictures share atlas pages", "[hd][gpu]") {
+  resources::load_fallback_palette();
+  ScopedHdScale scale(2);
+  std::mt19937 rng(11);
+  // Lines of text: small pictures marked for the atlas, some overlapping
+  // and some cut by the layer's edge, over a background with HD art.
+  std::vector<std::shared_ptr<const HdImage>> lines;
+  {
+    Surface layer(160, 100, PaletteHandle{0}, 0);
+    layer.blit_raw(random_sprite(rng, 160, 100, true), ViewPoint{0, 0});
+    for (int i = 0; i < 12; ++i) {
+      const int w = 10 + i * 7;
+      const int h = 5 + (i % 3) * 2;
+      Surface line = random_sprite(rng, w, h, false);
+      auto img = random_image(rng, w * 2, h * 2);
+      img->atlas = true;
+      line.attach_hd(img);
+      lines.push_back(img);
+      layer.blit(line, ViewRect{0, 0, w, h},
+                 ViewPoint{(i * 23) % 150 - 5, (i * 9) % 95}, gfx::TRANSPARENT);
+    }
+    CHECK(compare(layer, 1.0f) <= 2);
+    CHECK(compare(layer, 0.5f) <= 3);
+  }
+
+  SoftGpu gpu(64, 64);
+  HdCompositor comp(gpu.renderer);
+  for (const auto& img : lines) {
+    CHECK(comp.texture_for(img) != nullptr);
+  }
+  CHECK(comp.picture_count() == lines.size());
+  CHECK(comp.atlas_pages() == 1);
+  CHECK(comp.texture_count() == 1);
+  const auto a = comp.place(lines[0]);
+  const auto b = comp.place(lines[1]);
+  CHECK(a.tex == b.tex);
+  CHECK((a.x != b.x || a.y != b.y));
+  const std::size_t page_bytes = comp.texture_bytes();
+
+  // Gone pictures leave the page; once it is empty it is filled again from
+  // the top, without a new texture.
+  lines.clear();
+  comp.end_frame();
+  CHECK(comp.picture_count() == 0);
+  CHECK(comp.atlas_pages() == 1);
+  auto again = std::make_shared<HdImage>(20, 10, pack_rgba(1, 2, 3, 255));
+  again->atlas = true;
+  const auto c = comp.place(again);
+  CHECK(c.tex == a.tex);
+  CHECK(c.x == 1);
+  CHECK(c.y == 1);
+  CHECK(comp.texture_bytes() == page_bytes);
+
+  // Too big for a page: a texture of its own.
+  auto big = std::make_shared<HdImage>(64, 2000, 0u);
+  big->atlas = true;
+  CHECK(comp.place(big).tex != a.tex);
+  CHECK(comp.texture_count() == 2);
+}
+
 TEST_CASE("streamed textures draw the same as direct uploads", "[hd][gpu]") {
   resources::load_fallback_palette();
   ScopedHdScale scale(2);

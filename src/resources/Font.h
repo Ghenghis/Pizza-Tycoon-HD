@@ -86,6 +86,16 @@ public:
   void attach_hd(std::shared_ptr<const resources::HdTypeface> typeface,
                  HdMetrics metrics);
   [[nodiscard]] bool has_hd() const noexcept { return hd_ != nullptr; }
+  // Lines of HD text drawn since start, by how: from the glyph sheet, or as
+  // a picture of their own (narrowed to fit, letters outside the sheet, or
+  // drawn before the sheet was ready). For benchmarks and the log.
+  struct HdTextStats {
+    std::size_t from_sheet = 0;
+    std::size_t narrowed = 0;
+    std::size_t outside_sheet = 0;
+    std::size_t sheet_not_ready = 0;
+  };
+  [[nodiscard]] static HdTextStats hd_text_stats() noexcept;
 
   // The original's text files mark their line breaks with '|'.
   static std::vector<std::string_view> split_by_pipe(std::string_view text);

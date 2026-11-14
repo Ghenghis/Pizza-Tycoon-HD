@@ -113,6 +113,11 @@ public:
   [[nodiscard]] const HdList* hd_list() const noexcept {
     return has_hd() ? hd_.get() : nullptr;
   }
+  // Draws part of an HD picture over the texels already here, blending,
+  // leaving the indexed pixels alone (HD text). cmd.dx/dy are texels of this
+  // surface; the command is cut to `clip` (texels) and to the surface.
+  void hd_overlay(HdCmd cmd, int clip_x0, int clip_y0, int clip_x1,
+                  int clip_y1);
 
   // Copies src_rect at half size, keeping one pixel of each 2x2 block, and
   // averaging the HD texels of the same block when there are any.

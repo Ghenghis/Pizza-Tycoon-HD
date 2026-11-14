@@ -39,6 +39,10 @@ struct HdImage {
   int width = 0;
   int height = 0;
   std::vector<uint32_t> pixels;
+  // Small pictures that come and go often (lines of HD text) share GPU
+  // textures instead of having one each (see HdCompositor). Not copied: a
+  // copy is a picture of its own.
+  bool atlas = false;
 
   [[nodiscard]] uint32_t at(int x, int y) const {
     return pixels[static_cast<std::size_t>(y) * width + x];

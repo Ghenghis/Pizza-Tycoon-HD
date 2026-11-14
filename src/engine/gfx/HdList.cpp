@@ -96,11 +96,11 @@ bool opaque_block(const HdImage& img, int bx, int by, int k) {
 }
 
 uint32_t sample(const HdCmd& cmd, int tx, int ty) {
-  if (cmd.half) {
-    return sample_half(*cmd.img, cmd.sx + (tx - cmd.dx) * 2,
-                       cmd.sy + (ty - cmd.dy) * 2);
-  }
-  return cmd.img->at(cmd.sx + (tx - cmd.dx), cmd.sy + (ty - cmd.dy));
+  const uint32_t v =
+      cmd.half ? sample_half(*cmd.img, cmd.sx + (tx - cmd.dx) * 2,
+                             cmd.sy + (ty - cmd.dy) * 2)
+               : cmd.img->at(cmd.sx + (tx - cmd.dx), cmd.sy + (ty - cmd.dy));
+  return tinted(cmd, v);
 }
 
 std::shared_ptr<HdList> HdList::leaf(std::shared_ptr<const HdImage> img,
@@ -295,7 +295,7 @@ HdImage HdList::materialize(int k, int x, int y, int w, int h) const {
             // Straight copy of a row of the picture (the common case).
             const uint32_t* src = c.img->row(c.sy + (ty - c.dy)) + c.sx - c.dx;
             for (int tx = xa; tx < xb; ++tx) {
-              const uint32_t v = src[tx];
+              const uint32_t v = tinted(c, src[tx]);
               const uint32_t a = alpha(v);
               uint32_t& d = row[tx - ox];
               if (a == 255 || (i == f && a != 0)) {

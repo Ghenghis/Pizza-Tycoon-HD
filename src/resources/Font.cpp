@@ -201,6 +201,9 @@ PictureCache& picture_cache() {
   return cache;
 }
 
+// Text is drawn on the main thread only; plain counters are enough.
+Font::HdTextStats text_stats;
+
 int floor_div(int v, int k) { return v >= 0 ? v / k : -((-v + k - 1) / k); }
 
 } // namespace
@@ -210,6 +213,16 @@ int floor_div(int v, int k) { return v >= 0 ? v / k : -((-v + k - 1) / k); }
 struct Font::HdLine {
   ViewRect rect;
   std::shared_ptr<const gfx::HdImage> picture;
+  // Or the letters as quads from the glyph sheet, in these colours, the
+  // coverage's top-left at (x, y) texels of the target.
+  std::shared_ptr<const resources::HdTypeface::Sheet> sheet;
+  std::shared_ptr<const resources::HdTypeface::Coverage> letters;
+  int x = 0;
+  int y = 0;
+  int shadow_dx = 0;
+  int shadow_dy = 0;
+  uint32_t fg = 0;
+  uint32_t shadow = 0;
 };
 
 std::optional<Font::HdLine>
@@ -291,6 +304,34 @@ Font::prepare_hd_line(const Surface& target, std::string_view text,
     }
     return gfx::pack_rgba(colors[idx].r, colors[idx].g, colors[idx].b, 255);
   };
+  // From the glyph sheet when it is ready: nothing to draw or upload.
+  std::shared_ptr<const resources::HdTypeface::Sheet> sheet;
+  if (cov.from_sheet && resources::HdTypefaces::sheets_enabled()) {
+    sheet = hd_->sheet(hd_cap_px());
+  }
+  if (sheet) {
+    ++text_stats.from_sheet;
+    return HdLine{.rect = r,
+                  .picture = nullptr,
+                  .sheet = std::move(sheet),
+                  .letters = line.coverage,
+                  .x = x,
+                  .y = y,
+                  .shadow_dx = sdx,
+                  .shadow_dy = sdy,
+                  .fg = rgba(style.color.get()),
+                  .shadow =
+                      style.shadow ? rgba(style.shadow->color.get()) : 0u};
+  }
+  if (cov.squeeze < 1.0f) {
+    ++text_stats.narrowed;
+  }
+  else if (!cov.from_sheet) {
+    ++text_stats.outside_sheet;
+  }
+  else {
+    ++text_stats.sheet_not_ready;
+  }
   const PictureKey pkey{
       .coverage = line.coverage.get(),
       .fg = rgba(style.color.get()),
@@ -305,10 +346,11 @@ Font::prepare_hd_line(const Surface& target, std::string_view text,
   auto& pictures = picture_cache();
   if (auto it = pictures.entries.find(pkey); it != pictures.entries.end()) {
     it->second.last_use = ++pictures.clock;
-    return HdLine{r, it->second.picture};
+    return HdLine{.rect = r, .picture = it->second.picture};
   }
 
   auto picture = std::make_shared<gfx::HdImage>(r.w * k, r.h * k, 0u);
+  picture->atlas = true;
   const auto paint = [&](int ax, int ay, uint32_t colour) {
     if (gfx::alpha(colour) == 0) {
       return;
@@ -344,7 +386,7 @@ Font::prepare_hd_line(const Surface& target, std::string_view text,
                                               .picture = done,
                                               .last_use = ++pictures.clock});
   pictures.trim();
-  return HdLine{r, std::move(done)};
+  return HdLine{.rect = r, .picture = std::move(done)};
 }
 
 Font::HdLetters Font::hd_letters(std::string_view text, float room) const {
@@ -379,11 +421,49 @@ Font::HdLetters Font::hd_letters(std::string_view text, float room) const {
                    std::min(hd_->measure(letters, cap, tracking), room)};
 }
 
+Font::HdTextStats Font::hd_text_stats() noexcept { return text_stats; }
+
 void Font::finish_hd_line(Surface& target, const HdLine& line) const {
+  const ViewRect& r = line.rect;
+  if (line.sheet) {
+    // One quad per letter, shadow first, cut to the line's rect as the
+    // picture would be.
+    const int k = gfx::hd_scale();
+    const auto& cov = *line.letters;
+    const auto draw = [&](int ox, int oy, uint32_t colour) {
+      if (gfx::alpha(colour) == 0) {
+        return;
+      }
+      const int cx0 = std::max(r.x * k, ox);
+      const int cy0 = std::max(r.y * k, oy);
+      const int cx1 = std::min((r.x + r.w) * k, ox + cov.width);
+      const int cy1 = std::min((r.y + r.h) * k, oy + cov.height);
+      for (const auto& g : cov.glyphs) {
+        const auto& slot = line.sheet->slots[static_cast<std::size_t>(g.slot)];
+        if (slot.w <= 0 || slot.h <= 0) {
+          continue;
+        }
+        gfx::HdCmd cmd;
+        cmd.img = line.sheet->image;
+        cmd.sx = slot.x;
+        cmd.sy = slot.y;
+        cmd.sw = slot.w;
+        cmd.sh = slot.h;
+        cmd.dx = ox + g.x;
+        cmd.dy = oy + g.y;
+        cmd.tint = colour;
+        target.hd_overlay(std::move(cmd), cx0, cy0, cx1, cy1);
+      }
+    };
+    if (line.shadow != 0) {
+      draw(line.x + line.shadow_dx, line.y + line.shadow_dy, line.shadow);
+    }
+    draw(line.x, line.y, line.fg);
+    return;
+  }
   // The letters are blended over whatever is there: a block of transparent
   // pixels carrying them as its HD picture, so the indexed pixels under it
   // stay as they are and the renderer draws the letters on top.
-  const ViewRect& r = line.rect;
   Surface block(r.w, r.h, target.palette(), gfx::TRANSPARENT);
   block.attach_hd(line.picture);
   target.blit(block, ViewRect{0, 0, r.w, r.h}, ViewPoint{r.x, r.y},

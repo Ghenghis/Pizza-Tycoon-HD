@@ -40,8 +40,18 @@ public:
   // 0 = black. Leaves the render target set to `target`.
   void draw_layer(SDL_Texture* target, const gfx::Surface& layer, float fade);
 
-  // The GPU copy of a picture, uploaded on first use.
-  SDL_Texture* texture_for(const std::shared_ptr<const gfx::HdImage>& img);
+  // Where the GPU copy of a picture is: its texture and the top-left of the
+  // picture in it (not 0,0 for pictures in a shared atlas page).
+  struct Placed {
+    SDL_Texture* tex = nullptr;
+    int x = 0;
+    int y = 0;
+  };
+  // Uploaded on first use.
+  Placed place(const std::shared_ptr<const gfx::HdImage>& img);
+  SDL_Texture* texture_for(const std::shared_ptr<const gfx::HdImage>& img) {
+    return place(img).tex;
+  }
 
   // Streams pictures to the GPU ahead of use, a band of rows at a time,
   // spending at most budget_ms per call (call once per frame). Pictures not
@@ -58,14 +68,21 @@ public:
   preload(const std::vector<std::shared_ptr<const gfx::HdImage>>& imgs,
           std::size_t budget_bytes);
 
+  // Creates the first atlas page for small pictures ahead of use.
+  void prepare_atlas();
+
   // Call once per frame: forgets pictures nobody holds any more and evicts
   // the least recently used ones when over the memory budget.
   void end_frame();
 
   [[nodiscard]] std::size_t texture_bytes() const noexcept { return bytes_; }
-  [[nodiscard]] std::size_t texture_count() const noexcept {
+  // GPU textures held: pictures of their own plus atlas pages.
+  [[nodiscard]] std::size_t texture_count() const noexcept;
+  // Pictures on the GPU, in textures of their own or in atlas pages.
+  [[nodiscard]] std::size_t picture_count() const noexcept {
     return cache_.size();
   }
+  [[nodiscard]] std::size_t atlas_pages() const noexcept;
   void memory_budget(std::size_t bytes) noexcept { budget_ = bytes; }
 
   // Stats of the last draw_layer, for tests and the frame-time overlay.
@@ -76,14 +93,51 @@ public:
   [[nodiscard]] const Stats& last_stats() const noexcept { return stats_; }
   // Time spent preparing and uploading textures, since construction.
   [[nodiscard]] double upload_ms() const noexcept { return upload_ms_; }
+  // Small pictures put in atlas pages, their bytes, and the bytes sent to
+  // the GPU for them, since construction.
+  struct AtlasStats {
+    std::size_t pictures = 0;
+    std::size_t bytes = 0;
+    std::size_t sent = 0;
+  };
+  [[nodiscard]] AtlasStats atlas_stats() const noexcept {
+    return {atlas_pictures_, atlas_bytes_, sent_bytes_};
+  }
 
 private:
   struct Entry {
     std::weak_ptr<const gfx::HdImage> img;
     SDL_Texture* tex = nullptr;
-    std::size_t bytes = 0;
+    std::size_t bytes = 0; // of its own texture; 0 in an atlas page
     uint64_t last_used = 0;
     int rows_done = 0; // rows uploaded so far; complete at img height
+    int page = -1;     // atlas page, or -1 for a texture of its own
+    int x = 0;         // top-left of the picture in the texture
+    int y = 0;
+  };
+  // A shared texture for small pictures (gfx::HdImage::atlas), filled in
+  // shelves: rows of slots of similar height. Creating a GPU texture costs
+  // far more than uploading a small picture, and a screen full of text has
+  // dozens of them; one page also lets SDL batch the text into one draw.
+  // A page is reused from the top once every picture in it is gone.
+  struct Shelf {
+    int y = 0;
+    int h = 0;
+    int x = 0; // next free column
+  };
+  struct Page {
+    SDL_Texture* tex = nullptr;
+    std::vector<Shelf> shelves;
+    int bottom = 0; // first row below the last shelf
+    int live = 0;   // pictures in it
+    // The page's texels (premultiplied) on the CPU: new pictures are written
+    // here and sent in one upload of the changed rows (each upload is a
+    // staging texture and a copy on Direct3D, whatever its size).
+    std::vector<uint32_t> texels;
+    int dirty_x0 = 0;
+    int dirty_x1 = 0;
+    int dirty_y0 = 0;
+    int dirty_y1 = 0; // empty when equal to dirty_y0
   };
   struct Run {
     uint32_t floor;
@@ -96,6 +150,18 @@ private:
   void evict(Entry& e);
   // Creates the texture (nothing uploaded yet), or null when impossible.
   Entry* create(const std::shared_ptr<const gfx::HdImage>& img);
+  void size_atlas();
+  // A new atlas page; its index, or -1.
+  int add_page();
+  // place() without sending the atlas pages (see flush_atlas).
+  Placed locate(const std::shared_ptr<const gfx::HdImage>& img);
+  // Uploads what changed in the atlas pages.
+  void flush_atlas();
+  // On the GPU and complete: drawable.
+  [[nodiscard]] bool ready(const Entry& e, const gfx::HdImage& img) const;
+  // A slot for the picture in an atlas page, or null when it doesn't fit
+  // one (it then gets a texture of its own).
+  Entry* create_in_atlas(const std::shared_ptr<const gfx::HdImage>& img);
   // Premultiplies and uploads up to `rows` more rows.
   void upload_rows(Entry& e, const gfx::HdImage& img, int rows);
 
@@ -111,6 +177,12 @@ private:
   std::size_t budget_ = std::size_t{1536} << 20; // 1.5 GiB of textures
   int max_texture_size_ = 16384;
   std::vector<std::weak_ptr<const gfx::HdImage>> stream_queue_;
+  std::vector<Page> pages_;
+  int page_w_ = 0; // atlas page size, set on first use
+  int page_h_ = 0;
   double upload_ms_ = 0;
+  std::size_t atlas_pictures_ = 0;
+  std::size_t atlas_bytes_ = 0;
+  std::size_t sent_bytes_ = 0;
   Stats stats_;
 };

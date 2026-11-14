@@ -74,6 +74,8 @@ private:
     bool fade_on_next_transition = false;
     bool skip_tick_during_fade_in = false;
     bool redraw_requested = false;
+    // The GPU's render targets (1) or the whole device (2) were reset.
+    int render_reset = 0;
   };
 
   bool init(int display_height, const GameOptions& options);

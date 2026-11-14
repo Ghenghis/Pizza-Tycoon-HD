@@ -21,6 +21,7 @@
 #include "engine/gfx/Surface.h"
 #include "engine/ui/CursorManager.h"
 #include "resources/HdPack.h"
+#include "resources/HdTypeface.h"
 
 using gfx::Surface;
 
@@ -33,6 +34,9 @@ void Renderer::add_layers(Renderable* r) {
 
 Renderer::~Renderer() {
   destroy_layer_textures();
+  for (SDL_Texture* tex : target_pool_) {
+    SDL_DestroyTexture(tex);
+  }
   if (back_tex_) {
     SDL_DestroyTexture(back_tex_);
   }
@@ -50,40 +54,80 @@ void Renderer::redraw_all() {
 
 void Renderer::destroy_layer_textures() {
   for (auto& [view, tex] : layer_tex_) {
-    SDL_DestroyTexture(tex);
+    give_back(tex);
   }
   layer_tex_.clear();
   for (auto& [view, tex] : lit_tex_) {
-    SDL_DestroyTexture(tex);
+    give_back(tex);
   }
   lit_tex_.clear();
   gpu_cached_.clear();
 }
 
-SDL_Texture* Renderer::layer_texture(Renderable* view, int w, int h) {
-  SDL_Texture*& tex = layer_tex_[view];
-  if (tex && (tex->w != w || tex->h != h)) {
-    SDL_DestroyTexture(tex);
-    tex = nullptr;
+SDL_Texture* Renderer::take_target(int w, int h) {
+  SDL_Texture* tex = nullptr;
+  if (auto it = std::ranges::find_if(
+          target_pool_,
+          [w, h](const SDL_Texture* t) { return t->w == w && t->h == h; });
+      it != target_pool_.end()) {
+    tex = *it;
+    target_pool_.erase(it);
   }
-  if (!tex) {
-    tex = SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+  else {
+    tex = SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_ARGB8888,
                             SDL_TEXTUREACCESS_TARGET, w, h);
     if (!tex) {
       fatal(SDL_GetError());
     }
-    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
-    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+  }
+  SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+  SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+  SDL_SetTextureColorModFloat(tex, 1.0f, 1.0f, 1.0f);
+  SDL_SetTextureAlphaModFloat(tex, 1.0f);
+  return tex;
+}
+
+void Renderer::give_back(SDL_Texture* tex) {
+  if (!tex) {
+    return;
+  }
+  target_pool_.push_back(tex);
+  if (target_pool_.size() > max_pooled_targets) {
+    SDL_DestroyTexture(target_pool_.front());
+    target_pool_.erase(target_pool_.begin());
+  }
+}
+
+SDL_Texture* Renderer::layer_texture(Renderable* view, int w, int h) {
+  SDL_Texture*& tex = layer_tex_[view];
+  if (tex && (tex->w != w || tex->h != h)) {
+    give_back(tex);
+    tex = nullptr;
+  }
+  if (!tex) {
+    tex = take_target(w, h);
     gpu_cached_.erase(view);
   }
   return tex;
+}
+
+SDL_Texture* Renderer::lit_texture(Renderable* view, SDL_Texture* albedo) {
+  SDL_Texture*& out = lit_tex_[view];
+  if (out && (out->w != albedo->w || out->h != albedo->h)) {
+    give_back(out);
+    out = nullptr;
+  }
+  if (!out) {
+    out = take_target(albedo->w, albedo->h);
+  }
+  return out;
 }
 
 void Renderer::ensure_back_texture() {
   if (back_tex_) {
     return;
   }
-  back_tex_ = SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_RGBA8888,
+  back_tex_ = SDL_CreateTexture(sdl_.renderer.get(), SDL_PIXELFORMAT_ARGB8888,
                                 SDL_TEXTUREACCESS_TARGET, frame_width(),
                                 frame_height());
   if (!back_tex_) {
@@ -109,16 +153,82 @@ void Renderer::stream_ahead(double budget_ms) {
   if (!gpu_) {
     gpu_ = std::make_unique<HdCompositor>(sdl_.renderer.get());
   }
-  gpu_->stream(resources::HdPack::instance().take_prefetched(), budget_ms);
+  auto add = resources::HdPack::instance().take_prefetched();
+  // The HD text's glyph sheets, as soon as they are made.
+  for (auto& sheet : resources::HdTypefaces::instance().take_new_sheets()) {
+    add.push_back(std::move(sheet));
+  }
+  gpu_->stream(add, budget_ms);
+}
+
+void Renderer::on_render_reset(bool device_lost) {
+  if (device_lost) {
+    // The old device's textures are gone (SDL keeps the handles, without
+    // their contents): every one is destroyed here and made again, and its
+    // pictures uploaded again, when next needed.
+    for (auto* map : {&layer_tex_, &lit_tex_}) {
+      for (auto& [view, tex] : *map) {
+        SDL_DestroyTexture(tex);
+      }
+      map->clear();
+    }
+    for (SDL_Texture* tex : target_pool_) {
+      SDL_DestroyTexture(tex);
+    }
+    target_pool_.clear();
+    if (back_tex_) {
+      SDL_DestroyTexture(back_tex_);
+      back_tex_ = nullptr;
+    }
+    if (cursor_tex_) {
+      SDL_DestroyTexture(cursor_tex_);
+      cursor_tex_ = nullptr;
+    }
+    cursor_tex_sprite_ = nullptr;
+    light_.reset();
+    gpu_.reset();
+  }
+  // Render targets lost their contents: everything is drawn again.
+  gpu_cached_.clear();
+  cache_.clear();
+  force_recompose_ = true;
+  clear_back_texture();
 }
 
 void Renderer::warm_up_gpu() {
-  if (scale_ > 1 && hd_gpu_compositing()) {
-    stream_ahead(1e9);
+  if (scale_ <= 1 || !hd_gpu_compositing()) {
+    return;
   }
+  stream_ahead(1e9);
+  gpu_->prepare_atlas();
+  SDL_Renderer* r = sdl_.renderer.get();
+  ensure_back_texture();
+  for (const auto& layer : layers_) {
+    SDL_Texture* tex =
+        layer_texture(layer.view, layer.area.w * scale_, layer.area.h * scale_);
+    lighting::Scene scene;
+    if (lighting::enabled() && layer.view->lighting(scene) && scene.active()) {
+      SDL_Texture* out = lit_texture(layer.view, tex);
+      if (!light_) {
+        light_ = std::make_unique<LightPass>(r);
+      }
+      // Makes the light pass's own textures; the first frame draws over it.
+      light_->apply(tex, out, layer.area.w, layer.area.h, scale_, scene,
+                    static_cast<double>(SDL_GetTicks()) / 1000.0);
+    }
+  }
+  SDL_SetRenderTarget(r, nullptr);
 }
 
+namespace {
+double ms_between(uint64_t a, uint64_t b) {
+  return static_cast<double>(b - a) * 1000.0 /
+         static_cast<double>(SDL_GetPerformanceFrequency());
+}
+} // namespace
+
 void Renderer::render_gpu() {
+  times_ = {};
   SDL_Renderer* r = sdl_.renderer.get();
   if (!gpu_) {
     gpu_ = std::make_unique<HdCompositor>(r);
@@ -161,29 +271,20 @@ void Renderer::render_gpu() {
         layer_surface->clear_palette_state();
       }
       RenderContext ctx{layer_surface.get()};
+      const uint64_t t0 = SDL_GetPerformanceCounter();
       view->render(ctx);
+      const uint64_t t1 = SDL_GetPerformanceCounter();
       gpu_->draw_layer(tex, *layer_surface,
                        view->ignore_fade() ? 1.0f : fade_factor_);
+      times_.views_ms += ms_between(t0, t1);
+      times_.compose_ms += ms_between(t1, SDL_GetPerformanceCounter());
       gpu_cached_.insert(view);
       view->clean();
     }
     if (recomposite) {
       SDL_Texture* shown = tex;
       if (lit) {
-        SDL_Texture*& out = lit_tex_[view];
-        if (out && (out->w != tex->w || out->h != tex->h)) {
-          SDL_DestroyTexture(out);
-          out = nullptr;
-        }
-        if (!out) {
-          out = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888,
-                                  SDL_TEXTUREACCESS_TARGET, tex->w, tex->h);
-          if (!out) {
-            fatal(SDL_GetError());
-          }
-          SDL_SetTextureBlendMode(out, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
-          SDL_SetTextureScaleMode(out, SDL_SCALEMODE_NEAREST);
-        }
+        SDL_Texture* out = lit_texture(view, tex);
         if (!light_) {
           light_ = std::make_unique<LightPass>(r);
         }
@@ -257,7 +358,9 @@ void Renderer::render_gpu() {
   SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
   SDL_RenderClear(r);
   SDL_RenderTexture(r, sdl_.texture.get(), nullptr, nullptr);
+  const uint64_t p0 = SDL_GetPerformanceCounter();
   SDL_RenderPresent(r);
+  times_.present_ms += ms_between(p0, SDL_GetPerformanceCounter());
   stream_ahead(stream_budget_ms);
   gpu_->end_frame();
 

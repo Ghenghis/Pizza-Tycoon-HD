@@ -630,6 +630,14 @@ int Game::run() {
       loop_state.redraw_requested = false;
       renderer.invalidate();
     }
+    if (loop_state.render_reset != 0) {
+      const bool device_lost = loop_state.render_reset == 2;
+      loop_state.render_reset = 0;
+      if (device_lost) {
+        sdl_.texture.reset(create_display_texture(display_height_));
+      }
+      renderer.on_render_reset(device_lost);
+    }
 
     // For software cursor:
     cursor_manager_->cursor_position(pointer_->position());
@@ -799,6 +807,13 @@ void Game::handle_events(LoopState& loop_state) {
       // end any active drag now.
       interaction_manager_->end_active_drag();
     }
+    else if (event.type == SDL_EVENT_RENDER_DEVICE_RESET) {
+      Logger::warn("The GPU was reset; making the textures again");
+      loop_state.render_reset = 2;
+    }
+    else if (event.type == SDL_EVENT_RENDER_TARGETS_RESET) {
+      loop_state.render_reset = std::max(loop_state.render_reset, 1);
+    }
   }
   // A drag that ended this frame unlocked the pointer during event processing
   // above. Restore the position to the one before we entered relative mouse
@@ -959,6 +974,7 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   // In a real session the intro gives the background warm-up time to decode
   // and stream the art; measure that state rather than a race against it.
   resources::HdPack::instance().wait_for_prefetch();
+  resources::HdTypefaces::instance().wait_for_prewarm();
   renderer.warm_up_gpu();
   SDL_SetRenderVSync(sdl_.renderer.get(), SDL_RENDERER_VSYNC_DISABLED);
   std::vector<double> ms;
@@ -968,6 +984,9 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   double first_upload_ms = 0;
   std::size_t first_files = 0;
   const auto pack_before = resources::HdPack::instance().stats();
+  const double upload_before =
+      renderer.compositor() ? renderer.compositor()->upload_ms() : 0.0;
+  Renderer::FrameTimes first_times;
   constexpr int warmup = 10;
   for (int i = 0; i < frames + warmup; ++i) {
     const uint64_t t0 = SDL_GetPerformanceCounter();
@@ -983,8 +1002,20 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
       const auto& after = resources::HdPack::instance().stats();
       first_pack_ms = after.load_ms - pack_before.load_ms;
       first_files = after.loaded - pack_before.loaded;
-      first_upload_ms =
-          renderer.compositor() ? renderer.compositor()->upload_ms() : 0.0;
+      first_upload_ms = renderer.compositor()
+                            ? renderer.compositor()->upload_ms() - upload_before
+                            : 0.0;
+      first_times = renderer.frame_times();
+      if (renderer.compositor()) {
+        const auto a = renderer.compositor()->atlas_stats();
+        const auto t = Font::hd_text_stats();
+        std::cout << "  first frame text: " << t.from_sheet
+                  << " lines from glyph sheets; as pictures: " << t.narrowed
+                  << " narrowed, " << t.outside_sheet << " other letters, "
+                  << t.sheet_not_ready << " before the sheet (" << a.pictures
+                  << " pictures, " << (a.bytes >> 10) << " KB, sent "
+                  << (a.sent >> 10) << " KB)\n";
+      }
       for (std::size_t s = pack_before.slow.size(); s < after.slow.size();
            ++s) {
         std::cout << "  slow pack file: " << after.slow[s].first << " "
@@ -1017,10 +1048,12 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
       "{} frames at {}x{} ({}, {} compositing): avg {:.2f} ms ({:.0f} fps), "
       "median {:.2f}, p95 {:.2f}, p99 {:.2f}, worst {:.2f} ms; "
       "first frame {:.2f} ms (pack files {} in {:.1f} ms, GPU upload {:.1f} "
-      "ms); {} HD textures, {} MB",
+      "ms, views {:.1f} ms, compositing {:.1f} ms, present {:.1f} ms); {} HD "
+      "textures, {} MB",
       ms.size(), renderer.frame_width(), renderer.frame_height(), backend,
       comp ? "GPU" : "CPU", avg, 1000.0 / avg, pct(0.5), pct(0.95), pct(0.99),
       sorted.back(), first_ms, first_files, first_pack_ms, first_upload_ms,
+      first_times.views_ms, first_times.compose_ms, first_times.present_ms,
       comp ? comp->texture_count() : 0, comp ? comp->texture_bytes() >> 20 : 0);
 }
 
@@ -1088,6 +1121,18 @@ void Game::load_game_data() {
   blitmap_manager_ = std::make_unique<BlitmapManager>(vga_manager_.get());
   cursor_manager_->base_cursor_mode(UiMode::Menu);
   context.blitmap = blitmap_manager_.get();
+  // Loading every font now starts drawing its HD letters in the background
+  // while the intro plays, so the first screens of text open at once.
+  if (gfx::hd_scale() > 1) {
+    for (FontFace face : FontManager::font_list()) {
+      try {
+        (void)font_manager_->get(face);
+      }
+      catch (const std::exception& e) {
+        Logger::warn("Can't preload font {}: {}", to_string(face), e.what());
+      }
+    }
+  }
 }
 
 void Game::apply_fullscreen(bool enabled) {

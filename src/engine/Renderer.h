@@ -51,10 +51,15 @@ public:
   void invalidate() { force_recompose_ = true; }
   // Marks every layer for a full redraw (benchmarks).
   void redraw_all();
-  // Uploads everything the HD pack has pre-decoded, now (benchmarks; the game
-  // streams it a little each frame instead).
+  // Uploads everything the HD pack has pre-decoded, now, and creates the
+  // render targets and light maps the current layers draw into (benchmarks:
+  // in the game the HD art streams in a little each frame, and the targets
+  // are reused from the screen before).
   void warm_up_gpu();
   void set_cursor_manager(CursorManager* cursor) { cursor_ = cursor; }
+  // SDL_EVENT_RENDER_TARGETS_RESET (false) or SDL_EVENT_RENDER_DEVICE_RESET
+  // (true, the display texture is made again by the caller first).
+  void on_render_reset(bool device_lost);
 
   // Fade control - returns true when fade completes
   bool tick_fade();
@@ -65,6 +70,15 @@ public:
 
   // GPU statistics of the last frame (HD only).
   [[nodiscard]] const HdCompositor* compositor() const { return gpu_.get(); }
+  // Where the last HD frame's time went, on the CPU side: drawing the views
+  // (their indexed pixels and draw lists), turning those into GPU commands
+  // and uploads, and handing the frame to the display.
+  struct FrameTimes {
+    double views_ms = 0;
+    double compose_ms = 0;
+    double present_ms = 0;
+  };
+  [[nodiscard]] const FrameTimes& frame_times() const { return times_; }
 
 private:
   // HD: layers are drawn by the GPU (HdCompositor) into textures and
@@ -75,6 +89,12 @@ private:
   // Per frame: small enough not to be felt at 144 Hz.
   static constexpr double stream_budget_ms = 3.0;
   SDL_Texture* layer_texture(Renderable* view, int w, int h);
+  // The lit copy of a layer drawn into `albedo`.
+  SDL_Texture* lit_texture(Renderable* view, SDL_Texture* albedo);
+  // Render targets are kept for the next screen: creating a 4K target costs
+  // milliseconds, and most screens have the same layer sizes.
+  SDL_Texture* take_target(int w, int h);
+  void give_back(SDL_Texture* tex);
   void ensure_back_texture();
   void clear_back_texture();
   void destroy_layer_textures();
@@ -109,10 +129,14 @@ private:
   [[nodiscard]] bool software_crt() const;
 
   std::unique_ptr<HdCompositor> gpu_;
+  FrameTimes times_;
   std::unique_ptr<LightPass> light_;
   // Lit copy of each lit layer (see Renderable::lighting).
   std::unordered_map<Renderable*, SDL_Texture*> lit_tex_;
   std::unordered_map<Renderable*, SDL_Texture*> layer_tex_;
+  std::vector<SDL_Texture*> target_pool_;
+  // A screen has up to a dozen layers (the view, its panels, the overlays).
+  static constexpr std::size_t max_pooled_targets = 12;
   std::unordered_set<Renderable*> gpu_cached_;
   SDL_Texture* back_tex_{nullptr};
   SDL_Texture* cursor_tex_{nullptr};

@@ -20,6 +20,9 @@ struct HdCmd {
   int sx{0}, sy{0}, sw{0}, sh{0}; // source rect, texels of img
   int dx{0}, dy{0};               // destination, texels of the surface
   bool half{false};               // drawn at half size (2x2 texels -> 1)
+  // 0: the picture's own colours. Otherwise 0xRRGGBBFF: the picture is a
+  // coverage mask (its alpha), drawn in this colour (HD text).
+  uint32_t tint{0};
 
   [[nodiscard]] int dw() const noexcept { return half ? sw / 2 : sw; }
   [[nodiscard]] int dh() const noexcept { return half ? sh / 2 : sh; }
@@ -108,5 +111,15 @@ private:
 
 // Value of one destination texel of a command (sampling rules included).
 [[nodiscard]] uint32_t sample(const HdCmd& cmd, int tx, int ty);
+
+// A texel of the command's picture in the command's colour (see
+// HdCmd::tint).
+[[nodiscard]] inline uint32_t tinted(const HdCmd& cmd, uint32_t v) noexcept {
+  if (cmd.tint == 0) {
+    return v;
+  }
+  const uint32_t a = v & 0xFFu;
+  return a == 0 ? 0u : (cmd.tint & 0xFFFFFF00u) | a;
+}
 
 } // namespace gfx

@@ -122,6 +122,30 @@ void Surface::hd_clear_rect(int x0, int y0, int x1, int y1) {
   hd_mut().plain_rect(x0, y0, x1, y1);
 }
 
+void Surface::hd_overlay(HdCmd cmd, int clip_x0, int clip_y0, int clip_x1,
+                         int clip_y1) {
+  const int k = hd_scale();
+  const int x0 = std::max({cmd.dx, clip_x0, 0});
+  const int y0 = std::max({cmd.dy, clip_y0, 0});
+  const int x1 = std::min({cmd.dx + cmd.dw(), clip_x1, width_ * k});
+  const int y1 = std::min({cmd.dy + cmd.dh(), clip_y1, height_ * k});
+  if (x1 <= x0 || y1 <= y0 || !cmd.img) {
+    return;
+  }
+  const int scale = cmd.half ? 2 : 1;
+  cmd.sx += (x0 - cmd.dx) * scale;
+  cmd.sy += (y0 - cmd.dy) * scale;
+  cmd.sw = (x1 - x0) * scale;
+  cmd.sh = (y1 - y0) * scale;
+  cmd.dx = x0;
+  cmd.dy = y0;
+  // Blended over everything before it, like a blit whose pixels are all
+  // transparent: no floor changes.
+  HdList& list = hd_mut();
+  list.push(std::move(cmd));
+  list.compact_if_needed();
+}
+
 void Surface::hd_clear_pixel(int x, int y) {
   if (!has_hd()) {
     return;

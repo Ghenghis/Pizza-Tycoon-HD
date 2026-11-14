@@ -12,8 +12,11 @@
 #include <fstream>
 #include <iterator>
 #include <nlohmann/json.hpp>
+#include <stop_token>
+#include <thread>
 #include <utility>
 #include "engine/Logger.h"
+#include "engine/gfx/HdImage.h"
 
 #if defined(_MSC_VER)
 #pragma warning(push, 0)
@@ -33,6 +36,15 @@ namespace {
 // line that is drawn again (most of them) costs a copy, not a rasterization.
 // Half-texel pen positions: at HD sizes finer steps don't show.
 constexpr int subpixel_steps = 2;
+// How much closer than the font's own spacing letters may move to fit a
+// line into the original's width, as a fraction of the cap height.
+constexpr float tight_tracking = 0.06f;
+// The letters in a glyph sheet: printable ASCII.
+constexpr char32_t sheet_first = 32;
+constexpr char32_t sheet_last = 127;
+constexpr int sheet_slot(char32_t c, int sub) {
+  return static_cast<int>(c - sheet_first) * subpixel_steps + sub;
+}
 constexpr std::size_t max_cached_glyphs = 4096;
 
 struct GlyphKey {
@@ -77,6 +89,13 @@ struct HdTypeface::Impl {
   int descent = 0;     // font units, negative
   mutable std::mutex mutex;
   mutable std::unordered_map<GlyphKey, GlyphBitmap, GlyphKeyHash> cache;
+  // Glyph sheets by scale (float bits), and the pictures of those not yet
+  // handed out for upload.
+  std::unordered_map<uint32_t, std::shared_ptr<const Sheet>> sheets;
+  std::vector<std::shared_ptr<const gfx::HdImage>> new_sheets;
+  // Background prewarms (see prewarm). Declared last: destroyed (stopped
+  // and joined) before everything they use.
+  std::vector<std::jthread> workers;
 
   [[nodiscard]] int index(char32_t c) const {
     return stbtt_FindGlyphIndex(&info, static_cast<int>(c));
@@ -106,6 +125,63 @@ struct HdTypeface::Impl {
                                     sy, shift, 0.0f, gi);
     }
     return cache.emplace(key, std::move(g)).first->second;
+  }
+
+  // Makes the glyph sheet of scale s from the glyph cache. Call with the
+  // mutex held.
+  void build_sheet(float s) {
+    const uint32_t key = float_bits(s);
+    if (sheets.contains(key)) {
+      return;
+    }
+    std::vector<const GlyphBitmap*> glyphs(
+        static_cast<std::size_t>((sheet_last - sheet_first) * subpixel_steps));
+    int widest = 0;
+    for (char32_t c = sheet_first; c < sheet_last; ++c) {
+      for (int sub = 0; sub < subpixel_steps; ++sub) {
+        const GlyphBitmap& g = glyph(index(c), c, s, s, sub);
+        glyphs[static_cast<std::size_t>(sheet_slot(c, sub))] = &g;
+        widest = std::max(widest, g.w);
+      }
+    }
+    // Rows of letters, a transparent texel between them and round the edge
+    // so smooth scaling never mixes neighbours.
+    const int width = std::max(1024, widest + 2);
+    auto sheet = std::make_shared<Sheet>();
+    sheet->slots.resize(glyphs.size());
+    int x = 1;
+    int y = 1;
+    int row = 0;
+    for (std::size_t i = 0; i < glyphs.size(); ++i) {
+      const GlyphBitmap& g = *glyphs[i];
+      if (g.w <= 0 || g.h <= 0) {
+        continue;
+      }
+      if (x + g.w + 1 > width) {
+        x = 1;
+        y += row + 1;
+        row = 0;
+      }
+      sheet->slots[i] = Slot{x, y, g.w, g.h};
+      x += g.w + 1;
+      row = std::max(row, g.h);
+    }
+    auto image = std::make_shared<gfx::HdImage>(width, y + row + 1, 0u);
+    for (std::size_t i = 0; i < glyphs.size(); ++i) {
+      const GlyphBitmap& g = *glyphs[i];
+      const Slot& slot = sheet->slots[i];
+      for (int gy = 0; gy < slot.h; ++gy) {
+        const uint8_t* src =
+            g.pixels.data() + static_cast<std::size_t>(gy) * g.w;
+        uint32_t* dst = image->row(slot.y + gy) + slot.x;
+        for (int gx = 0; gx < slot.w; ++gx) {
+          dst[gx] = src[gx] != 0 ? gfx::pack_rgba(255, 255, 255, src[gx]) : 0u;
+        }
+      }
+    }
+    sheet->image = image;
+    new_sheets.push_back(std::move(image));
+    sheets.emplace(key, std::move(sheet));
   }
 };
 
@@ -154,14 +230,53 @@ std::unique_ptr<HdTypeface> HdTypeface::load(const std::filesystem::path& file,
 bool HdTypeface::has_glyph(char32_t c) const { return impl_->index(c) != 0; }
 
 void HdTypeface::prewarm(float cap_px) const {
-  const float s = cap_px / impl_->cap_units;
-  for (char32_t c = 32; c < 127; ++c) {
-    const int gi = impl_->index(c);
-    for (int sub = 0; sub < subpixel_steps; ++sub) {
-      std::lock_guard lock(impl_->mutex);
-      (void)impl_->glyph(gi, c, s, s, sub);
+  // On a thread of its own, one glyph at a time, so a line being drawn
+  // meanwhile only ever waits for one glyph.
+  Impl* impl = impl_.get();
+  const float s = cap_px / impl->cap_units;
+  std::lock_guard lock(impl->mutex);
+  impl->workers.emplace_back([impl, s](std::stop_token stop) {
+    for (char32_t c = sheet_first; c < sheet_last; ++c) {
+      const int gi = impl->index(c);
+      for (int sub = 0; sub < subpixel_steps; ++sub) {
+        if (stop.stop_requested()) {
+          return;
+        }
+        std::lock_guard glyph_lock(impl->mutex);
+        (void)impl->glyph(gi, c, s, s, sub);
+      }
     }
+    std::lock_guard sheet_lock(impl->mutex);
+    impl->build_sheet(s);
+  });
+}
+
+void HdTypeface::wait_for_prewarm() const {
+  // Taken out under the lock, joined without it: a worker takes the lock
+  // for every glyph.
+  std::vector<std::jthread> done;
+  {
+    std::lock_guard lock(impl_->mutex);
+    done.swap(impl_->workers);
   }
+  for (auto& worker : done) {
+    worker.join();
+  }
+}
+
+std::shared_ptr<const HdTypeface::Sheet> HdTypeface::sheet(float cap_px) const {
+  std::lock_guard lock(impl_->mutex);
+  const auto it = impl_->sheets.find(float_bits(cap_px / impl_->cap_units));
+  return it == impl_->sheets.end() ? nullptr : it->second;
+}
+
+void HdTypeface::take_new_sheets(
+    std::vector<std::shared_ptr<const gfx::HdImage>>& out) const {
+  std::lock_guard lock(impl_->mutex);
+  for (auto& image : impl_->new_sheets) {
+    out.push_back(std::move(image));
+  }
+  impl_->new_sheets.clear();
 }
 
 float HdTypeface::measure(std::u32string_view text, float cap_px,
@@ -197,16 +312,32 @@ HdTypeface::Coverage HdTypeface::line(std::u32string_view text, float cap_px,
   const float sy = cap_px / impl_->cap_units;
   const float natural = measure(text, cap_px, tracking_px);
   // Narrower than the original's line is fine; wider would overlap what is
-  // next to it, so it is narrowed (by at most what it takes).
-  const float squeeze =
-      natural > max_width && max_width > 0 ? max_width / natural : 1.0f;
+  // next to it. Then the letters first move closer together, by up to
+  // tight_tracking of the cap height between two letters, which keeps their
+  // shapes (and lets the line be drawn from the glyph sheet); only a line
+  // still too wide is narrowed, by at most what it takes.
+  float track = tracking_px;
+  float squeeze = 1.0f;
+  if (max_width > 0 && natural > max_width) {
+    const auto gaps = static_cast<float>(text.size() - 1);
+    const float tightest = std::min(tracking_px, -tight_tracking * cap_px);
+    const float at_tightest = natural - (tracking_px - tightest) * gaps;
+    if (gaps > 0 && at_tightest <= max_width) {
+      track = tracking_px - (natural - max_width) / gaps;
+    }
+    else {
+      squeeze = max_width / (gaps > 0 ? at_tightest : natural);
+      track = (gaps > 0 ? tightest : tracking_px) * squeeze;
+    }
+  }
   const float sx = sy * squeeze;
-  const float track = tracking_px * squeeze;
 
   struct Placed {
     const GlyphBitmap* g;
     int x;
+    int slot; // in the glyph sheet, or -1
   };
+  bool from_sheet = squeeze == 1.0f;
   std::vector<Placed> placed;
   placed.reserve(text.size());
   std::lock_guard lock(impl_->mutex);
@@ -232,7 +363,9 @@ HdTypeface::Coverage HdTypeface::line(std::u32string_view text, float cap_px,
     const GlyphBitmap& g = impl_->glyph(gi, text[i], sx, sy, sub);
     if (g.w > 0 && g.h > 0) {
       const int x = static_cast<int>(whole) + g.x0;
-      placed.push_back({&g, x});
+      const bool in_sheet = text[i] >= sheet_first && text[i] < sheet_last;
+      from_sheet = from_sheet && in_sheet;
+      placed.push_back({&g, x, in_sheet ? sheet_slot(text[i], sub) : -1});
       left = any ? std::min(left, x) : x;
       right = any ? std::max(right, x + g.w) : x + g.w;
       any = true;
@@ -255,6 +388,14 @@ HdTypeface::Coverage HdTypeface::line(std::u32string_view text, float cap_px,
   out.baseline = above;
   out.height = above + below;
   out.pixels.assign(static_cast<std::size_t>(out.width) * out.height, 0);
+  out.from_sheet = from_sheet;
+  out.squeeze = squeeze;
+  if (from_sheet) {
+    out.glyphs.reserve(placed.size());
+    for (const auto& p : placed) {
+      out.glyphs.push_back({p.slot, p.x - left, out.baseline + p.g->y0});
+    }
+  }
   for (const auto& p : placed) {
     for (int y = 0; y < p.g->h; ++y) {
       const int oy = out.baseline + p.g->y0 + y;
@@ -275,11 +416,16 @@ HdTypeface::Coverage HdTypeface::line(std::u32string_view text, float cap_px,
 
 namespace {
 std::atomic<bool> hd_text_on{true};
+std::atomic<bool> sheets_on{true};
 } // namespace
 
 void HdTypefaces::set_enabled(bool on) noexcept { hd_text_on = on; }
 
 bool HdTypefaces::enabled() noexcept { return hd_text_on; }
+
+void HdTypefaces::set_sheets_enabled(bool on) noexcept { sheets_on = on; }
+
+bool HdTypefaces::sheets_enabled() noexcept { return sheets_on; }
 
 HdTypefaces& HdTypefaces::instance() {
   static HdTypefaces s;
@@ -335,6 +481,35 @@ HdTypefaces::get(std::string_view font_name) const {
   std::lock_guard lock(mutex_);
   auto it = fonts_.find(std::string(font_name));
   return it == fonts_.end() ? nullptr : it->second;
+}
+
+std::vector<std::shared_ptr<const gfx::HdImage>>
+HdTypefaces::take_new_sheets() const {
+  std::vector<std::shared_ptr<const HdTypeface>> all;
+  {
+    std::lock_guard lock(mutex_);
+    for (const auto& [name, typeface] : fonts_) {
+      all.push_back(typeface);
+    }
+  }
+  std::vector<std::shared_ptr<const gfx::HdImage>> out;
+  for (const auto& typeface : all) {
+    typeface->take_new_sheets(out);
+  }
+  return out;
+}
+
+void HdTypefaces::wait_for_prewarm() const {
+  std::vector<std::shared_ptr<const HdTypeface>> all;
+  {
+    std::lock_guard lock(mutex_);
+    for (const auto& [name, typeface] : fonts_) {
+      all.push_back(typeface);
+    }
+  }
+  for (const auto& typeface : all) {
+    typeface->wait_for_prewarm();
+  }
 }
 
 } // namespace resources

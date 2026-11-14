@@ -4,9 +4,14 @@ Unreleased
   options): at HD resolution every line of text is drawn with a modern
   typeface at full resolution (Chakra Petch, Archivo, Crimson Pro, Fira Sans,
   Zilla Slab; SIL OFL, in data/fonts), in exactly the space, alignment and
-  line breaks of the 1994 font, over the HD picture under it. The game still
-  draws the original letters into its indexed pixels, so nothing it reads
-  back changes. stb_truetype is bundled for this.
+  line breaks of the 1994 font, over the HD picture under it. The letters
+  live only in the HD layer (no blocky original letters under them), and
+  game state never depends on them. stb_truetype is bundled for this.
+* Screens open faster at HD: lines of text share atlas textures, sent to
+  the GPU in one upload per page instead of one texture each; layer render
+  targets are reused from the screen before instead of created again; and
+  the HD letters of every font are drawn on background threads while the
+  intro plays.
 * HD lighting (option `lighting`, on by default; also in the options menu):
   candles, ovens and grills, arcade machines, TVs, the jukebox and vending
   machines light the restaurant around them, with flicker (flames, fire,

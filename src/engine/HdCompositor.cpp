@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <thread>
+#include "engine/DisplayConstants.h"
 #include "engine/Fatal.h"
 #include "engine/Logger.h"
 #include "engine/gfx/HdList.h"
@@ -17,16 +18,37 @@ using gfx::HdList;
 
 namespace {
 
+// Textures are ARGB8888 (0xAARRGGBB), the order Direct3D, Vulkan, Metal
+// and OpenGL take as is: in any other format SDL converts every upload
+// through a temporary copy first.
+constexpr SDL_PixelFormat gpu_format = SDL_PIXELFORMAT_ARGB8888;
+
+constexpr uint32_t argb(uint32_t r, uint32_t g, uint32_t b,
+                        uint32_t a) noexcept {
+  return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+// A straight-alpha HD texel (0xRRGGBBAA) as a premultiplied GPU texel.
 uint32_t premultiply(uint32_t p) {
   const uint32_t a = gfx::alpha(p);
   if (a == 255) {
-    return p;
+    return (p >> 8) | 0xFF000000u;
   }
   if (a == 0) {
     return 0;
   }
   auto m = [a](uint32_t c) { return (c * a + 127) / 255; };
-  return gfx::pack_rgba(m(gfx::red(p)), m(gfx::green(p)), m(gfx::blue(p)), a);
+  return argb(m(gfx::red(p)), m(gfx::green(p)), m(gfx::blue(p)), a);
+}
+
+// Upload failures are logged, but not one line per texture per frame.
+void upload_failed(const char* what) {
+  static int count = 0;
+  if (count < 5 || count % 1000 == 0) {
+    Logger::warn("HD upload of {} failed ({}x): {}", what, count + 1,
+                 SDL_GetError());
+  }
+  ++count;
 }
 
 } // namespace
@@ -50,24 +72,147 @@ HdCompositor::HdCompositor(SDL_Renderer* renderer) : renderer_(renderer) {
 
 HdCompositor::~HdCompositor() {
   for (auto& [ptr, e] : cache_) {
-    SDL_DestroyTexture(e.tex);
+    if (e.page < 0) {
+      SDL_DestroyTexture(e.tex);
+    }
+  }
+  for (Page& page : pages_) {
+    if (page.tex) {
+      SDL_DestroyTexture(page.tex);
+    }
   }
   if (base_) {
     SDL_DestroyTexture(base_);
   }
 }
 
+std::size_t HdCompositor::texture_count() const noexcept {
+  std::size_t n = 0;
+  for (const auto& [ptr, e] : cache_) {
+    n += e.page < 0 ? 1 : 0;
+  }
+  return n + atlas_pages();
+}
+
+std::size_t HdCompositor::atlas_pages() const noexcept {
+  return static_cast<std::size_t>(std::ranges::count_if(
+      pages_, [](const Page& p) { return p.tex != nullptr; }));
+}
+
+void HdCompositor::size_atlas() {
+  if (page_w_ != 0) {
+    return;
+  }
+  // Wide enough for a line of text across the whole screen.
+  const int needed = DisplayConstants::SCREEN_WIDTH * gfx::hd_scale() + 2;
+  int w = 256;
+  while (w < needed && w < max_texture_size_) {
+    w *= 2;
+  }
+  page_w_ = std::min(w, max_texture_size_);
+  page_h_ = std::min(page_w_ / 2, max_texture_size_);
+}
+
+int HdCompositor::add_page() {
+  size_atlas();
+  // In the place of one given back if there is one.
+  auto spare = std::ranges::find_if(
+      pages_, [](const Page& p) { return p.tex == nullptr; });
+  if (spare == pages_.end()) {
+    spare = pages_.insert(pages_.end(), Page{});
+  }
+  spare->tex = SDL_CreateTexture(renderer_, gpu_format,
+                                 SDL_TEXTUREACCESS_STATIC, page_w_, page_h_);
+  if (!spare->tex) {
+    Logger::warn("Cannot create an HD atlas page: {}", SDL_GetError());
+    return -1;
+  }
+  SDL_SetTextureBlendMode(spare->tex, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+  spare->texels.assign(static_cast<std::size_t>(page_w_) * page_h_, 0);
+  spare->shelves.clear();
+  spare->bottom = 0;
+  spare->live = 0;
+  spare->dirty_y0 = 0;
+  spare->dirty_y1 = 0;
+  bytes_ += static_cast<std::size_t>(page_w_) * page_h_ * 4;
+  return static_cast<int>(spare - pages_.begin());
+}
+
+void HdCompositor::prepare_atlas() {
+  if (std::ranges::none_of(pages_,
+                           [](const Page& p) { return p.tex != nullptr; })) {
+    (void)add_page();
+  }
+}
+
+HdCompositor::Entry*
+HdCompositor::create_in_atlas(const std::shared_ptr<const HdImage>& img) {
+  size_atlas();
+  // A transparent texel all round, so even smooth scaling never picks up
+  // the neighbours.
+  const int w = img->width + 2;
+  const int h = img->height + 2;
+  if (w > page_w_ || h > page_h_ / 4) {
+    return nullptr;
+  }
+  // The flattest shelf it fits on without wasting more than a third of the
+  // shelf's height, else a new shelf, else a new page.
+  int index = -1;
+  Shelf* shelf = nullptr;
+  for (std::size_t i = 0; i < pages_.size() && index < 0; ++i) {
+    Page& page = pages_[i];
+    if (!page.tex) {
+      continue;
+    }
+    for (Shelf& s : page.shelves) {
+      if (s.h >= h && s.h * 2 <= h * 3 && s.x + w <= page_w_ &&
+          (!shelf || s.h < shelf->h)) {
+        shelf = &s;
+      }
+    }
+    if (shelf || page.bottom + h <= page_h_) {
+      index = static_cast<int>(i);
+    }
+  }
+  if (index < 0) {
+    index = add_page();
+    if (index < 0) {
+      return nullptr;
+    }
+  }
+  Page& page = pages_[static_cast<std::size_t>(index)];
+  if (!shelf) {
+    page.shelves.push_back({page.bottom, h, 0});
+    page.bottom += h;
+    shelf = &page.shelves.back();
+  }
+  Entry e;
+  e.img = img;
+  e.tex = page.tex;
+  e.last_used = frame_;
+  e.page = index;
+  e.x = shelf->x + 1;
+  e.y = shelf->y + 1;
+  shelf->x += w;
+  ++page.live;
+  return &cache_.insert_or_assign(img.get(), std::move(e)).first->second;
+}
+
 HdCompositor::Entry*
 HdCompositor::create(const std::shared_ptr<const HdImage>& img) {
+  if (img->atlas) {
+    if (Entry* e = create_in_atlas(img)) {
+      return e;
+    }
+  }
   if (img->width > max_texture_size_ || img->height > max_texture_size_ ||
       img->width <= 0 || img->height <= 0) {
     Logger::warn("HD picture {}x{} is larger than the GPU allows ({})",
                  img->width, img->height, max_texture_size_);
     return nullptr;
   }
-  SDL_Texture* tex =
-      SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888,
-                        SDL_TEXTUREACCESS_STATIC, img->width, img->height);
+  SDL_Texture* tex = SDL_CreateTexture(
+      renderer_, gpu_format, SDL_TEXTUREACCESS_STATIC, img->width, img->height);
   if (!tex) {
     Logger::warn("Cannot create HD texture: {}", SDL_GetError());
     return nullptr;
@@ -83,6 +228,43 @@ HdCompositor::create(const std::shared_ptr<const HdImage>& img) {
 }
 
 void HdCompositor::upload_rows(Entry& e, const HdImage& img, int rows) {
+  if (e.page >= 0) {
+    // Small: all at once, with the transparent frame round it, into the
+    // page's texels; flush_atlas() sends them.
+    Page& page = pages_[static_cast<std::size_t>(e.page)];
+    const int w = img.width + 2;
+    uint32_t* top = page.texels.data() +
+                    static_cast<std::size_t>(e.y - 1) * page_w_ + (e.x - 1);
+    std::fill_n(top, w, 0u);
+    for (int y = 0; y < img.height; ++y) {
+      uint32_t* row = top + static_cast<std::size_t>(y + 1) * page_w_;
+      row[0] = 0;
+      std::transform(img.row(y), img.row(y) + img.width, row + 1, premultiply);
+      row[w - 1] = 0;
+    }
+    std::fill_n(top + static_cast<std::size_t>(img.height + 1) * page_w_, w,
+                0u);
+    const int x0 = e.x - 1;
+    const int x1 = e.x + img.width + 1;
+    const int y0 = e.y - 1;
+    const int y1 = e.y + img.height + 1;
+    if (page.dirty_y0 == page.dirty_y1) {
+      page.dirty_x0 = x0;
+      page.dirty_x1 = x1;
+      page.dirty_y0 = y0;
+      page.dirty_y1 = y1;
+    }
+    else {
+      page.dirty_x0 = std::min(page.dirty_x0, x0);
+      page.dirty_x1 = std::max(page.dirty_x1, x1);
+      page.dirty_y0 = std::min(page.dirty_y0, y0);
+      page.dirty_y1 = std::max(page.dirty_y1, y1);
+    }
+    e.rows_done = img.height;
+    atlas_bytes_ += static_cast<std::size_t>(w) * (img.height + 2) * 4;
+    ++atlas_pictures_;
+    return;
+  }
   const int y0 = e.rows_done;
   const int y1 = std::min(img.height, y0 + rows);
   if (y1 <= y0) {
@@ -112,12 +294,63 @@ void HdCompositor::upload_rows(Entry& e, const HdImage& img, int rows) {
     part(0, std::min(n, step));
   }
   const SDL_Rect rect{0, y0, img.width, y1 - y0};
-  SDL_UpdateTexture(e.tex, &rect, scratch_.data(), img.width * 4);
+  if (!SDL_UpdateTexture(e.tex, &rect, scratch_.data(), img.width * 4)) {
+    // Not marked done: tried again when next drawn or streamed, and until
+    // then the original pixels show (see locate).
+    upload_failed("a picture");
+    return;
+  }
   e.rows_done = y1;
 }
 
-SDL_Texture*
-HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
+void HdCompositor::flush_atlas() {
+  for (Page& page : pages_) {
+    if (!page.tex || page.dirty_y0 == page.dirty_y1) {
+      continue;
+    }
+    const uint64_t started = SDL_GetPerformanceCounter();
+    const SDL_Rect rect{page.dirty_x0, page.dirty_y0,
+                        page.dirty_x1 - page.dirty_x0,
+                        page.dirty_y1 - page.dirty_y0};
+    sent_bytes_ += static_cast<std::size_t>(rect.w) * rect.h * 4;
+    if (SDL_UpdateTexture(page.tex, &rect,
+                          page.texels.data() +
+                              static_cast<std::size_t>(rect.y) * page_w_ +
+                              rect.x,
+                          page_w_ * 4)) {
+      page.dirty_y0 = page.dirty_y1 = 0;
+    }
+    else {
+      // Kept dirty: its pictures aren't drawn (see locate) and the upload
+      // is tried again on the next flush.
+      upload_failed("an atlas page");
+    }
+    upload_ms_ += static_cast<double>(SDL_GetPerformanceCounter() - started) *
+                  1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+  }
+}
+
+HdCompositor::Placed
+HdCompositor::place(const std::shared_ptr<const HdImage>& img) {
+  (void)locate(img);
+  flush_atlas();
+  return locate(img);
+}
+
+bool HdCompositor::ready(const Entry& e, const HdImage& img) const {
+  if (e.rows_done < img.height) {
+    return false;
+  }
+  if (e.page < 0) {
+    return true;
+  }
+  // In an atlas page: once the page's changes are on the GPU.
+  const Page& page = pages_[static_cast<std::size_t>(e.page)];
+  return page.dirty_y0 == page.dirty_y1;
+}
+
+HdCompositor::Placed
+HdCompositor::locate(const std::shared_ptr<const HdImage>& img) {
   Entry* e = nullptr;
   auto it = cache_.find(img.get());
   if (it != cache_.end()) {
@@ -132,21 +365,27 @@ HdCompositor::texture_for(const std::shared_ptr<const HdImage>& img) {
   }
   if (e && e->rows_done >= img->height) {
     e->last_used = frame_;
-    return e->tex;
+    if (!ready(*e, *img)) {
+      return {};
+    }
+    return {e->tex, e->x, e->y};
   }
   // Not there yet, or only partly streamed: finish it now.
   const uint64_t started = SDL_GetPerformanceCounter();
   if (!e) {
     e = create(img);
     if (!e) {
-      return nullptr;
+      return {};
     }
   }
   upload_rows(*e, *img, img->height);
   e->last_used = frame_;
   upload_ms_ += static_cast<double>(SDL_GetPerformanceCounter() - started) *
                 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
-  return e->tex;
+  if (!ready(*e, *img)) {
+    return {};
+  }
+  return {e->tex, e->x, e->y};
 }
 
 void HdCompositor::stream(
@@ -187,11 +426,16 @@ void HdCompositor::stream(
     }
     // About a million texels (4 MB) per band.
     const int band = std::max(16, 1'000'000 / std::max(1, img->width));
+    const int before = e->rows_done;
     upload_rows(*e, *img, band);
+    if (e->rows_done == before) {
+      ++done; // failed: left to be finished when it is drawn
+    }
   }
   stream_queue_.erase(stream_queue_.begin(),
                       stream_queue_.begin() +
                           static_cast<std::ptrdiff_t>(done));
+  flush_atlas();
 }
 
 std::size_t
@@ -214,6 +458,24 @@ HdCompositor::preload(const std::vector<std::shared_ptr<const HdImage>>& imgs,
 }
 
 void HdCompositor::evict(Entry& e) {
+  if (e.page >= 0) {
+    Page& page = pages_[static_cast<std::size_t>(e.page)];
+    if (--page.live == 0) {
+      // Empty: filled again from the top. Pages beyond the first are given
+      // back to the GPU.
+      page.shelves.clear();
+      page.bottom = 0;
+      if (e.page > 0) {
+        SDL_DestroyTexture(page.tex);
+        page.tex = nullptr;
+        page.texels = {};
+        bytes_ -= static_cast<std::size_t>(page_w_) * page_h_ * 4;
+      }
+    }
+    e.tex = nullptr;
+    e.page = -1;
+    return;
+  }
   SDL_DestroyTexture(e.tex);
   bytes_ -= e.bytes;
   e.tex = nullptr;
@@ -232,7 +494,8 @@ void HdCompositor::end_frame() {
   if (bytes_ > budget_) {
     std::vector<std::pair<uint64_t, const HdImage*>> lru;
     for (const auto& [ptr, e] : cache_) {
-      if (e.last_used < frame_) {
+      // Atlas pictures free no memory one by one; they go when unused.
+      if (e.last_used < frame_ && e.page < 0) {
         lru.emplace_back(e.last_used, ptr);
       }
     }
@@ -252,30 +515,33 @@ void HdCompositor::end_frame() {
 void HdCompositor::upload_base(const gfx::Surface& layer, float fade) {
   const int w = layer.width();
   const int h = layer.height();
-  if (!base_ || base_w_ != w || base_h_ != h) {
+  // One texture for every layer, grown when a larger one comes: layers of
+  // different sizes (panels, popups) in one frame then cost an upload of
+  // their own rect, not a new texture each.
+  if (!base_ || base_w_ < w || base_h_ < h) {
     if (base_) {
       SDL_DestroyTexture(base_);
     }
-    base_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888,
-                              SDL_TEXTUREACCESS_STREAMING, w, h);
+    base_w_ = std::max({base_w_, w, DisplayConstants::SCREEN_WIDTH});
+    base_h_ = std::max({base_h_, h, DisplayConstants::SCREEN_HEIGHT});
+    base_ = SDL_CreateTexture(renderer_, gpu_format,
+                              SDL_TEXTUREACCESS_STREAMING, base_w_, base_h_);
     if (!base_) {
       fatal(SDL_GetError());
     }
     SDL_SetTextureScaleMode(base_, SDL_SCALEMODE_NEAREST);
     SDL_SetTextureBlendMode(base_, SDL_BLENDMODE_NONE);
-    base_w_ = w;
-    base_h_ = h;
   }
   // Index 0 is the transparent colour key; everything else is opaque, so
   // premultiplied and straight alpha are the same here.
   uint32_t lut[256];
-  std::fill(std::begin(lut), std::end(lut), gfx::pack_rgba(0, 0, 0, 255));
+  std::fill(std::begin(lut), std::end(lut), argb(0, 0, 0, 255));
   const auto& pal = layer.colors();
   for (std::size_t i = 0; i < pal.size() && i < 256; ++i) {
-    lut[i] = gfx::pack_rgba(
-        static_cast<uint32_t>(static_cast<float>(pal[i].r) * fade),
-        static_cast<uint32_t>(static_cast<float>(pal[i].g) * fade),
-        static_cast<uint32_t>(static_cast<float>(pal[i].b) * fade), 255);
+    lut[i] =
+        argb(static_cast<uint32_t>(static_cast<float>(pal[i].r) * fade),
+             static_cast<uint32_t>(static_cast<float>(pal[i].g) * fade),
+             static_cast<uint32_t>(static_cast<float>(pal[i].b) * fade), 255);
   }
   lut[0] = 0;
   const auto px = layer.pixels();
@@ -283,7 +549,10 @@ void HdCompositor::upload_base(const gfx::Surface& layer, float fade) {
   for (std::size_t i = 0; i < px.size(); ++i) {
     scratch_[i] = lut[px[i]];
   }
-  SDL_UpdateTexture(base_, nullptr, scratch_.data(), w * 4);
+  const SDL_Rect rect{0, 0, w, h};
+  if (!SDL_UpdateTexture(base_, &rect, scratch_.data(), w * 4)) {
+    upload_failed("a layer's pixels");
+  }
 }
 
 void HdCompositor::draw_runs(const std::vector<Run>& runs, std::size_t& pos,
@@ -347,20 +616,38 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
         [](const Run& a, const Run& b) { return a.floor < b.floor; });
   }
 
-  // 3. The pictures, in order, with those runs in between.
-  std::size_t pos = 0;
+  // 3. The pictures, in order, with those runs in between. New lines of
+  //    text first, all of them, so each atlas page is sent once.
   const auto& cmds = list->cmds();
+  for (const gfx::HdCmd& c : cmds) {
+    if (c.img && c.img->atlas) {
+      (void)locate(c.img);
+    }
+  }
+  flush_atlas();
+  std::size_t pos = 0;
   for (std::size_t i = 0; i < cmds.size(); ++i) {
     draw_runs(runs_, pos, static_cast<uint32_t>(i), k);
     const gfx::HdCmd& c = cmds[i];
-    SDL_Texture* tex = texture_for(c.img);
+    const Placed at = locate(c.img);
+    SDL_Texture* tex = at.tex;
     if (!tex) {
       continue;
     }
-    SDL_SetTextureColorModFloat(tex, fade, fade, fade);
+    if (c.tint != 0) {
+      // A coverage mask (white): the colour is the GPU's modulation.
+      SDL_SetTextureColorModFloat(
+          tex, fade * static_cast<float>(gfx::red(c.tint)) / 255.0f,
+          fade * static_cast<float>(gfx::green(c.tint)) / 255.0f,
+          fade * static_cast<float>(gfx::blue(c.tint)) / 255.0f);
+    }
+    else {
+      SDL_SetTextureColorModFloat(tex, fade, fade, fade);
+    }
     SDL_SetTextureScaleMode(tex, c.half ? SDL_SCALEMODE_LINEAR
                                         : SDL_SCALEMODE_NEAREST);
-    const SDL_FRect src{static_cast<float>(c.sx), static_cast<float>(c.sy),
+    const SDL_FRect src{static_cast<float>(c.sx + at.x),
+                        static_cast<float>(c.sy + at.y),
                         static_cast<float>(c.sw), static_cast<float>(c.sh)};
     const SDL_FRect dst{static_cast<float>(c.dx), static_cast<float>(c.dy),
                         static_cast<float>(c.dw()), static_cast<float>(c.dh())};
