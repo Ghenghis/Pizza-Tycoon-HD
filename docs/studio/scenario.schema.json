@@ -33,8 +33,8 @@
     "roster": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 32,
-      "description": "Order = runtime CityId. Immutable for a game once created. Validator SCN-1: unique keys; classic entries only with classic pins.",
+      "maxItems": 48,
+      "description": "Order = runtime CityId. Immutable for a game once created. Validator SCN-1: unique keys; classic entries only with classic pins. 48 is a provisional per-game active-simulation budget (contract 2.4), not a catalog limit.",
       "items": {
         "type": "object",
         "additionalProperties": false,

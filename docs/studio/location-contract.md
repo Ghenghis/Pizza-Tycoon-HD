@@ -4,10 +4,9 @@ Contract version **1.0.0-review**. It becomes 1.0.0 (frozen) when the integrator
 after that, changes are additive minor versions or a new major version with a migration.
 
 This is a design. **Nothing in it is implemented.** Every statement about the current engine
-cites `file:line` in this checkout (`/home/claude/w/pl/pizzalegacy`, no git metadata). The
-Codex review on the user's PC is pinned to local HEAD `94d616e`; some of its line numbers differ
-by a line or two from the ones here (for example its `WeaponMarket.h:47` is `:48` here), and the
-recovered kit's audit quotes `SAVE_FORMAT_VERSION = 2` where this checkout has 3
+cites `file:line` in this repository as of commit `1fd2a9e`. The Codex review on the owner's
+PC is pinned to `94d616e`; some of its line numbers differ by a line or two from the ones here
+(for example its `WeaponMarket.h:47` is `:48` here). `SAVE_FORMAT_VERSION` is 3
 (`src/core/save/SaveGameManager.h:26`).
 
 Files that belong to this contract:
@@ -27,7 +26,7 @@ Files that belong to this contract:
 Section map: 1 inventory, 2 identity, 3 LocationDefinition, 4 construction, 5 validation,
 6 saves, 7 generation, 8 admission and publication, 9 Studio project, 10 catalog and
 navigation, 11 scenarios and objectives, 12 calendar events, 13 main menu data, 14 cast and
-costumes, 15 geography, art and asset admission, 16 refactor order, 17 recovered kit,
+costumes, 15 geography, art and asset admission, 16 refactor order, 17 unrelated projects,
 18 defects found while verifying, 19 open questions.
 
 ---
@@ -183,8 +182,12 @@ and definition hash (or to `classic`). Roster position = runtime `CityId`. The r
 at game creation, copied into the save, and **never changes** during that game. Installing,
 updating, renaming or deleting catalog content cannot add a city to a running game, change
 array sizes, change victory scope or change RNG draw counts (item 16 in 1.1). Classic games use
-the implicit Classic roster `[classic:paris .. classic:london]`. Limits: 1..32 entries in
-contract 1.x (memory budget, section 6.6).
+the implicit Classic roster `[classic:paris .. classic:london]`. Limits: 1..48 entries in
+contract 1.x. That is a **provisional active-simulation budget** per game on desktop (the 35
+locations of the full target fit with room), not a catalog limit: the catalog has no ceiling,
+every shipped area stays discoverable and user additions are unlimited. A phone budget is set
+only from measurements on the real device (S21, tablet); a game that would not fit is refused
+before it starts, never by dropping locations or saves.
 
 ---
 
@@ -445,7 +448,7 @@ id, revision and hash and falls back when missing.
 | | Embed (chosen) | Immutable required bundle |
 |---|---|---|
 | Save opens if the bundle is deleted, renamed, or on another device | yes | no: recovery flow needed |
-| Save size | + about 50 KB canonical per location (harbor-bay: 51,566 bytes, 3,385 compressed); budget 256 KiB per definition, 32 locations | minimal |
+| Save size | + about 50 KB canonical per location (harbor-bay: 51,566 bytes, 3,385 compressed); budget 256 KiB per definition, 48 locations per game (provisional) | minimal |
 | Sharing a save shares the topology | yes (user content only; no original data) | needs the bundle too |
 | Duplicate storage across many saves | yes | no |
 | Behaviour when the catalog has a newer revision | the game keeps playing its embedded revision; the menu may offer "newer version available" for new games only | must pin and keep every old revision forever |
@@ -479,7 +482,7 @@ default Classic save is byte-identical to today's.
 | Costume or event catalog missing | presentation refs unresolved | base appearance, events off; notice; never an error |
 | Property or supplier reference unresolved | `json_to_city` lookup | Expanded: refuse with the refs listed. Classic: unchanged warn-and-skip (`SaveGameCity.cpp:686-689,732-734`) |
 
-Budgets: roster <= 32, definition <= 256 KiB canonical, save JSON cap unchanged (256 MiB,
+Budgets: roster <= 48 (provisional, per game), definition <= 256 KiB canonical, save JSON cap unchanged (256 MiB,
 `SaveGameManager.cpp:58`). The S21/tablet parse cost must be measured in W07.
 
 ---
@@ -575,7 +578,7 @@ Revisions form a tree (parent pointers); `head` is the cursor. Undo moves the cu
 parent; `history.redo` lists undone revisions until a new edit at head, which clears it (the
 abandoned revisions remain for the Recovery Center). Operations are constrained JSON-Patch with
 stable selectors (`{kind, id}` or tile rectangles); array-index-only paths are rejected for
-entity lists (kept from the kit's `DOCS/ARCHITECTURE.md`). Each operation stores `old_value`.
+entity lists. Each operation stores `old_value`.
 Branches cover variations, "Try safely" and restores. Bounded: 2,000 revisions per document;
 older ones compact into checkpoints; published revisions never compact.
 
@@ -950,22 +953,12 @@ year rolls, AI expansion, newspaper events, mafia and police, plus loading v1, v
 
 ---
 
-## 17. Recovered Studio kit: what is reused
+## 17. Unrelated projects
 
-Read from `C:/Users/Admin/Pizza-Tycoon-HD-Work/recovered-from-D/pizza_tycoon/BARROS_PIZZA_STUDIO_SDK_HARNESS_CONTRACT_KIT_v1.0.0`.
-
-| Kit part | Reused | Not reused, and why |
-|---|---|---|
-| `schemas/location.schema.json` | revision integer, id discipline | address, contact, coordinates, real-world status, services: a store record, not a city's tiles and economy |
-| `schemas/map.schema.json` | layer list with visible and locked flags, external round trip idea | free orientation and tile size; layers as external files |
-| `schemas/change_set.schema.json`, `service/app/store.py` | base-revision precondition, old value per operation, rollback snapshot, bounded operation count, append-only event log | dotted-path allowlist limited to store fields; `main.py:50` refuses every target except locations |
-| `schemas/asset.schema.json` | source type, rights status, quarantine and approved states, sha256 | `legacy_*` kinds; no frame contract |
-| `schemas/project.schema.json` | `runtime.mode` classic / expanded idea | brand, market, live-data and price-snapshot fields |
-| `schemas/interior_layout.schema.json` | rooms and objects with ids, validation profiles | polygon rooms: the engine's rooms are rectangles of tiles |
-| `DOCS/ARCHITECTURE.md` | canonical document + transactions; reject array-index-only patches; resolution chain project -> packs -> classic -> placeholder | Godot client, VPS services |
-| `DOCS/UX_EDITOR_SPEC.md` | inspector badges for generated / manual / imported, validation linking to the object | UI is not in this contract |
-
-The kit's id pattern `^[a-z0-9][a-z0-9._-]{2,127}$` is kept for project ids; location keys use the
+The Barros Pizza Studio kit and the Pizza Connection 3 tools on the owner's PC are separate
+projects. Nothing from them is used here: no code, art, schemas or adapters (owner's decision,
+2026-11-14). An earlier draft of this contract compared ideas with that kit; those references
+were removed. Project ids use the pattern `^[a-z0-9][a-z0-9._-]{2,127}$`; location keys use the
 namespaced pattern above.
 
 ---
@@ -989,20 +982,29 @@ namespaced pattern above.
 
 ---
 
-## 19. Open questions for the user
+## 19. Owner decisions (2026-11-14) and what is still open
 
-1. Pin Natural Earth to a release (for example the current 5.x tag) and choose the gazetteer for
-   city coordinates (Natural Earth populated places or another licensed source).
-2. Should Expanded scenarios be allowed to mix Classic cities with new locations in 1.0, or start
-   with single-region or single-location rosters only?
-3. Classic mode: may players turn on cosmetic events and costumes (they never touch the
-   fingerprint), or must Classic stay visually exact?
-4. Mission mode for Expanded: out of 1.0, agreed?
-5. Inclusion rules for borders (Mexico is placed in Latin America and the Caribbean per the
-   Codex proposal) and for transcontinental places.
-6. Balance thresholds to calibrate against Classic data dumped locally: PROP-5 (16 premises),
+Decided:
+
+1. **Geography:** use the Natural Earth geometry already pinned with its provenance in
+   `world-region-art/region-overviews-v1` (the overview manifest records the exact source
+   revision and hashes). Never "latest". City coordinates come from the same pinned source.
+2. **Rosters:** Expanded games may mix the preserved Classic cities with new areas (the full
+   target is 35 combined). The roster is frozen per game.
+3. **Classic stays visually faithful.** Cosmetic events and costumes are opt-in Expanded
+   features with a preview and an off switch.
+4. **Missions:** legacy Classic missions are preserved. New locations still get their own
+   scenarios and goals built on the supported economy (section 11).
+5. **Borders:** every place has one primary browser region plus searchable secondary geography
+   tags; Mexico stays in Latin America and the Caribbean.
+6. **No catalog ceiling.** The per-game roster limit above is a provisional, measured
+   active-simulation budget, kept separate from the catalog; the S21 budget needs real device
+   evidence.
+
+Still open:
+
+7. Balance thresholds to calibrate against Classic data dumped locally: PROP-5 (16 premises),
    ECON-1 (3 x rent), population weight magnitudes, and whether ROAD-4 holds for the Classic maps.
-7. Roster limit 32 and definition limit 256 KiB until the S21 is measured: acceptable?
 8. Names are limited to ISO-8859-1 by the original fonts; accept for 1.0, or require HD text for
    names outside it (for example scripts for Seoul or Kathmandu signage)?
 9. Event catalog content: which observances, with which local review, beyond the fixture's

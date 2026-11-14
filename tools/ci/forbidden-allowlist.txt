@@ -22,7 +22,6 @@
 
 # --- Real gaps in user flows (upstream): fix these first ----------------------
 marker | src/views/screens/Advertising.cpp | Show error message "There is already a campaign | 2026-12-14 | upstream, R1: the Shop button does nothing while a campaign runs; fix: post a status message as CityView.cpp does
-marker | src/views/screens/menus/MenuSaveAsGame.cpp | Show error popup to user | 2026-12-14 | upstream, R2: a failed save only logs; fix: show a popup or status message
 not-implemented | src/core/conversations/MayorConversation.cpp | advance_line_choice() not implemented | 2026-12-14 | upstream, R3: handler logs and returns false; fix: an explicit "the mayor has no choice lines" error, or implement it
 not-implemented | src/core/conversations/MayorConversation.cpp | lines() not implemented for | 2026-12-14 | upstream, R4: default branch returns no lines; fix: drop the default so -Wswitch flags every unhandled MayorLine
 not-implemented | src/core/conversations/ArmsDealerConversation.cpp | Get Lines Not yet implemented for line | 2026-12-14 | upstream (not in the audit): default branch of lines() returns no lines; fix: drop the default so -Wswitch flags every unhandled line

@@ -250,7 +250,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["kind"],
-      "description": "Stable selector. Entity lists are addressed by entity id, never by array index (kit ARCHITECTURE.md rule, kept).",
+      "description": "Stable selector. Entity lists are addressed by entity id, never by array index.",
       "properties": {
         "kind": {
           "enum": ["tiles", "district_cells", "district", "property", "actor", "food_supplier", "building_names", "display", "world", "economy", "assets", "ingredient_base_prices"]
