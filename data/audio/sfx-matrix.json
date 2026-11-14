@@ -1,0 +1,1351 @@
+{
+  "schema": "plegacy.sfx-matrix/1",
+  "commit": "34d895182092f59a30365dc97e5e44d43652c9dc",
+  "generator": "tools/audio/sfx_matrix.py",
+  "game_sound_dir": "SOUND (M0..M11 of the 1994 release; path not recorded)",
+  "reachability_terms": {
+    "visited": "a call site on a normal gameplay path exists at this commit (static; not observed at runtime)",
+    "unverified": "no gameplay call site found; not counted",
+    "unused": "proven never played"
+  },
+  "rows": [
+    {
+      "slot": 0,
+      "id": "RESTAURANT_NOISE_1",
+      "family": "restaurant-crowd",
+      "trigger": "restaurant open, dining room shown, seating utilization >21 %",
+      "scene": "restaurant (dining room)",
+      "role": "loop",
+      "priority": "ambience",
+      "reachability": "visited",
+      "notes": "RestaurantView::update_restaurant_noise: seating utilization >21/>51/>81 % picks 1/2/3; off when closed, in the kitchen view, while the jukebox plays, or with options().restaurant_fx off. Stopped and restarted on each update.",
+      "candidates": [
+        "pc3:GuestRoom_lowactivity"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/RestaurantView.cpp:225",
+          "code": "noise = audio::SoundId::RESTAURANT_NOISE_1;"
+        }
+      ],
+      "original": {
+        "container": "sound/m0",
+        "container_sha256": "934bc5807fffe43dd0e7740ab63185ae926fd47f0c9e11a506de16c67fea184a",
+        "index": 0,
+        "voc_index": 0,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 79941,
+        "duration_s": 7.1948,
+        "voc_sha256": "86c174353da036a061e6ec965d38026129b8c327d3e83d50497dca205bdd1886",
+        "pcm_sha256": "6044fdb60a6e3b82f548d344562409c1dc47cb38ed2434b63de46e87b166050b",
+        "voc_blocks": [
+          6,
+          1,
+          7,
+          0
+        ],
+        "voc_repeat_count": 65535,
+        "peak_u8_from_128": 12,
+        "clipped_samples": 0,
+        "dc_offset_u8": -0.838,
+        "leading_quiet_ms": 0.1,
+        "trailing_quiet_ms": 0.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 317289,
+          "bytes_s16": 1269156,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 1,
+      "id": "RESTAURANT_NOISE_2",
+      "family": "restaurant-crowd",
+      "trigger": "restaurant open, dining room shown, seating utilization >51 %",
+      "scene": "restaurant (dining room)",
+      "role": "loop",
+      "priority": "ambience",
+      "reachability": "visited",
+      "notes": "RestaurantView::update_restaurant_noise: seating utilization >21/>51/>81 % picks 1/2/3; off when closed, in the kitchen view, while the jukebox plays, or with options().restaurant_fx off. Stopped and restarted on each update.",
+      "candidates": [
+        "pc3:GuestRoom_midactivity"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/RestaurantView.cpp:222",
+          "code": "noise = audio::SoundId::RESTAURANT_NOISE_2;"
+        }
+      ],
+      "original": {
+        "container": "sound/m0",
+        "container_sha256": "934bc5807fffe43dd0e7740ab63185ae926fd47f0c9e11a506de16c67fea184a",
+        "index": 1,
+        "voc_index": 1,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 65029,
+        "duration_s": 5.8527,
+        "voc_sha256": "d1fc39da34f68d4ac03d93041dbd4678c0d7186a600ef2489c9e177cd56fdb71",
+        "pcm_sha256": "e13b35c64d0cf80c1590dd069ef16e505ad49434d2859e39fbe9d40b3bbb2d26",
+        "voc_blocks": [
+          6,
+          1,
+          7,
+          0
+        ],
+        "voc_repeat_count": 65535,
+        "peak_u8_from_128": 21,
+        "clipped_samples": 0,
+        "dc_offset_u8": -0.736,
+        "leading_quiet_ms": 1.4,
+        "trailing_quiet_ms": 0.3,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 258102,
+          "bytes_s16": 1032408,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 2,
+      "id": "RESTAURANT_NOISE_3",
+      "family": "restaurant-crowd",
+      "trigger": "restaurant open, dining room shown, seating utilization >81 %",
+      "scene": "restaurant (dining room)",
+      "role": "loop",
+      "priority": "ambience",
+      "reachability": "visited",
+      "notes": "RestaurantView::update_restaurant_noise: seating utilization >21/>51/>81 % picks 1/2/3; off when closed, in the kitchen view, while the jukebox plays, or with options().restaurant_fx off. Stopped and restarted on each update.",
+      "candidates": [
+        "pc3:GuestRoom_highactivity"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/RestaurantView.cpp:219",
+          "code": "noise = audio::SoundId::RESTAURANT_NOISE_3;"
+        }
+      ],
+      "original": {
+        "container": "sound/m0",
+        "container_sha256": "934bc5807fffe43dd0e7740ab63185ae926fd47f0c9e11a506de16c67fea184a",
+        "index": 2,
+        "voc_index": 2,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 67649,
+        "duration_s": 6.0885,
+        "voc_sha256": "bcfde35619d67f1f65f07bfe766a6c26361984459812ec4e87c0453c1f49baf7",
+        "pcm_sha256": "aaae3cc6b0dd01e205c0b7f063e8aeb6696f10f3ad03520e167488c31c478884",
+        "voc_blocks": [
+          6,
+          1,
+          7,
+          0
+        ],
+        "voc_repeat_count": 65535,
+        "peak_u8_from_128": 61,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.191,
+        "leading_quiet_ms": 0.0,
+        "trailing_quiet_ms": 0.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 268501,
+          "bytes_s16": 1074004,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 3,
+      "id": "TRAFFIC_1",
+      "family": "city-traffic",
+      "trigger": "city map at CLOSE zoom",
+      "scene": "city view",
+      "role": "loop",
+      "priority": "ambience",
+      "reachability": "visited",
+      "notes": "CityView::update_city_sound; needs options().map_fx; FAR zoom stops it.",
+      "candidates": [
+        "pc3:Blocks_Urban_Traffic_Day (lead, not staged)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/city_view/CityView.cpp:406",
+          "code": "desired = audio::SoundId::TRAFFIC_1;"
+        }
+      ],
+      "original": {
+        "container": "sound/m7",
+        "container_sha256": "6e5fa37ebc2992831402590d547215c5a00fbb10d030e6125c64d3f44f75f94a",
+        "index": 0,
+        "voc_index": 0,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 159535,
+        "duration_s": 14.3583,
+        "voc_sha256": "cbba7308f401e062406672230c66c177baf78925658edef0c24b8c432fe47d2d",
+        "pcm_sha256": "32597654d41c885cda321b8c0f425aec4f9cac7bcb9b023a025af715c85f084e",
+        "voc_blocks": [
+          6,
+          1,
+          7,
+          0
+        ],
+        "voc_repeat_count": 65535,
+        "peak_u8_from_128": 25,
+        "clipped_samples": 0,
+        "dc_offset_u8": -1.121,
+        "leading_quiet_ms": 0.4,
+        "trailing_quiet_ms": 0.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 633200,
+          "bytes_s16": 2532800,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 4,
+      "id": "TRAFFIC_2",
+      "family": "city-traffic",
+      "trigger": "city map at MEDIUM zoom",
+      "scene": "city view",
+      "role": "loop",
+      "priority": "ambience",
+      "reachability": "visited",
+      "notes": "CityView::update_city_sound; needs options().map_fx; FAR zoom stops it.",
+      "candidates": [
+        "pc3:Blocks_Urban_Traffic_Night or a distance-filtered Day (lead, not staged)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/city_view/CityView.cpp:409",
+          "code": "desired = audio::SoundId::TRAFFIC_2;"
+        }
+      ],
+      "original": {
+        "container": "sound/m7",
+        "container_sha256": "6e5fa37ebc2992831402590d547215c5a00fbb10d030e6125c64d3f44f75f94a",
+        "index": 1,
+        "voc_index": 1,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 70186,
+        "duration_s": 6.3168,
+        "voc_sha256": "bb51c5ce2c2c8e9b43ce8d542ccded79fde2a923abee97ae4e7c815ff777aa1f",
+        "pcm_sha256": "43d8e9d9195d3ff031ae22f87dad6177ca27b027c27ba6fb004bc193d1e333c8",
+        "voc_blocks": [
+          6,
+          1,
+          7,
+          0
+        ],
+        "voc_repeat_count": 65535,
+        "peak_u8_from_128": 22,
+        "clipped_samples": 0,
+        "dc_offset_u8": -0.361,
+        "leading_quiet_ms": 0.6,
+        "trailing_quiet_ms": 0.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 278571,
+          "bytes_s16": 1114284,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 5,
+      "id": "DIAL_TONE_0",
+      "family": "phone",
+      "trigger": "digit 0 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 0,
+        "voc_index": 0,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1312,
+        "duration_s": 0.1181,
+        "voc_sha256": "852be4088b2d60c0fcf8d3f15b3cb56b14eb7829fe521c9ac41ab779aba2a5df",
+        "pcm_sha256": "898fe90670cd155259d2f88df5430223474a90729895251a190410c8538310e4",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 81,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.178,
+        "leading_quiet_ms": 0.1,
+        "trailing_quiet_ms": 5.1,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5207,
+          "bytes_s16": 20828,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 6,
+      "id": "DIAL_TONE_1",
+      "family": "phone",
+      "trigger": "digit 1 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 1,
+        "voc_index": 1,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 2017,
+        "duration_s": 0.1815,
+        "voc_sha256": "d018a91a6c1cc78b8ff62030605c641312978d0509424394545e1fedfb309094",
+        "pcm_sha256": "22d55a795afea647eba4d074f63fab0c364d0494279b05cd5003dbf55cd4b692",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 83,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.17,
+        "leading_quiet_ms": 0.7,
+        "trailing_quiet_ms": 4.7,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 8005,
+          "bytes_s16": 32020,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 7,
+      "id": "DIAL_TONE_2",
+      "family": "phone",
+      "trigger": "digit 2 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 2,
+        "voc_index": 2,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1704,
+        "duration_s": 0.1534,
+        "voc_sha256": "b3cf9e09c0b2d8bcdfbd117837b05524ecc324bb08aa9ba9175db95e2b3348d1",
+        "pcm_sha256": "a85467843b20a50d96865d6cf4d7910097d0a549f45e3a3dce98757d8b85ec96",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 95,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.194,
+        "leading_quiet_ms": 0.4,
+        "trailing_quiet_ms": 9.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 6763,
+          "bytes_s16": 27052,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 8,
+      "id": "DIAL_TONE_3",
+      "family": "phone",
+      "trigger": "digit 3 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 3,
+        "voc_index": 3,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1703,
+        "duration_s": 0.1533,
+        "voc_sha256": "6ee2cf58484494bc71dafacab6d851ff2cc5829af929d9089314a4bef6fb01e2",
+        "pcm_sha256": "a1cee498837447442285f382f7da4be059a1d019429476aeab0830dc4129a22e",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 81,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.196,
+        "leading_quiet_ms": 0.3,
+        "trailing_quiet_ms": 8.8,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 6759,
+          "bytes_s16": 27036,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 9,
+      "id": "DIAL_TONE_4",
+      "family": "phone",
+      "trigger": "digit 4 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 4,
+        "voc_index": 4,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1363,
+        "duration_s": 0.1227,
+        "voc_sha256": "19b6478f2f13a27b51e61ec73caea21b5f230a5864e21d11ae5cbf4a446e6642",
+        "pcm_sha256": "c07607b42cfdc5c5f3ed8dd43b423db2a35a26c831607cf980f991c027757457",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 95,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.183,
+        "leading_quiet_ms": 0.1,
+        "trailing_quiet_ms": 10.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5409,
+          "bytes_s16": 21636,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 10,
+      "id": "DIAL_TONE_5",
+      "family": "phone",
+      "trigger": "digit 5 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 5,
+        "voc_index": 5,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1310,
+        "duration_s": 0.1179,
+        "voc_sha256": "0fd174866010975c08306d34bc5b97e5b5822906789ec169eb4c76f55a059fa9",
+        "pcm_sha256": "d3487db35fd2686db38b6dc6a560559f45b8ba05011525b15dde194f8f5b4867",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 76,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.173,
+        "leading_quiet_ms": 0.1,
+        "trailing_quiet_ms": 5.1,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5199,
+          "bytes_s16": 20796,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 11,
+      "id": "DIAL_TONE_6",
+      "family": "phone",
+      "trigger": "digit 6 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 6,
+        "voc_index": 6,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1348,
+        "duration_s": 0.1213,
+        "voc_sha256": "25d831a1c3d22309d2c844b1b5168de3fd88cc3d5764e9153547fb13bfd37ad0",
+        "pcm_sha256": "a80512e344b49c5c471904ee305b7e782f60eb5d8a8cc155d88f01a67ac2fe5a",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 86,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.143,
+        "leading_quiet_ms": 0.1,
+        "trailing_quiet_ms": 8.6,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5350,
+          "bytes_s16": 21400,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 12,
+      "id": "DIAL_TONE_7",
+      "family": "phone",
+      "trigger": "digit 7 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 7,
+        "voc_index": 7,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1384,
+        "duration_s": 0.1246,
+        "voc_sha256": "c036b3f2f4e4766bbe4e01e44eca055fac299b717780cacb458627235945937b",
+        "pcm_sha256": "cd87f9fed8abd6ad7cf7250dac1ef9bd91e38fd691115ee74eafe6e620874946",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 84,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.173,
+        "leading_quiet_ms": 1.4,
+        "trailing_quiet_ms": 10.6,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5493,
+          "bytes_s16": 21972,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 13,
+      "id": "DIAL_TONE_8",
+      "family": "phone",
+      "trigger": "digit 8 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 8,
+        "voc_index": 8,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1320,
+        "duration_s": 0.1188,
+        "voc_sha256": "e69587069f14a3addf59936f84eb598cef2be644d5c119e1bcbb8fb580afdce3",
+        "pcm_sha256": "f2c3e749626bf233ffe9f6d227e8a75aca7de0dae730cdf90139e4fb0743a440",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 81,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.186,
+        "leading_quiet_ms": 0.0,
+        "trailing_quiet_ms": 6.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5239,
+          "bytes_s16": 20956,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 14,
+      "id": "DIAL_TONE_9",
+      "family": "phone",
+      "trigger": "digit 9 keyed on the terminal keypad",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "ui",
+      "reachability": "visited",
+      "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:496",
+          "code": "static_cast<int>(audio::SoundId::DIAL_TONE_0) + nr_int);",
+          "indexed": "DIAL_TONE_0 + digit"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 9,
+        "voc_index": 9,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 1351,
+        "duration_s": 0.1216,
+        "voc_sha256": "f7f47f1a5dd61a9ad92759b36f7ed9285f2d06ea2d37c555f41e290d8ed990a2",
+        "pcm_sha256": "c02869d2cc1d6e42651417b07950de3ee326f4ef014d0fbe9407acdc23b4ead8",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 79,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.184,
+        "leading_quiet_ms": 0.1,
+        "trailing_quiet_ms": 8.7,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 5362,
+          "bytes_s16": 21448,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 15,
+      "id": "PHONE_RINGING",
+      "family": "phone",
+      "trigger": "call placed (waiting for connection) and the error phase",
+      "scene": "terminal (phone)",
+      "role": "loop",
+      "priority": "alert",
+      "reachability": "visited",
+      "notes": "Looped in WAITING_FOR_CONNECTION and ERROR; stopped in IDLE, PHONE_PICKUP and the destructor.",
+      "candidates": [
+        "lead only: R6 Black Ops data sound/ringing.wav (not on the approved list; not staged)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:74",
+          "code": "context_.audio->stop_sound(audio::SoundId::PHONE_RINGING);"
+        },
+        {
+          "site": "src/views/screens/Terminal.cpp:564",
+          "code": "context_.audio->stop_sound(audio::SoundId::PHONE_RINGING);"
+        },
+        {
+          "site": "src/views/screens/Terminal.cpp:578",
+          "code": "context_.audio->play_sound(audio::SoundId::PHONE_RINGING,"
+        },
+        {
+          "site": "src/views/screens/Terminal.cpp:590",
+          "code": "context_.audio->stop_sound(audio::SoundId::PHONE_RINGING);"
+        },
+        {
+          "site": "src/views/screens/Terminal.cpp:606",
+          "code": "context_.audio->play_sound(audio::SoundId::PHONE_RINGING,"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 10,
+        "voc_index": 10,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 23397,
+        "duration_s": 2.1058,
+        "voc_sha256": "6f93f1593948b60bcea889cd2a768cb83dc1ca653fa02f5f3a4017ab028f4891",
+        "pcm_sha256": "b7d68950aee8c60f7c1f0ab4f922b9950c8aa6c168945890376090bf20ace365",
+        "voc_blocks": [
+          6,
+          1,
+          7,
+          0
+        ],
+        "voc_repeat_count": 2,
+        "peak_u8_from_128": 72,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.089,
+        "leading_quiet_ms": 448.9,
+        "trailing_quiet_ms": 459.7,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 92863,
+          "bytes_s16": 371452,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 16,
+      "id": "PHONE_PICKUP",
+      "family": "phone",
+      "trigger": "the other side picks up",
+      "scene": "terminal (phone)",
+      "role": "one-shot",
+      "priority": "alert",
+      "reachability": "visited",
+      "notes": "Played after PHONE_RINGING is stopped.",
+      "candidates": [
+        "none approved yet (see gaps)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/Terminal.cpp:591",
+          "code": "context_.audio->play_sound(audio::SoundId::PHONE_PICKUP);"
+        }
+      ],
+      "original": {
+        "container": "sound/m8",
+        "container_sha256": "70e372a31420c14ee4de961913906094dbc4de07e8440b2c3a4e9d8508150f89",
+        "index": 11,
+        "voc_index": 11,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 4200,
+        "duration_s": 0.378,
+        "voc_sha256": "e444522aa893c7b19ef79a1bd978a30ac8eb30ac0320f1890947a449e9917fe6",
+        "pcm_sha256": "a57ce17d1da0904ddd83d2edb724cc66358ebd1c46c79a32ff65316755714be1",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 57,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.08,
+        "leading_quiet_ms": 19.4,
+        "trailing_quiet_ms": 0.5,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 16669,
+          "bytes_s16": 66676,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 17,
+      "id": "CHOPPER",
+      "family": "kitchen-prep",
+      "trigger": "a choppable topping is chopped in the pizza designer",
+      "scene": "pizza designer",
+      "role": "one-shot",
+      "priority": "feedback",
+      "reachability": "visited",
+      "notes": "PizzaDesign::start_chop; the blade animation runs NUMBER_OF_CHOP_MS = 600 ms flipping every 55 ms. Loader starts playback 500 interleaved samples (250 frames at 44.1 kHz) in to skip a static lead-in; a clean replacement must carry its own start offset instead.",
+      "candidates": [
+        "pc3:PizzaCreator/Ingredients/cut.ogg"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/pizza/PizzaDesignCanvas.cpp:117",
+          "code": "context_.audio->play_sound(audio::SoundId::CHOPPER);"
+        }
+      ],
+      "original": {
+        "container": "sound/m9",
+        "container_sha256": "c45ce409ce0e1dc4d5ad2493aee2107e509536f5e4853bd9c1655845cf386b88",
+        "index": 0,
+        "voc_index": 0,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 22222,
+        "samples": 36161,
+        "duration_s": 1.6273,
+        "voc_sha256": "718442a2e3f9af8bd167ba57e9180d647f2feb23b7393c959b6efae769511676",
+        "pcm_sha256": "b8874a7c8cc8e248130cd4697bb7869f927401508a8b6675e8501249508d5fd9",
+        "voc_blocks": [
+          1
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 121,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.337,
+        "leading_quiet_ms": 0.0,
+        "trailing_quiet_ms": 194.9,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 71762,
+          "bytes_s16": 287048,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        },
+        "engine_start_offset_frames": 250
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 18,
+      "id": "WEAPON_1",
+      "family": "attack",
+      "trigger": "flame weapon active (and no police, no explosion)",
+      "scene": "restaurant attack scene",
+      "role": "loop",
+      "priority": "feedback",
+      "reachability": "visited",
+      "notes": "AttackScene: play_sound_if_changed priority chain: siren > explosion > flame > bazooka.",
+      "candidates": [],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/AttackScene.cpp:1274",
+          "code": "a->play_sound_if_changed(SoundId::WEAPON_1, LoopMode::Loop);"
+        }
+      ],
+      "original": {
+        "container": "sound/m10",
+        "container_sha256": "12b3ad4e5dbb742d688efa8ad96a4439173eb90a002ddef547116be2155d53f9",
+        "index": 2,
+        "voc_index": 0,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 5524,
+        "samples": 38263,
+        "duration_s": 6.9267,
+        "voc_sha256": "c26018360e2616ca1b75dfce9cda90dba3f1cecc84cde196301a9e5047c02a66",
+        "pcm_sha256": "f22f6c8b74d1f422d5a69ddb5ddd7c2bc34c73638e8fe1686c01df329ef35575",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 12,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.001,
+        "leading_quiet_ms": 6.2,
+        "trailing_quiet_ms": 0.0,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 305466,
+          "bytes_s16": 1221864,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 19,
+      "id": "WEAPON_2",
+      "family": "attack",
+      "trigger": "none found",
+      "scene": "-",
+      "role": "unknown",
+      "priority": "-",
+      "reachability": "unverified",
+      "notes": "No call site at HEAD (only the enum). Reachability stays unverified until proven; do not count it.",
+      "candidates": [],
+      "call_sites": [],
+      "original": {
+        "container": "sound/m10",
+        "container_sha256": "12b3ad4e5dbb742d688efa8ad96a4439173eb90a002ddef547116be2155d53f9",
+        "index": 3,
+        "voc_index": 1,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 22222,
+        "samples": 36146,
+        "duration_s": 1.6266,
+        "voc_sha256": "7bfae8b380331a080e41694197d8f524b53a882a808ec643d37addb888754493",
+        "pcm_sha256": "6ef772fc2ecd8d6c0c36f86bc5363282469648e4165736c15fb935132904a93d",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 7,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.279,
+        "leading_quiet_ms": 5.8,
+        "trailing_quiet_ms": 473.5,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 71732,
+          "bytes_s16": 286928,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 20,
+      "id": "WEAPON_3",
+      "family": "attack",
+      "trigger": "bazooka projectile in flight",
+      "scene": "restaurant attack scene",
+      "role": "one-shot",
+      "priority": "feedback",
+      "reachability": "visited",
+      "notes": "AttackScene priority chain (see WEAPON_1).",
+      "candidates": [],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/AttackScene.cpp:1277",
+          "code": "a->play_sound_if_changed(SoundId::WEAPON_3);"
+        }
+      ],
+      "original": {
+        "container": "sound/m10",
+        "container_sha256": "12b3ad4e5dbb742d688efa8ad96a4439173eb90a002ddef547116be2155d53f9",
+        "index": 4,
+        "voc_index": 2,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 36545,
+        "duration_s": 3.2891,
+        "voc_sha256": "d9799cf62b8a059adf6e1defc6a8c4966921c4b0efe9ab3ad5c6e0d753853343",
+        "pcm_sha256": "64f10190fe1b5e34c1093a4023dc24f93f23cdaf047bff1dcc6a69cee520df87",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 9,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.08,
+        "leading_quiet_ms": 12.2,
+        "trailing_quiet_ms": 545.4,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 145048,
+          "bytes_s16": 580192,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 21,
+      "id": "WEAPON_4",
+      "family": "attack",
+      "trigger": "explosion active",
+      "scene": "restaurant attack scene",
+      "role": "one-shot",
+      "priority": "feedback",
+      "reachability": "visited",
+      "notes": "AttackScene priority chain (see WEAPON_1).",
+      "candidates": [],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/AttackScene.cpp:1271",
+          "code": "a->play_sound_if_changed(SoundId::WEAPON_4);"
+        }
+      ],
+      "original": {
+        "container": "sound/m10",
+        "container_sha256": "12b3ad4e5dbb742d688efa8ad96a4439173eb90a002ddef547116be2155d53f9",
+        "index": 5,
+        "voc_index": 3,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 11111,
+        "samples": 27946,
+        "duration_s": 2.5152,
+        "voc_sha256": "88fce77cb3b79dd5288474154abe7cf3d7f07e19b82c92e0e4aa3c41bc0990b2",
+        "pcm_sha256": "2d3ab1741559218033d423cfe0d42c79d6c3601bc8cfe0e2ec8e4dd682736bc0",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 21,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.244,
+        "leading_quiet_ms": 13.3,
+        "trailing_quiet_ms": 687.5,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 110918,
+          "bytes_s16": 443672,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    },
+    {
+      "slot": 22,
+      "id": "POLICE_SIREN",
+      "family": "attack",
+      "trigger": "police window after an attack",
+      "scene": "restaurant attack scene",
+      "role": "loop",
+      "priority": "alert",
+      "reachability": "visited",
+      "notes": "AttackScene priority chain: highest.",
+      "candidates": [
+        "pc3:Policecar_Siren_1 / Policecar_Siren_2 (lead, not staged; 1.05 s / 0.69 s)"
+      ],
+      "call_sites": [
+        {
+          "site": "src/views/screens/restaurant/AttackScene.cpp:1268",
+          "code": "a->play_sound_if_changed(SoundId::POLICE_SIREN, LoopMode::Loop);"
+        }
+      ],
+      "original": {
+        "container": "sound/m10",
+        "container_sha256": "12b3ad4e5dbb742d688efa8ad96a4439173eb90a002ddef547116be2155d53f9",
+        "index": 6,
+        "voc_index": 4,
+        "format": "VOC block 1, 8-bit unsigned PCM",
+        "channels": 1,
+        "rate_hz": 5524,
+        "samples": 41615,
+        "duration_s": 7.5335,
+        "voc_sha256": "19e97a404eecfe7535707a77b9f023edb06fde05ef6e75f9bd61b8540ae2edc7",
+        "pcm_sha256": "4672cf59e1c0c698fc6efb0c3e9abd715a0c371960372d539bf58e15d2c2f744",
+        "voc_blocks": [
+          1,
+          0
+        ],
+        "voc_repeat_count": null,
+        "peak_u8_from_128": 10,
+        "clipped_samples": 0,
+        "dc_offset_u8": 0.167,
+        "leading_quiet_ms": 2310.5,
+        "trailing_quiet_ms": 316.1,
+        "engine_decoded": {
+          "rate_hz": 44100,
+          "channels": 2,
+          "frames": 332226,
+          "bytes_s16": 1328904,
+          "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
+        }
+      },
+      "fallback": "original",
+      "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
+      "asset_check": "open",
+      "engine_trigger_check": "open",
+      "audible_review": "open"
+    }
+  ],
+  "candidate_new_events": [
+    {
+      "id": "GUEST_ENTERS",
+      "family": "doors",
+      "emitted_by": "GuestWalkScene::spawn_guest",
+      "trigger": "a guest is spawned at the customer door",
+      "role": "one-shot",
+      "status": "needs new trigger",
+      "candidates": [
+        "pc3:Scooter_DoorBell (lead, 2.08 s)",
+        "kenney: Foley Sounds (door-like, unreviewed)"
+      ]
+    },
+    {
+      "id": "GUEST_LEAVES",
+      "family": "doors",
+      "emitted_by": "GuestWalkScene::spawn_guest_departure",
+      "trigger": "the oldest seated guest leaves through the customer door",
+      "role": "one-shot",
+      "status": "needs new trigger",
+      "candidates": []
+    },
+    {
+      "id": "PIZZA_SERVED",
+      "family": "service",
+      "emitted_by": "GuestWalkScene::waiter_delivered",
+      "trigger": "a waiter reaches the table and the guest starts eating",
+      "role": "one-shot",
+      "status": "needs new trigger",
+      "candidates": [
+        "pc3:PizzaCreator/Ingredients/placeSmall.ogg (lead)"
+      ]
+    },
+    {
+      "id": "KITCHEN_AMBIENCE",
+      "family": "kitchen",
+      "emitted_by": "RestaurantView kitchen_view_ (crowd noise is off there)",
+      "trigger": "kitchen view shown while open",
+      "role": "loop",
+      "status": "needs new trigger",
+      "candidates": [
+        "pc3:Kitchen_activity / Kitchen_noactivity (lead)"
+      ]
+    }
+  ],
+  "families_not_backed_by_events": {
+    "ovens": "no discrete oven event in the views (ovens are bought/listed only)",
+    "payment": "no per-guest payment event; takings are shown as reports"
+  }
+}
