@@ -63,13 +63,19 @@ ComfyUI setup, limits).
 | `scripts\export-assets.ps1` | Writes the original art to `export\` |
 | `scripts\make-pack.ps1` | Builds `pack\` (baseline upscale or ComfyUI) and validates it |
 | `scripts\run-dev.ps1` | Plays the game with a pack at a chosen scale (builds it first if needed) |
-| `scripts\release.ps1` | Packages the Windows zip and exe, with checksums; the version comes from CMake's `project(VERSION)` |
-| `scripts\hd-gates.ps1` | Runs the real game hidden: HD screens render, GPU = CPU picture, gameplay unchanged by smooth motion, 4K frame time limits; keeps screenshots and logs under `build\hd-gates` when a gate fails |
+| `scripts\release.ps1` | Packages the Windows zip and exe, with checksums; the version comes from CMake's `project(VERSION)`; then runs the release gate and removes a release that fails it |
+| `scripts\check-release.ps1` | The release gate: every SHA-256, the zip's files against `tools\ci\release-manifest.txt` (no original game files; data, LICENSE and notices there), the unpacked game's `--version`, and a short hidden `--exec` run with the game files |
+| `scripts\hd-gates.ps1` | Runs the real game hidden: HD screens render, GPU = CPU picture, gameplay unchanged by smooth motion, 4K frame time limits, per-screen HD coverage (`build\coverage`); keeps screenshots and logs under `build\hd-gates` when a gate fails |
 | `scripts\ci-local.ps1` | All of the above in order, run locally (no hosted CI); lists every skipped check at the end. `-RequireGame` (or `PLEGACY_TEST_GAME_PATH`) makes skipped game checks fail |
 
 Linux and macOS: `scripts/doctor.sh`, `scripts/fetch-deps.sh`,
 `scripts/build.sh`, `scripts/lint.sh`, `scripts/scan.sh`, `scripts/test.sh`,
-`scripts/hd-gates.sh`, `scripts/format.sh`, `scripts/ci-local.sh`.
+`scripts/hd-gates.sh`, `scripts/check-release.sh`, `scripts/format.sh`,
+`scripts/ci-local.sh`.
+
+GitHub runs `scripts\ci-local.ps1` only on a self-hosted runner on the
+owner's PC (`.github/workflows/ci-local.yml`; setup in
+[docs/BUILDING.md](docs/BUILDING.md)): no hosted runners, nothing paid.
 
 Windows build from Linux or WSL2 (no Visual Studio needed):
 `scripts/build-windows-cross.sh` makes a `Pizza Legacy.exe` with no DLL

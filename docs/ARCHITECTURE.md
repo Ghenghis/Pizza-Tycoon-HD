@@ -160,8 +160,13 @@ It writes only to the user data folder, except where a command is told to:
 - `tools/hdpack/`: the HD pack tools (Python), with their pytest tests in
   `tools/hdpack/tests/`; `tools/ci/`: the local CI gates and scans.
 - `scripts/`: one command per job, for Windows (`.ps1`) and Linux/macOS
-  (`.sh`): doctor, build, lint, scan, test, hd-gates, release, ci-local.
-  CI runs on the owner's PC (`scripts/ci-local.*`), not on hosted runners.
+  (`.sh`): doctor, build, lint, scan, test, hd-gates, release,
+  check-release, ci-local. CI runs on the owner's PC (`scripts/ci-local.*`),
+  also as GitHub's only workflow, on a self-hosted runner
+  (`.github/workflows/ci-local.yml`), never on hosted runners.
+- `tools/ci/`: the gates and scans (`hd_gates.py`, `check_release.py`,
+  `scan.py`), their allowlists, budgets and manifest, and their pytest tests
+  in `tools/ci/tests/` (against a stand-in game, `fake_game.py`).
 - `data/`, `assets/`: files the program ships; `docs/`: documentation.
 
 ## User interface: faithful by design

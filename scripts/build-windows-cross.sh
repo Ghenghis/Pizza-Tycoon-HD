@@ -5,7 +5,8 @@
 # Builds the Windows release from Linux or WSL2 with MinGW-w64: one
 # "Pizza Legacy.exe" with no DLL dependencies (SDL3, zlib, libADLMIDI and
 # the C++ runtime linked in; it still needs the data folder from the zip),
-# then the release zip with SHA-256 checksums.
+# then the release zip with SHA-256 checksums, checked by the release gate
+# (scripts/check-release.sh).
 #   sudo apt-get install g++-mingw-w64-x86-64-posix
 #
 # The version comes from the build (version.txt, written by CMake from
@@ -103,6 +104,7 @@ cp "$ROOT/tools/hdpack/hdpack.py" "$ROOT/tools/hdpack/export.py" "$ROOT/tools/hd
 cp -R "$ROOT/tools/hdpack/workflows" "$STAGE/tools/hdpack/"
 cp "$ROOT/README.md" "$ROOT/SECURITY.md" "$ROOT/docs/HD_REMASTER.md" "$ROOT/docs/CHANGELOG.md" "$ROOT/docs/CREDITS.md" "$STAGE/"
 cp -R "$ROOT/LICENSES" "$STAGE/LICENSES"
+cp "$ROOT/LICENSE" "$STAGE/"
 # The original game's files are not ours to ship. The only VGA picture in a
 # release is the game location screen the engine draws itself.
 GAME_FILES=$(find "$STAGE" -type f \( -iname '*.bob' -o -iname '*.fnt' -o -iname '*.e' -o -iname '*.cmf' \
@@ -115,4 +117,11 @@ fi
 (cd "$OUT" && rm -f "$NAME.zip" && "$PYTHON" -m zipfile -c "$NAME.zip" "$NAME" >/dev/null)
 cp "$EXE" "$OUT/${NAME}.exe"
 (cd "$OUT" && sha256sum "$NAME.zip" > "$NAME.zip.sha256" && sha256sum "${NAME}.exe" > "${NAME}.exe.sha256")
+
+# The release gate: unpack what a player gets and check it. A release that
+# fails it is removed, so nothing half-checked is left to ship.
+if ! "$ROOT/scripts/check-release.sh" "$OUT/$NAME.zip" "$OUT/${NAME}.exe" "$VERSION"; then
+  rm -f "$OUT/$NAME.zip" "$OUT/$NAME.zip.sha256" "$OUT/${NAME}.exe" "$OUT/${NAME}.exe.sha256"
+  die "release $VERSION: the release check failed, so its zip and exe were removed (the stage $STAGE is kept)"
+fi
 ok "release $VERSION ($COMMIT): $OUT/$NAME.zip and $OUT/${NAME}.exe"

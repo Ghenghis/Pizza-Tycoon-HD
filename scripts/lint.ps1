@@ -36,6 +36,8 @@ foreach ($dir in 'tools\hdpack', 'tools\ci') {
     Push-Location (Join-Path $script:Root $dir)
     try {
         $modules = @(Get-ChildItem -Filter '*.py' | ForEach-Object Name)
+        # The CI tools' tests are typed too (the pack tool's are not yet).
+        if ($dir -eq 'tools\ci') { $modules += @(Get-ChildItem -Path 'tests' -Filter '*.py' | ForEach-Object { "tests\$($_.Name)" }) }
         Invoke-PyTool ruff @('check', '-q', '.')
         Invoke-PyTool black @('--check', '-q', '.')
         Invoke-PyTool mypy $modules

@@ -4,8 +4,8 @@
 <#
 .SYNOPSIS
   The checks that need a build but no GPU, with no window: clang-format on
-  the fork's C++ files, a smoke run (--version, --help), the C++ tests and
-  the pack tool's tests. Python lint is scripts\lint.ps1.
+  the fork's C++ files, a smoke run (--version, --help), the C++ tests, the
+  pack tool's tests and the CI tools' tests. Python lint is scripts\lint.ps1.
   Tests that need the original game skip without it, and each skip is
   listed; when the game is expected (-GamePath, PLEGACY_TEST_GAME_PATH or
   PLEGACY_REQUIRE_GAME=1) a skipped test fails the run.
@@ -65,4 +65,15 @@ try {
     Pop-Location
     if ($tmp -and (Test-Path $tmp)) { Remove-Item -Recurse -Force $tmp }
 }
+
+Write-Host '== CI tool tests (pytest: hd_gates.py, check_release.py, on synthetic screenshots and releases)'
+Push-Location (Join-Path $script:Root 'tools\ci')
+try {
+    $run = Invoke-Captured -File $pytest[0] -Arguments (@($pytest | Select-Object -Skip 1) + @('-q', '-rs'))
+    if ($run.ExitCode -ne 0) { throw "CI tool tests failed (exit code $($run.ExitCode))" }
+    $skipped = $run.Lines | Select-String -CaseSensitive -Pattern '(\d+) skipped' | Select-Object -Last 1
+    if ($skipped) {
+        Skip-Check -Name 'CI tool tests' -Reason "$($skipped.Matches[0].Groups[1].Value) test(s) skipped" -Fix 'run pytest -rs in tools\ci to see why'
+    }
+} finally { Pop-Location }
 Write-Ok 'tests'

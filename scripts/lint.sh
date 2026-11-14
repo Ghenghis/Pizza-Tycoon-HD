@@ -5,7 +5,7 @@
 # Static checks, each required (the twin of lint.ps1):
 #   the fork's sh scripts (scripts/*.sh): ShellCheck
 #   ruff, black --check and mypy (strict) on every Python tool:
-#     tools/hdpack/*.py, tools/ci/*.py, tools/gen_game_location_screen
+#     tools/hdpack/*.py, tools/ci/*.py and its tests, tools/gen_game_location_screen
 #   PSScriptAnalyzer on scripts/*.ps1, when pwsh is installed (lint.ps1 on
 #     Windows always runs it)
 set -eu
@@ -22,7 +22,7 @@ ok "shellcheck: $(echo scripts/*.sh | wc -w) scripts"
 echo "== Python tools (ruff, black, mypy --strict)"
 (cd tools/hdpack && run_pytool ruff check -q . && run_pytool black --check -q . && run_pytool mypy ./*.py)
 ok "tools/hdpack"
-(cd tools/ci && run_pytool ruff check -q . && run_pytool black --check -q . && run_pytool mypy ./*.py)
+(cd tools/ci && run_pytool ruff check -q . && run_pytool black --check -q . && run_pytool mypy ./*.py tests/*.py)
 ok "tools/ci"
 CFG=tools/ci/pyproject.toml
 GEN=tools/gen_game_location_screen

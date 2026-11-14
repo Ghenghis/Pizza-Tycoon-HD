@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Local CI on the owner's own Windows PC, through a self-hosted runner
+# (setup: docs/BUILDING.md, "CI runner on your PC"). There is no job for
+# GitHub-hosted runners in this repository, so no Actions minutes are used,
+# and nothing is uploaded to GitHub's artifact storage: the evidence stays on
+# the PC (build\hd-gates, build\coverage, build\ci-local-skipped.txt).
+name: ci-local
+
+on:
+  push:
+    branches: [main, "integration/**"]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *" # nightly, from a clean checkout
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-local-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci-local:
+    # Pull requests from forks never run on the owner's PC.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 240
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The format and forbidden-pattern checks compare against the
+          # upstream import, so they need the whole history and its tags.
+          fetch-depth: 0
+          fetch-tags: true
+          # Keep build\ and deps\ between runs (incremental builds); the
+          # nightly run starts from a clean tree.
+          clean: ${{ github.event_name == 'schedule' }}
+          persist-credentials: false
+
+      - name: Local CI (scripts\ci-local.ps1)
+        shell: pwsh
+        run: ./scripts/ci-local.ps1

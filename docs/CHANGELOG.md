@@ -46,6 +46,13 @@ Unreleased
   Windows build has no console. Laptops with two GPUs use the fast one.
 * The game reports itself as Pizza Tycoon HD 1.1.0 (version from one place,
   CMake); compiler warnings are errors.
+* HD resolution is Auto by default (from the screen's height: 1080p -> 3x,
+  1440p -> 4x, 2160p -> 6x) and can be chosen in Options, Graphics.
+* Gates: a screen-coverage gate measures how much of each of 32 screens is
+  still drawn at 640x400 and fails when a screen gets worse; a release gate
+  checks a zip's checksums, file list (no original game files), version and
+  a smoke run from the unpacked files before the release is kept; and a
+  self-hosted-only workflow runs the local CI on the owner's PC.
 * HD lighting (option `lighting`, on by default; also in the options menu):
   candles, ovens and grills, arcade machines, TVs, the jukebox and vending
   machines light the restaurant around them, with flicker (flames, fire,

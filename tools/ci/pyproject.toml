@@ -24,3 +24,8 @@ ignore = ["S101", "S311"]
 
 [tool.mypy]
 strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
+filterwarnings = ["error"]

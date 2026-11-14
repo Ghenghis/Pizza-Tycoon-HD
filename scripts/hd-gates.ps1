@@ -7,7 +7,9 @@
   the HD screens render, GPU and CPU compositing draw the same picture,
   smooth motion leaves the game state byte-for-byte unchanged, and a fully
   redrawn 4K restaurant frame stays under 8 ms (99th percentile) and opens
-  in under 16 ms. Screenshots and game logs of a failed run are kept under
+  in under 16 ms, and no major screen loses HD coverage (the share of it
+  still drawn at 640x400, against tools\ci\coverage-budget.json; report in
+  build\coverage). Screenshots and game logs of a failed run are kept under
   build\hd-gates.
   Without game files the gates are skipped (listed); with
   PLEGACY_REQUIRE_GAME=1 that is a failure. With game files every gate must
@@ -17,10 +19,15 @@
 .PARAMETER Pack
   A 4K HD pack (default: $env:PLEGACY_TEST_HD_PACK). Without one, a
   baseline pack is built from the game's art first.
+.PARAMETER UpdateCoverage
+  Only the coverage gate, recording today's shares as the budget for this
+  pack (also PLEGACY_COVERAGE_UPDATE=1). Review build\coverage\coverage.md,
+  then commit tools\ci\coverage-budget.json.
 #>
 param(
     [string]$GamePath = $env:PLEGACY_TEST_GAME_PATH,
-    [string]$Pack = $env:PLEGACY_TEST_HD_PACK
+    [string]$Pack = $env:PLEGACY_TEST_HD_PACK,
+    [switch]$UpdateCoverage
 )
 . "$PSScriptRoot\common.ps1"
 if (-not $GamePath) {
@@ -33,5 +40,6 @@ $gates = Join-Path $script:Root 'tools\ci\hd_gates.py'
 $gateArgs = @($gates, '--game', (Get-GameExe), '--game-path', $GamePath, '--fail-on-skip',
     '--artifacts', (Join-Path $script:Root 'build\hd-gates'))
 if ($Pack) { $gateArgs += @('--pack', $Pack) } else { $gateArgs += '--make-pack' }
+if ($UpdateCoverage -or $env:PLEGACY_COVERAGE_UPDATE -eq '1') { $gateArgs += @('--checks', 'coverage', '--coverage-update') }
 Invoke-Checked -File $py -Arguments $gateArgs
 Write-Ok 'HD gates'

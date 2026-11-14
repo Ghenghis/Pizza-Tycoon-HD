@@ -6,7 +6,11 @@
   Packages a Windows release from a finished build: a standalone zip (game,
   data, DLLs, pack tools, docs) and the bare exe, each with a SHA-256 file.
   Never includes original game files, exports or packs: the staged files
-  are checked for them.
+  are checked for them. Then the release gate (scripts\check-release.ps1)
+  unpacks the zip into a temporary folder and checks it: every SHA-256, the
+  file list against tools\ci\release-manifest.txt, the unpacked game's
+  --version, and a short --exec run when game files are available. A
+  release that fails it is removed.
 
   The version comes from the build: build\release\version.txt, which CMake
   writes from project(VERSION) in CMakeLists.txt, the one source of truth.
@@ -85,6 +89,7 @@ foreach ($doc in 'README.md', 'SECURITY.md', 'docs\HD_REMASTER.md', 'docs\CHANGE
     Copy-Item (Join-Path $script:Root $doc) $stage
 }
 Copy-Item -Recurse (Join-Path $script:Root 'LICENSES') (Join-Path $stage 'LICENSES')
+Copy-Item (Join-Path $script:Root 'LICENSE') $stage
 
 # The original game's files are not ours to ship. The only VGA picture in a
 # release is the game location screen the engine draws itself.
@@ -105,6 +110,18 @@ Copy-Item $exe $bareExe
 foreach ($f in $zip, $bareExe) {
     $hash = (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()
     "$hash  $(Split-Path -Leaf $f)" | Set-Content -Encoding ascii "$f.sha256"
+}
+
+# The release gate: unpack what a player gets and check it (scripts\check-release.ps1).
+# A release that fails it is removed, so nothing half-checked is left to ship.
+try {
+    & "$PSScriptRoot\check-release.ps1" -Zip $zip -Exe $bareExe -Version $Version -Require 'SDL3.dll'
+} catch {
+    foreach ($f in $zip, "$zip.sha256", $bareExe, "$bareExe.sha256") {
+        if (Test-Path $f) { Remove-Item -Force $f }
+    }
+    Write-Bad "release ${Version}: the release check failed, so its zip and exe were removed (the stage $stage is kept)"
+    throw
 }
 Write-Ok "release ${Version} ($commit): $zip"
 Write-Ok "release ${Version} ($commit): $bareExe (needs the DLLs and the data folder from the zip next to it)"

@@ -1,0 +1,50 @@
+{
+  "about": [
+    "HD screen coverage (tools/ci/hd_gates.py --checks coverage). Each screen is opened with its commands in one hidden --exec run at hd_scale 3, after 'setup', and screenshotted.",
+    "The measure is the share of 3x3 texel blocks (one 640x400 engine pixel each) that are flat, all nine texels equal: what an upscaled indexed pixel looks like. Lower is more HD.",
+    "budgets[profile].screens holds the share measured when the budget was recorded; a screen fails when it rises above that by more than 'tolerance'.",
+    "A profile is '<pack>@<renderer>': 'baseline' for the pack --make-pack builds, else the pack folder's name; 'gpu' or 'software'.",
+    "Record or lower budgets only with --coverage-update, after looking at the report (build/coverage/coverage.md and its masks/); never raise one without a reason in the commit message."
+  ],
+  "hd_scale": 3,
+  "tolerance": 0.002,
+  "setup": [
+    "game options set lighting false",
+    "restaurant qs 0 0"
+  ],
+  "screens": [
+    {"name": "city-view", "open": ["nav cityview @"]},
+    {"name": "euro-map", "open": ["nav euromap"]},
+    {"name": "player-profile", "open": ["nav profile @"]},
+    {"name": "advertising", "open": ["nav advertising"]},
+    {"name": "company-stats-month", "open": ["nav globalstats 0"]},
+    {"name": "restaurants-overview", "open": ["nav globalstats 1"]},
+    {"name": "company-stats-cash-flow", "open": ["nav globalstats 2"]},
+    {"name": "company-stats-balance", "open": ["nav globalstats 6"]},
+    {"name": "terminal", "open": ["nav terminal"]},
+    {"name": "depot", "open": ["depot give 0 0", "nav depot"]},
+    {"name": "depot-stock", "open": ["nav depot vegetables"]},
+    {"name": "restaurant", "open": ["nav restaurant @"]},
+    {"name": "stock", "open": ["nav stock"]},
+    {"name": "stock-vegetables", "open": ["nav stock vegetables"]},
+    {"name": "ingredient-order", "open": ["nav order vegetables 0"]},
+    {"name": "purchasing", "open": ["nav purchasing"]},
+    {"name": "furniture-and-customers", "open": ["nav demographics"]},
+    {"name": "equipment-suppliers", "open": ["nav suppliers"]},
+    {"name": "restaurant-stats-day", "open": ["nav stats @ 0"]},
+    {"name": "weeks-takings", "open": ["nav stats @ 3"]},
+    {"name": "restaurant-stats-customers", "open": ["nav stats @ 4"]},
+    {"name": "pizza-recipes", "open": ["nav pizza recipes"]},
+    {"name": "pizza-design", "open": ["nav pizza design"]},
+    {"name": "recipe-import", "open": ["nav pizza import"]},
+    {"name": "disk-menu", "open": ["nav disk"]},
+    {"name": "main-menu", "open": ["nav main"]},
+    {"name": "new-game", "open": ["nav ng"]},
+    {"name": "load-game", "open": ["nav load"]},
+    {"name": "options", "open": ["nav op"]},
+    {"name": "options-graphics", "open": ["nav op graphics"]},
+    {"name": "key-bindings", "open": ["nav op bindings"]},
+    {"name": "game-location", "open": ["nav gameloc"]}
+  ],
+  "budgets": {}
+}

@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# What a Windows release zip may and must contain (tools/ci/check_release.py).
+# Paths are relative to the zip's top (a single top folder is stripped first).
+# In a pattern, * matches within one folder, ** across folders.
+#
+#   require <pattern>  at least one file must match
+#   allow <pattern>    every file must match an allow line
+#   deny <pattern>     no file may match, unless an allow line names that
+#                      exact path (no wildcards)
+#
+# The original game's files are never ours to ship: the only VGA picture in a
+# release is the game location screen the engine draws itself.
+
+require Pizza Legacy.exe
+require data/*.json
+require data/fonts/hd_fonts.json
+require data/fonts/*.ttf
+require data/game_location.vga
+require LICENSE
+require LICENSES/GPL-3.0-or-later.txt
+require README.md
+require SECURITY.md
+require CREDITS.md
+require CHANGELOG.md
+
+allow Pizza Legacy.exe
+allow *.dll
+allow data/*.json
+allow data/fonts/*.ttf
+allow data/fonts/*.txt
+allow data/fonts/*.json
+allow data/game_location.vga
+allow hd/**.png
+allow tools/hdpack/*.py
+allow tools/hdpack/*.json
+allow tools/hdpack/requirements.txt
+allow tools/hdpack/workflows/*.json
+allow LICENSE
+allow LICENSES/*.txt
+allow README.md
+allow SECURITY.md
+allow HD_REMASTER.md
+allow CHANGELOG.md
+allow CREDITS.md
+
+deny **.vga
+deny **.bob
+deny **.fnt
+deny **.e
+deny **.cmf
+deny **.voc
+deny **.pc
+deny **.xmi
+deny **.mid
+deny **.mis
+deny **.dat

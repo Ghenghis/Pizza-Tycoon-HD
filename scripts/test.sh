@@ -4,7 +4,8 @@
 #
 # The checks that need a build but no GPU (the twin of test.ps1):
 # clang-format on the fork's C++ files, a smoke run (--version, --help), the
-# C++ tests and the pack tool's tests. Python lint is scripts/lint.sh.
+# C++ tests, the pack tool's tests and the CI tools' tests. Python lint is
+# scripts/lint.sh.
 # Tests that need the original game skip without it, and each skip is
 # listed; when the game is expected (PLEGACY_TEST_GAME_PATH or
 # PLEGACY_REQUIRE_GAME=1) a skipped test fails the run.
@@ -75,4 +76,15 @@ fi
 cat "$LOG"
 N=$(skipped_count "$LOG")
 if [ -n "$N" ]; then skip_check "pack tool tests" "$N test(s) skipped (they need the original game)" "$GAME_FIX" game; fi
+
+echo "== CI tool tests (pytest: hd_gates.py, check_release.py, on synthetic screenshots and releases)"
+LOG="$BUILD/pytest-ci.log"
+# shellcheck disable=SC2086 # "python3 -m pytest" or a path
+if ! (cd "$ROOT/tools/ci" && $PYTEST -q -rs) >"$LOG" 2>&1; then
+  cat "$LOG"
+  die "CI tool tests failed" "see the output above (also in $LOG)"
+fi
+cat "$LOG"
+N=$(skipped_count "$LOG")
+if [ -n "$N" ]; then skip_check "CI tool tests" "$N test(s) skipped" "run them with -rs to see why" other; fi
 ok "tests"

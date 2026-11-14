@@ -332,6 +332,33 @@ the failures above.
 Copy `redraw-out/0.80/bob/` into the pack when you're happy with it (keep the
 old folders: they're the pixel-art versions).
 
+## HD coverage
+
+How much of each major screen still reaches the player at 640x400 is
+measured by the `coverage` HD gate (`tools/ci/hd_gates.py --checks coverage`,
+part of `scripts/hd-gates.*` and so of local CI). In one hidden `--exec` run
+at `hd_scale` 3 it quick-starts a game, turns lighting off (the light map
+would hide flat pixels), opens each screen listed in
+`tools/ci/coverage-budget.json` with its `nav` commands, and screenshots it.
+For every engine pixel it then looks at the 3x3 texels drawn for it: when
+all nine are equal the pixel is *flat*, which is what an indexed pixel
+scaled up looks like. Flat areas in real HD art (a black background, a
+plain panel) count too, so the number is a trend to keep down, not a
+verdict on its own.
+
+The report goes to `build/coverage`: `coverage.md` (worst screen first),
+`coverage.json`, and `masks/<screen>.png`, with the flat pixels in white,
+which shows where HD art is missing. Budgets are kept per pack and renderer
+(`baseline@gpu` for the pack the gates build, `<pack folder>@gpu` for your
+own, `@software` for SDL's software renderer). A screen fails when its share
+rises above its budget by more than 0.2 percentage points, and a screen that
+can't be opened fails too. When a screen gets better, the gate says so;
+record the new, lower budget with `scripts\hd-gates.ps1 -UpdateCoverage`
+(or `PLEGACY_COVERAGE_UPDATE=1 scripts/hd-gates.sh`), read the report, and
+commit `tools/ci/coverage-budget.json`. A screen with no budget yet is a
+skip, which local CI counts as a failure, so the first run on a PC needs
+that update once.
+
 ## Legal
 
 The engine is GPL-3.0-or-later. The original game's files are not included
