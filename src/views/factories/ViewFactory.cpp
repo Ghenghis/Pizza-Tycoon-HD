@@ -6,10 +6,13 @@
 
 #include "views/factories/ViewFactory.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <variant>
 
@@ -26,6 +29,7 @@
 #include "core/state/ViewerType.h"
 #include "core/util/GameContext.h"
 #include "engine/Logger.h"
+#include "resources/util/FileUtils.h"
 #include "views/base/PaneledView.h"
 #include "views/base/View.h"
 #include "views/factories/ActorViewFactory.h"
@@ -96,6 +100,35 @@
 #include "views/viewers/VgaViewer.h"
 
 namespace {
+
+// A file inside the game folder ("GFX/TITEL1.VGA") is opened by the same key
+// the game uses ("gfx/titel1"), so the viewer gets the game's palette and any
+// HD pack art. Other files are opened by their path, as before.
+// strip_ext is the extension the loader adds itself (".vga"), or "".
+std::string asset_key_for(const std::filesystem::path& file,
+                          const std::string& strip_ext) {
+  std::error_code ec;
+  const auto root = std::filesystem::weakly_canonical(
+      std::filesystem::path(fileutils::game_data_path()), ec);
+  const auto full = std::filesystem::weakly_canonical(file, ec);
+  if (ec || root.empty()) {
+    return file.string();
+  }
+  const auto rel = full.lexically_relative(root);
+  if (rel.empty() || rel.begin()->string() == "..") {
+    return file.string();
+  }
+  std::string key = rel.generic_string();
+  std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (!strip_ext.empty() && key.size() > strip_ext.size() &&
+      key.compare(key.size() - strip_ext.size(), strip_ext.size(), strip_ext) ==
+          0) {
+    key.resize(key.size() - strip_ext.size());
+  }
+  return key;
+}
 
 // To help figure out palette for popups and mouse cursor
 bool is_menu_screen(ScreenTag::Kind kind) {
@@ -173,12 +206,16 @@ std::unique_ptr<View> create_viewer(GameContext& context, GameState& state,
 
   try {
     switch (effective_type) {
-    case ViewerType::Vga:
-      Logger::info("Loading VGA file: {}", filename.string());
-      return std::make_unique<VgaViewer>(context, state, filename.string());
-    case ViewerType::Bob:
-      Logger::info("Loading BOB file: {}", filename.string());
-      return std::make_unique<BobViewer>(context, state, filename.string());
+    case ViewerType::Vga: {
+      const std::string key = asset_key_for(filename, ".vga");
+      Logger::info("Loading VGA file: {} (as {})", filename.string(), key);
+      return std::make_unique<VgaViewer>(context, state, key);
+    }
+    case ViewerType::Bob: {
+      const std::string key = asset_key_for(filename, "");
+      Logger::info("Loading BOB file: {} (as {})", filename.string(), key);
+      return std::make_unique<BobViewer>(context, state, key);
+    }
     case ViewerType::Auto:
     case ViewerType::Card:
       break; // resolved above

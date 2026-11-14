@@ -27,6 +27,7 @@ import copy
 import fnmatch
 import json
 import random
+import subprocess
 import sys
 import time
 import urllib.error
@@ -495,6 +496,41 @@ class ComfySettings:
     seed: int | None
     feather: float
     job_timeout: float
+    denoise: float | None = None  # overrides every prompt rule when set
+    wait_gpu: int | None = None  # nvidia-smi index of a GPU to wait for
+    wait_below: int = 70  # ...until its utilisation (%) is below this
+
+
+def gpu_utilisation(index: int) -> int | None:
+    """Current utilisation of one NVIDIA GPU, or None when unknown."""
+    # nvidia-smi is found on PATH; the arguments are fixed.
+    cmd = ["nvidia-smi", f"--id={index}", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]
+    try:
+        out = subprocess.run(  # noqa: S603
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return int(out.stdout.strip().splitlines()[0])
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+
+
+def wait_for_gpu(index: int, below: int, log: Any, poll: float = 15.0, samples: int = 3) -> None:
+    """Block while another GPU is busy, so two cards never run flat out together."""
+    announced = False
+    while True:
+        values = [gpu_utilisation(index) for _ in range(samples)]
+        known = [v for v in values if v is not None]
+        if not known or sum(known) / len(known) < below:
+            return
+        if not announced:
+            log(f"GPU {index} is busy ({sum(known) // len(known)}%), waiting")
+            announced = True
+        time.sleep(poll)
 
 
 # Diffusion models make poor pictures far below their training size, so small
@@ -528,7 +564,7 @@ def comfy_values(asset: Asset, settings: ComfySettings, uploaded: str, seed: int
         "input_image": uploaded,
         "positive": settings.prompts.positive(asset),
         "negative": settings.prompts.negative_for(asset),
-        "denoise": rule.denoise,
+        "denoise": settings.denoise if settings.denoise is not None else rule.denoise,
         "seed": seed,
         "width": width,
         "height": height,
@@ -563,6 +599,8 @@ def comfy_pack(
             fill_template(settings.workflow, values)  # catches placeholder errors
             log(f"[{n}/{len(todo)}] would generate {asset.file} at {values['width']}x{values['height']}")
             continue
+        if settings.wait_gpu is not None:
+            wait_for_gpu(settings.wait_gpu, settings.wait_below, log)
         try:
             started = time.monotonic()
             uploaded = client.upload_image(export_dir / asset.file, asset.file.replace("/", "_"))
@@ -671,6 +709,9 @@ def cmd_comfy(args: argparse.Namespace) -> int:
         seed=args.seed,
         feather=args.feather,
         job_timeout=args.job_timeout,
+        denoise=args.denoise,
+        wait_gpu=args.wait_gpu,
+        wait_below=args.wait_below,
     )
     client = ComfyClient(args.server)
     return _print_counts(
@@ -737,6 +778,11 @@ def build_parser() -> argparse.ArgumentParser:
     co.add_argument("--seed", type=int, default=None)
     co.add_argument("--feather", type=float, default=1.5, help="softness of sprite edges in output pixels")
     co.add_argument("--job-timeout", type=float, default=900.0)
+    co.add_argument("--denoise", type=float, default=None, help="use this denoise for every picture (style tests)")
+    co.add_argument(
+        "--wait-gpu", type=int, default=None, help="nvidia-smi index of a GPU to wait for before each picture"
+    )
+    co.add_argument("--wait-below", type=int, default=70, help="wait until that GPU's utilisation is below this %%")
     co.add_argument("--only", action="append", default=[])
     co.add_argument("--limit", type=int, default=None)
     co.add_argument("--force", action="store_true")

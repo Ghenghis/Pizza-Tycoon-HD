@@ -20,13 +20,16 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 Copy-Item $exe $stage
 Copy-Item -Recurse (Join-Path $build 'data') (Join-Path $stage 'data')
+# Original Pizza Tycoon HD art (title screen); used when hd_scale is 2 or more.
+Copy-Item -Recurse (Join-Path $script:Root 'assets\hd') (Join-Path $stage 'hd')
 Get-ChildItem $build -Filter *.dll | Copy-Item -Destination $stage
 foreach ($dll in 'SDL3.dll') {
     if (-not (Test-Path (Join-Path $stage $dll))) { throw "$dll missing from $build" }
 }
 $tools = Join-Path $stage 'tools\hdpack'
 New-Item -ItemType Directory -Force -Path $tools | Out-Null
-Copy-Item (Join-Path $script:Root 'tools\hdpack\hdpack.py'), (Join-Path $script:Root 'tools\hdpack\prompts.json'),
+Copy-Item (Join-Path $script:Root 'tools\hdpack\hdpack.py'), (Join-Path $script:Root 'tools\hdpack\export.py'),
+    (Join-Path $script:Root 'tools\hdpack\palettes.json'), (Join-Path $script:Root 'tools\hdpack\prompts.json'),
     (Join-Path $script:Root 'tools\hdpack\requirements.txt') $tools
 Copy-Item -Recurse (Join-Path $script:Root 'tools\hdpack\workflows') $tools
 foreach ($doc in 'README.md', 'SECURITY.md', 'docs\HD_REMASTER.md', 'docs\CHANGELOG.md', 'docs\CREDITS.md') {

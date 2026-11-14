@@ -61,7 +61,10 @@ OUT="$ROOT/release"; NAME="PizzaTycoonHD_v${VERSION}_win64"; STAGE="$OUT/$NAME"
 rm -rf "$STAGE"; mkdir -p "$STAGE/tools/hdpack"
 cp "$EXE" "$STAGE/"
 cp -R "$BUILD/data" "$STAGE/data"
-cp "$ROOT/tools/hdpack/hdpack.py" "$ROOT/tools/hdpack/prompts.json" "$ROOT/tools/hdpack/requirements.txt" "$STAGE/tools/hdpack/"
+# Original Pizza Tycoon HD art (title screen); used when hd_scale is 2 or more.
+cp -R "$ROOT/assets/hd" "$STAGE/hd"
+cp "$ROOT/tools/hdpack/hdpack.py" "$ROOT/tools/hdpack/export.py" "$ROOT/tools/hdpack/palettes.json" \
+  "$ROOT/tools/hdpack/prompts.json" "$ROOT/tools/hdpack/requirements.txt" "$STAGE/tools/hdpack/"
 cp -R "$ROOT/tools/hdpack/workflows" "$STAGE/tools/hdpack/"
 cp "$ROOT/README.md" "$ROOT/SECURITY.md" "$ROOT/docs/HD_REMASTER.md" "$ROOT/docs/CHANGELOG.md" "$ROOT/docs/CREDITS.md" "$STAGE/"
 cp -R "$ROOT/LICENSES" "$STAGE/LICENSES"

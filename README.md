@@ -17,6 +17,15 @@ original rules. This fork adds:
   checks a pack the way the engine will, and a batch driver for a local
   ComfyUI (RTX GPU) to generate remastered art.
 
+<p align="center">
+  <img src="screenshots/cover_box.jpg" width="38%" alt="Pizza Tycoon HD box cover">
+  <img src="screenshots/cover_title.jpg" width="60%" alt="Pizza Tycoon HD title screen">
+</p>
+
+*New 4K art made for this remaster with Flux on a local GPU: the box cover
+(2880x3840, `assets/art/`) and the title screen (3840x2400,
+`assets/hd/gfx/titel1.png`, shown in game when `hd_scale` is 2 or more).*
+
 ![Original vs HD pack at 6x](screenshots/hd_compare.png)
 
 *Left: original art, scaled up. Right: the same spot rendered at

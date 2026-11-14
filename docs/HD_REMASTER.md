@@ -45,6 +45,14 @@ original font, scaled up.
 .\scripts\run-dev.ps1 -HdScale 3
 ```
 
+No engine build on the GPU machine? `tools/hdpack/export.py` writes the same
+export with Python only (checked pixel for pixel against the engine):
+`python tools/hdpack/export.py "<folder with PT.EXE>" export`.
+
+When another job may be using a second GPU, add `--wait-gpu <index>` to
+`hdpack.py comfy`: it waits before each picture until that GPU is below
+`--wait-below` percent busy, so two cards never run flat out together.
+
 On Linux/macOS the same steps are:
 
 ```sh

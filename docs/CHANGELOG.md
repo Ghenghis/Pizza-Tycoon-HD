@@ -11,6 +11,15 @@ Based on Pizza Legacy 1.0.0-beta.2.
   with the palettes the engine uses, plus `manifest.json`.
 * `tools/hdpack`: baseline upscaler, pack validator, ComfyUI batch generator
   with two workflows and per-asset prompt rules.
+* New 4K art: box cover (`assets/art/`) and title screen
+  (`assets/hd/gfx/titel1.png`, replaces GFX/TITEL1.VGA); releases ship it as
+  the `hd` folder next to the program.
+* `tools/hdpack/export.py`: exports the original art without the engine
+  (same PNGs and manifest, verified pixel for pixel), for the GPU machine.
+  `hdpack.py comfy` gained `--denoise` and `--wait-gpu`/`--wait-below`, which
+  pause before each picture while another GPU is busy.
+* The VGA and BOB viewers open files from the game folder under the game's
+  own asset names, so they show the right palette and HD pack art.
 * Tests: Catch2 suite linking the real engine (HD image maths, surface overlay
   rules, renderer expansion, pack loading and full export against the
   original files), pytest suite for the pack tools, HD frame benchmark.
