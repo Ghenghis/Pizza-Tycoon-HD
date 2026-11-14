@@ -53,6 +53,11 @@ enum class Area : uint8_t { Other, City, Restaurant, Kitchen, NorthPole };
 inline constexpr std::array overridable_areas{Area::City, Area::Restaurant,
                                               Area::Kitchen, Area::NorthPole};
 
+// Falling weather, drawn over the frame (fx::Snowfall).
+enum class Weather : uint8_t { None, Snow, LightSnow };
+inline constexpr std::array all_weather{Weather::None, Weather::Snow,
+                                        Weather::LightSnow};
+
 // Which SDL render driver the game asks for. Auto is SDL's choice
 // (Direct3D 11 on Windows); Gpu is SDL's GPU driver (Direct3D 12, Vulkan or
 // Metal), the only one that runs the post-FX shader.
@@ -63,12 +68,16 @@ enum class RendererChoice : uint8_t { Auto, Gpu };
 [[nodiscard]] std::string to_string(AreaPreset p);
 [[nodiscard]] std::string to_string(RendererChoice c);
 [[nodiscard]] std::string to_string(Area a);
+[[nodiscard]] std::string to_string(Weather w);
 
 // settings.conf values: classic, natural, vivid, cinematic, studio; same;
 // auto, gpu.
 [[nodiscard]] std::string_view to_config_value(Preset p);
 [[nodiscard]] std::string_view to_config_value(AreaPreset p);
 [[nodiscard]] std::string_view to_config_value(RendererChoice c);
+[[nodiscard]] std::string_view to_config_value(Weather w);
+[[nodiscard]] std::optional<Weather>
+    weather_from_config_value(std::string_view);
 [[nodiscard]] std::optional<Preset> preset_from_config_value(std::string_view);
 [[nodiscard]] std::optional<AreaPreset>
     area_preset_from_config_value(std::string_view);
@@ -93,8 +102,17 @@ struct LookSettings {
   Sliders sliders;
   // Areas with their own preset; absent or Same follows `preset`.
   std::map<Area, AreaPreset> per_area;
+  // The game clock's time of day tints the city map (dawn, day, dusk,
+  // night), lights its street lamps at night and makes emissive art glow.
+  // Off, or in the Classic preset, the picture is exactly as without it.
+  bool day_night = false;
+  // Weather per area; absent is None.
+  std::map<Area, Weather> weather;
+  // Fewer, slower particles with no sway.
+  bool reduced_motion = false;
 
   [[nodiscard]] Preset preset_for(Area area) const;
+  [[nodiscard]] Weather weather_for(Area area) const;
   bool operator==(const LookSettings&) const = default;
 };
 
@@ -142,11 +160,35 @@ struct Grade {
 // The preset of `area` with the sliders applied.
 [[nodiscard]] Grade resolve(const LookSettings& settings, Area area);
 
+// What the game loop knows about the frame.
+struct FrameContext {
+  Area area = Area::Other;
+  // The game clock's time of day, 0..24 (12 = noon: day, no tint).
+  float hours = 12.0f;
+};
+
+// Everything the renderer needs for a frame, resolved from the settings.
+struct FrameState {
+  Grade grade;          // day/night tint included
+  float night = 0.0f;   // emissive glow and street lamps, 0..1
+  float sun_hours = -1; // time of day for the sun, < 0 = no sun
+  Weather weather = Weather::None;
+  bool reduced_motion = false;
+  Area area = Area::Other;
+  bool operator==(const FrameState&) const = default;
+};
+[[nodiscard]] FrameState resolve_frame(const LookSettings& settings,
+                                       const FrameContext& context);
+
 // The look of the frame being drawn, set by the game loop once per frame
 // (like lighting::set_enabled) and read by the renderer. Starts as the
 // identity.
+void set_frame_look(const LookSettings& settings, const FrameContext& context);
+// At noon (no day/night tint).
 void set_frame_look(const LookSettings& settings, Area area);
 void set_frame_grade(const Grade& grade);
+void set_frame_state(const FrameState& state);
 [[nodiscard]] const Grade& frame_grade();
+[[nodiscard]] const FrameState& frame_state();
 
 } // namespace fx

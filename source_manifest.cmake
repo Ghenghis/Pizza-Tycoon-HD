@@ -39,6 +39,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/conversations/SupplierConversation.cpp
     src/core/debug/DebugCommands.cpp
     src/core/debug/DebugConsole.cpp
+    src/core/debug/ScriptedPlayer.cpp
     src/core/debug/command/CommandContext.cpp
     src/core/debug/command/CommandParser.cpp
     src/core/debug/command/CommandRegistry.cpp
@@ -334,10 +335,14 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/audio/MixTap.cpp
     src/engine/audio/VocDecoder.cpp
     src/engine/debug/ScreenCommands.cpp
+    src/engine/fx/DayNight.cpp
     src/engine/fx/Grade.cpp
     src/engine/fx/Look.cpp
+    src/engine/fx/MapStore.cpp
+    src/engine/fx/NormalLight.cpp
     src/engine/fx/PostFx.cpp
     src/engine/fx/RendererSelect.cpp
+    src/engine/fx/Weather.cpp
     src/engine/geom/Camera.cpp
     src/engine/gfx/ColorIndex.cpp
     src/engine/gfx/Draw.cpp
@@ -440,6 +445,7 @@ set(PLEGACY_HEADERS
     src/core/conversations/SupplierLine.h
     src/core/debug/DebugCommands.h
     src/core/debug/DebugConsole.h
+    src/core/debug/ScriptedPlayer.h
     src/core/debug/command/ArgSpec.h
     src/core/debug/command/ArgType.h
     src/core/debug/command/CommandContext.h
@@ -640,10 +646,15 @@ set(PLEGACY_HEADERS
     src/engine/audio/MixTap.h
     src/engine/audio/VocDecoder.h
     src/engine/debug/ScreenCommands.h
+    src/engine/fx/DayNight.h
     src/engine/fx/Grade.h
     src/engine/fx/Look.h
+    src/engine/fx/MapStore.h
+    src/engine/fx/NormalLight.h
     src/engine/fx/PostFx.h
     src/engine/fx/RendererSelect.h
+    src/engine/fx/Weather.h
+    src/engine/fx/generated/NormalLightShaders.h
     src/engine/fx/generated/PostFxShaders.h
     src/engine/geom/Camera.h
     src/engine/geom/GeomFormat.h

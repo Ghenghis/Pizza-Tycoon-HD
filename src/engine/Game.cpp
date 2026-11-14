@@ -693,7 +693,11 @@ int Game::run() {
     lighting::set_enabled(state.options().lighting && !classic_look_);
     // The picture settings of the area on screen (the renderer drops them
     // in the 1994 look).
-    fx::set_frame_look(state.options().picture, picture_area(state));
+    const float hours =
+        static_cast<float>(state.time().current_hour()) +
+        static_cast<float>(state.time().current_minute()) / 60.0f;
+    fx::set_frame_look(state.options().picture,
+                       {.area = picture_area(state), .hours = hours});
     resources::HdTypefaces::set_enabled(state.options().hd_text &&
                                         !classic_look_);
     renderer.classic_look(classic_look_);

@@ -167,6 +167,27 @@ OptionDef picture_area_option(std::string_view key,
           section, note};
 }
 
+template <fx::Area Where>
+OptionDef weather_option(std::string_view key, std::string_view section = {},
+                         std::string_view note = {}) {
+  return {key,
+          [](const GameOptions& o) {
+            return std::string(
+                fx::to_config_value(o.picture.weather_for(Where)));
+          },
+          [](GameOptions& o, const std::string& s) {
+            if (auto parsed = fx::weather_from_config_value(s)) {
+              if (*parsed == fx::Weather::None) {
+                o.picture.weather.erase(Where);
+              }
+              else {
+                o.picture.weather[Where] = *parsed;
+              }
+            }
+          },
+          section, note};
+}
+
 const auto option_defs = std::to_array({
     bool_option<&GameOptions::crt_aspect_ratio>(
         "crt_aspect_ratio", "Display", "Use the original 4:3 CRT aspect ratio"),
@@ -316,6 +337,29 @@ const auto option_defs = std::to_array({
     bool_option<&GameOptions::hdr_output>(
         "hdr_output", {},
         "HDR (scRGB) output when the display has HDR on. Needs a restart"),
+    OptionDef{
+        "picture_day_night",
+        [](const GameOptions& o) { return from_bool(o.picture.day_night); },
+        [](GameOptions& o, const std::string& s) {
+          o.picture.day_night = to_bool(s);
+        },
+        {},
+        "the game clock tints the city map and lights the lamps at "
+        "night; emissive art glows (not in the classic preset)"},
+    OptionDef{"picture_reduced_motion",
+              [](const GameOptions& o) {
+                return from_bool(o.picture.reduced_motion);
+              },
+              [](GameOptions& o, const std::string& s) {
+                o.picture.reduced_motion = to_bool(s);
+              },
+              {},
+              "fewer, slower snowflakes with no sway"},
+    weather_option<fx::Area::City>("weather_city", {},
+                                   "none, snow or light_snow"),
+    weather_option<fx::Area::Restaurant>("weather_restaurant"),
+    weather_option<fx::Area::Kitchen>("weather_kitchen"),
+    weather_option<fx::Area::NorthPole>("weather_north_pole"),
 });
 
 // Where the original game lives.

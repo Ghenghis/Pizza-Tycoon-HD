@@ -17,7 +17,9 @@
 #include "engine/LayerInfo.h"
 #include "engine/LightPass.h"
 #include "engine/SDLContext.h"
+#include "engine/fx/NormalLight.h"
 #include "engine/fx/PostFx.h"
+#include "engine/fx/Weather.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Blit.h"
 #include "engine/gfx/HdImage.h"
@@ -146,16 +148,30 @@ private:
   [[nodiscard]] bool software_crt() const;
 
   void draw_compare_divider();
-  // The picture settings for this frame (fx::frame_grade(), or the identity
-  // in the 1994 look).
-  [[nodiscard]] fx::Grade frame_grade() const;
+  // The picture settings for this frame (fx::frame_state(), or nothing at
+  // all in the 1994 look).
+  [[nodiscard]] fx::FrameState frame_state() const;
+  [[nodiscard]] fx::Grade frame_grade() const { return frame_state().grade; }
   [[nodiscard]] LightPass::Strength light_strength() const;
   // Draws the display texture to the window through the picture pass.
   void present_display_texture();
   std::unique_ptr<fx::PostFx> post_;
   fx::PostFx::Path post_path_ = fx::PostFx::Path::Plain;
-  // The grade of the last frame: a change redraws the frame.
-  fx::Grade last_grade_;
+  // The picture settings of the last frame: a change redraws the frame.
+  fx::FrameState last_state_;
+  // Night glow of emissive art, per layer (HdCompositor::draw_emissive),
+  // and the layers whose glow is up to date.
+  std::unordered_map<Renderable*, SDL_Texture*> glow_tex_;
+  std::unordered_set<Renderable*> glow_ready_;
+  // Adds the layer's night glow onto the current target at `dest`.
+  void add_glow(Renderable* view, const Surface& surface, const SDL_FRect& dest,
+                float strength);
+  // Normal-map lighting (SDL's GPU driver, pictures with normal maps).
+  std::unique_ptr<fx::NormalLightPass> normal_;
+  fx::NormalLights normal_lights_;
+  // Weather over the frame.
+  std::unique_ptr<fx::SnowLayer> snow_;
+  uint64_t snow_ticks_ = 0;
   bool classic_ = false;
   std::optional<int> compare_x_;
   std::unique_ptr<HdCompositor> gpu_;

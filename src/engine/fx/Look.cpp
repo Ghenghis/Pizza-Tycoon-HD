@@ -7,6 +7,7 @@
 #include "engine/fx/Look.h"
 
 #include <algorithm>
+#include "engine/fx/DayNight.h"
 
 namespace fx {
 
@@ -68,6 +69,39 @@ std::string to_string(Area a) {
     return "North Pole";
   }
   return "Menus";
+}
+
+std::string to_string(Weather w) {
+  switch (w) {
+  case Weather::None:
+    return "None";
+  case Weather::Snow:
+    return "Snow";
+  case Weather::LightSnow:
+    return "Light snow";
+  }
+  return "None";
+}
+
+std::string_view to_config_value(Weather w) {
+  switch (w) {
+  case Weather::None:
+    return "none";
+  case Weather::Snow:
+    return "snow";
+  case Weather::LightSnow:
+    return "light_snow";
+  }
+  return "none";
+}
+
+std::optional<Weather> weather_from_config_value(std::string_view v) {
+  for (Weather w : all_weather) {
+    if (to_config_value(w) == v) {
+      return w;
+    }
+  }
+  return std::nullopt;
 }
 
 std::string_view to_config_value(Preset p) {
@@ -156,6 +190,11 @@ Preset LookSettings::preset_for(Area area) const {
     return Preset::Studio;
   }
   return preset;
+}
+
+Weather LookSettings::weather_for(Area area) const {
+  const auto it = weather.find(area);
+  return it == weather.end() ? Weather::None : it->second;
 }
 
 namespace {
@@ -285,16 +324,56 @@ Grade resolve(const LookSettings& settings, Area area) {
   return g;
 }
 
-namespace {
-Grade g_frame;
-} // namespace
-
-void set_frame_look(const LookSettings& settings, Area area) {
-  g_frame = resolve(settings, area);
+FrameState resolve_frame(const LookSettings& settings,
+                         const FrameContext& context) {
+  FrameState f;
+  f.area = context.area;
+  f.grade = resolve(settings, context.area);
+  f.weather = settings.weather_for(context.area);
+  f.reduced_motion = settings.reduced_motion;
+  // Day and night: places with a clock, never in the Classic preset.
+  const bool clocked = context.area == Area::City ||
+                       context.area == Area::Restaurant ||
+                       context.area == Area::Kitchen;
+  if (settings.day_night && clocked &&
+      settings.preset_for(context.area) != Preset::Classic) {
+    const DayNight dn = day_night(context.hours);
+    f.night = dn.night;
+    f.sun_hours = context.hours;
+    // Only the outdoor map takes the sky's tint; rooms have their own light.
+    if (context.area == Area::City) {
+      if (dn.exposure != 1.0f) {
+        f.grade.exposure *= dn.exposure;
+      }
+      if (dn.warmth != 0.0f) {
+        f.grade.warmth = std::clamp(f.grade.warmth + dn.warmth, -1.0f, 1.0f);
+      }
+    }
+  }
+  return f;
 }
 
-void set_frame_grade(const Grade& grade) { g_frame = grade; }
+namespace {
+FrameState g_frame;
+} // namespace
 
-const Grade& frame_grade() { return g_frame; }
+void set_frame_look(const LookSettings& settings, const FrameContext& context) {
+  g_frame = resolve_frame(settings, context);
+}
+
+void set_frame_look(const LookSettings& settings, Area area) {
+  set_frame_look(settings, FrameContext{.area = area});
+}
+
+void set_frame_grade(const Grade& grade) {
+  g_frame = FrameState{};
+  g_frame.grade = grade;
+}
+
+void set_frame_state(const FrameState& state) { g_frame = state; }
+
+const Grade& frame_grade() { return g_frame.grade; }
+
+const FrameState& frame_state() { return g_frame; }
 
 } // namespace fx

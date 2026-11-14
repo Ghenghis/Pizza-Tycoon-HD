@@ -12,6 +12,8 @@
 #include "engine/DisplayConstants.h"
 #include "engine/Fatal.h"
 #include "engine/Logger.h"
+#include "engine/fx/MapStore.h"
+#include "engine/fx/NormalLight.h"
 #include "engine/gfx/HdList.h"
 
 using gfx::HdImage;
@@ -580,6 +582,7 @@ void HdCompositor::draw_runs(const std::vector<Run>& runs, std::size_t& pos,
 void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
                               float fade, int art_from_x) {
   stats_ = {};
+  normal_lit_ = 0;
   const int k = gfx::hd_scale();
   const int w = layer.width();
   const int h = layer.height();
@@ -664,6 +667,29 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
     if (!tex) {
       continue;
     }
+    if (normal_pass_ && normal_lights_ && !text && !c.img->atlas &&
+        normal_pass_->ready()) {
+      if (auto map = fx::MapStore::instance().normal(c.img.get())) {
+        const Placed nm = place(map);
+        if (nm.tex) {
+          flush_batch();
+          const SDL_FRect src{
+              static_cast<float>(c.sx + at.x), static_cast<float>(c.sy + at.y),
+              static_cast<float>(c.sw), static_cast<float>(c.sh)};
+          const SDL_FRect dst{
+              static_cast<float>(c.dx), static_cast<float>(c.dy),
+              static_cast<float>(c.dw()), static_cast<float>(c.dh())};
+          SDL_SetTextureColorModFloat(tex, fade, fade, fade);
+          SDL_SetTextureScaleMode(tex, c.half ? SDL_SCALEMODE_LINEAR
+                                              : SDL_SCALEMODE_NEAREST);
+          if (normal_pass_->draw(tex, nm.tex, src, dst, *normal_lights_)) {
+            ++normal_lit_;
+            ++stats_.quads;
+            continue;
+          }
+        }
+      }
+    }
     if (!c.half && batch_geometry_) {
       // 1:1 copies (sprites, text, letters) go into one triangle list per
       // texture: a screen of text is hundreds of letters, and a draw call
@@ -727,6 +753,101 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
   clip_art(false);
   flush_batch();
   draw_runs(runs_, pos, static_cast<uint32_t>(cmds.size()), k);
+}
+
+bool HdCompositor::has_emissive(const gfx::Surface& layer) const {
+  const gfx::HdList* list = layer.hd_list();
+  fx::MapStore& maps = fx::MapStore::instance();
+  if (!list || !maps.enabled()) {
+    return false;
+  }
+  return std::ranges::any_of(list->cmds(), [&maps](const gfx::HdCmd& c) {
+    return c.img && c.tint == 0 && !c.img->atlas &&
+           maps.emissive(c.img.get()) != nullptr;
+  });
+}
+
+bool HdCompositor::draw_emissive(SDL_Texture* target, const gfx::Surface& layer,
+                                 int art_from_x) {
+  const gfx::HdList* list = layer.hd_list();
+  fx::MapStore& maps = fx::MapStore::instance();
+  if (!list || !maps.enabled()) {
+    return false;
+  }
+  const auto& cmds = list->cmds();
+  auto glow_of = [&maps](const gfx::HdCmd& c) {
+    return c.img && c.tint == 0 && !c.img->atlas ? maps.emissive(c.img.get())
+                                                 : nullptr;
+  };
+  std::size_t first = cmds.size();
+  for (std::size_t i = 0; i < cmds.size(); ++i) {
+    if (glow_of(cmds[i])) {
+      first = i;
+      break;
+    }
+  }
+  if (first == cmds.size()) {
+    return false;
+  }
+  const int k = gfx::hd_scale();
+  const int w = layer.width() * k;
+  const int h = layer.height() * k;
+  SDL_SetRenderTarget(renderer_, target);
+  SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+  SDL_RenderClear(renderer_);
+  if (art_from_x >= w) {
+    return true;
+  }
+  const SDL_Rect clip{art_from_x, 0, w - art_from_x, h};
+  if (art_from_x > 0) {
+    SDL_SetRenderClipRect(renderer_, &clip);
+  }
+  auto draw = [this](SDL_Texture* tex, const gfx::HdCmd& c, int ox, int oy,
+                     float mod, SDL_BlendMode mode) {
+    float r = 1.0f;
+    float g = 1.0f;
+    float b = 1.0f;
+    SDL_BlendMode old = SDL_BLENDMODE_NONE;
+    SDL_GetTextureColorModFloat(tex, &r, &g, &b);
+    SDL_GetTextureBlendMode(tex, &old);
+    SDL_SetTextureColorModFloat(tex, mod, mod, mod);
+    SDL_SetTextureBlendMode(tex, mode);
+    SDL_SetTextureScaleMode(tex, c.half ? SDL_SCALEMODE_LINEAR
+                                        : SDL_SCALEMODE_NEAREST);
+    const SDL_FRect src{static_cast<float>(c.sx + ox),
+                        static_cast<float>(c.sy + oy), static_cast<float>(c.sw),
+                        static_cast<float>(c.sh)};
+    const SDL_FRect dst{static_cast<float>(c.dx), static_cast<float>(c.dy),
+                        static_cast<float>(c.dw()), static_cast<float>(c.dh())};
+    SDL_RenderTexture(renderer_, tex, &src, &dst);
+    SDL_SetTextureColorModFloat(tex, r, g, b);
+    SDL_SetTextureBlendMode(tex, old);
+  };
+  for (std::size_t i = first; i < cmds.size(); ++i) {
+    const gfx::HdCmd& c = cmds[i];
+    if (!c.img || c.tint != 0 || c.img->atlas) {
+      continue; // text gives off no light and hides little
+    }
+    const Placed at = locate(c.img);
+    if (!at.tex) {
+      continue;
+    }
+    // The picture hides the glow under it, as far as it is opaque...
+    if (i > first) {
+      draw(at.tex, c, at.x, at.y, 0.0f, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+    }
+    // ...and adds its own.
+    if (auto glow = glow_of(c)) {
+      const Placed g = place(glow);
+      if (g.tex) {
+        draw(g.tex, c, g.x, g.y, 1.0f, SDL_BLENDMODE_ADD_PREMULTIPLIED);
+      }
+    }
+  }
+  if (art_from_x > 0) {
+    SDL_SetRenderClipRect(renderer_, nullptr);
+  }
+  return true;
 }
 
 void HdCompositor::flush_batch() {

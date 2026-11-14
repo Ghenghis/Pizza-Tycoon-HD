@@ -481,6 +481,34 @@ void MenuOptions::build_graphics(GameState& state) {
                    ", or the same as Preset above. The sliders apply on top "
                    "of it.");
   }
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Day and night", look.day_night,
+                    [&look, changed] {
+                      look.day_night = !look.day_night;
+                      changed();
+                    }))
+      .help_text("HD only: the game clock colours the city map through the "
+                 "day (dawn, day, dusk, night), and at night lit windows, "
+                 "signs and lamps glow. Not in the Classic preset. Only the "
+                 "picture changes, not the game.");
+  for (const fx::Area area : fx::overridable_areas) {
+    add_menu_item(std::make_unique<EnumMenuItem<fx::Weather>>(
+                      context_, fx::to_string(area) + " weather",
+                      look.weather[area],
+                      std::vector<fx::Weather>(fx::all_weather.begin(),
+                                               fx::all_weather.end()),
+                      changed, face))
+        .help_text("HD only: snow falling over the " + fx::to_string(area) +
+                   ", for a winter look. Only the picture changes, not the "
+                   "game.");
+  }
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Reduced motion", look.reduced_motion,
+                    [&look, changed] {
+                      look.reduced_motion = !look.reduced_motion;
+                      changed();
+                    }))
+      .help_text("Fewer snowflakes, falling slowly and straight down.");
 }
 
 void MenuOptions::build_gameplay(GameState& state) {

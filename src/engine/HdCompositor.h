@@ -16,6 +16,11 @@
 #include "engine/gfx/HdImage.h"
 #include "engine/gfx/Surface.h"
 
+namespace fx {
+class NormalLightPass;
+struct NormalLights;
+} // namespace fx
+
 // True unless the environment variable PLEGACY_CPU_COMPOSE=1 asks for the
 // old CPU compositing (a fallback for broken GPU drivers, and for checks).
 [[nodiscard]] bool hd_gpu_compositing();
@@ -44,6 +49,29 @@ public:
   // the layer's width or more none.
   void draw_layer(SDL_Texture* target, const gfx::Surface& layer, float fade,
                   int art_from_x = 0);
+
+  // The glow of the layer's emissive art (fx::MapStore emissive maps), for
+  // night: `target` (the layer's size times hd_scale()) is cleared to
+  // transparent black, each picture with an emissive map adds its light
+  // (premultiplied), and each picture drawn after it covers that light as
+  // far as it is opaque, so the glow is only where the art shows. Left of
+  // art_from_x there is no glow (the 1994 look). Returns false, leaving
+  // `target` untouched, when no picture of the layer has an emissive map.
+  bool draw_emissive(SDL_Texture* target, const gfx::Surface& layer,
+                     int art_from_x = 0);
+  // True when some picture of the layer has an emissive map.
+  [[nodiscard]] bool has_emissive(const gfx::Surface& layer) const;
+
+  // Normal-map lighting for the next draw_layer calls (SDL's GPU driver):
+  // pictures with a normal map (fx::MapStore) are drawn through `pass`
+  // with `lights`. Null (the default) draws every picture as before.
+  void normal_lighting(fx::NormalLightPass* pass,
+                       const fx::NormalLights* lights) {
+    normal_pass_ = pass;
+    normal_lights_ = lights;
+  }
+  // Pictures drawn with their normal map in the last draw_layer.
+  [[nodiscard]] std::size_t normal_lit() const noexcept { return normal_lit_; }
 
   // Where the GPU copy of a picture is: its texture and the top-left of the
   // picture in it (not 0,0 for pictures in a shared atlas page).
@@ -193,6 +221,9 @@ private:
   int page_w_ = 0; // atlas page size, set on first use
   int page_h_ = 0;
   double upload_ms_ = 0;
+  fx::NormalLightPass* normal_pass_ = nullptr;
+  const fx::NormalLights* normal_lights_ = nullptr;
+  std::size_t normal_lit_ = 0;
   std::size_t atlas_pictures_ = 0;
   std::size_t atlas_bytes_ = 0;
   std::size_t sent_bytes_ = 0;

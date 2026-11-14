@@ -112,3 +112,21 @@ python tools/hdpack/hdpack.py provenance <maps>
 ```
 
 The engine does not read these maps yet. Normal-mapped lighting is the report's SDL_GPU item.
+
+## What the engine reads (fx::MapStore)
+
+Added 2026-11-14 by the rendering lane. The engine looks for maps in `<pack>/_maps/`, so copy or link the `maps.py` output folder there. The bundle layout is the one above:
+
+```
+<pack>/_maps/<asset id>/normal.png     as above; the engine decodes 128 as 0, so (128,128,255) is exactly flat.
+                                       Texels with alpha < 128 count as flat.
+<pack>/_maps/<asset id>/emissive.png   NEW, optional: RGBA 8-bit, straight alpha. RGB is the light the picture
+                                       gives off by itself (lit windows, neon, oven mouths, screens); alpha is how
+                                       much. Transparent means no glow. It is added over the lit frame at night,
+                                       scaled by the day/night night factor ("Day and night" option).
+```
+
+* A map may be any size with the picture's aspect ratio (within `HdPack::aspect_tolerance`). It is resized to the picture.
+* `depth_16.png` is not read yet.
+* With no `_maps` folder, or no map for a picture, the picture is drawn exactly as before.
+* `maps.py` does not make emissive masks. They are hand-painted or made by a future stage, and need a provenance sidecar like every other output.

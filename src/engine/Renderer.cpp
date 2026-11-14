@@ -18,7 +18,9 @@
 #include "engine/Renderable.h"
 #include "engine/SDL_include.h"
 #include "engine/adapters/SDLRectAdapter.h"
+#include "engine/fx/DayNight.h"
 #include "engine/fx/Look.h"
+#include "engine/fx/MapStore.h"
 #include "engine/gfx/Surface.h"
 #include "engine/ui/CursorManager.h"
 #include "resources/HdPack.h"
@@ -62,6 +64,11 @@ void Renderer::destroy_layer_textures() {
     give_back(tex);
   }
   lit_tex_.clear();
+  for (auto& [view, tex] : glow_tex_) {
+    give_back(tex);
+  }
+  glow_tex_.clear();
+  glow_ready_.clear();
   gpu_cached_.clear();
 }
 
@@ -211,9 +218,52 @@ void Renderer::draw_compare_divider() {
   SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
 
-fx::Grade Renderer::frame_grade() const {
-  // The 1994 look is the 1994 picture: no grade, no light strength.
-  return classic_ ? fx::Grade{} : fx::frame_grade();
+fx::FrameState Renderer::frame_state() const {
+  // The 1994 look is the 1994 picture: no grade, no light strength, no
+  // night glow, no weather.
+  return classic_ ? fx::FrameState{} : fx::frame_state();
+}
+
+void Renderer::add_glow(Renderable* view, const Surface& surface,
+                        const SDL_FRect& dest, float strength) {
+  SDL_Renderer* r = sdl_.renderer.get();
+  if (!glow_ready_.contains(view)) {
+    if (!gpu_->has_emissive(surface)) {
+      return;
+    }
+    SDL_Texture*& glow = glow_tex_[view];
+    const int w = surface.width() * scale_;
+    const int h = surface.height() * scale_;
+    if (glow && (glow->w != w || glow->h != h)) {
+      give_back(glow);
+      glow = nullptr;
+    }
+    if (!glow) {
+      glow = take_target(w, h);
+    }
+    SDL_Texture* target = SDL_GetRenderTarget(r);
+    int art_from_x = 0;
+    if (compare_x_) {
+      art_from_x = std::max(
+          0, (*compare_x_ - static_cast<int>(dest.x) / scale_) * scale_);
+    }
+    if (!gpu_->draw_emissive(glow, surface, art_from_x)) {
+      SDL_SetRenderTarget(r, target);
+      return;
+    }
+    SDL_SetRenderTarget(r, target);
+    glow_ready_.insert(view);
+  }
+  const auto it = glow_tex_.find(view);
+  if (it == glow_tex_.end() || !it->second) {
+    return;
+  }
+  SDL_Texture* glow = it->second;
+  SDL_SetTextureBlendMode(glow, SDL_BLENDMODE_ADD_PREMULTIPLIED);
+  SDL_SetTextureColorModFloat(glow, strength, strength, strength);
+  SDL_RenderTexture(r, glow, nullptr, &dest);
+  SDL_SetTextureColorModFloat(glow, 1.0f, 1.0f, 1.0f);
+  SDL_SetTextureBlendMode(glow, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
 }
 
 LightPass::Strength Renderer::light_strength() const {
@@ -246,6 +296,20 @@ void Renderer::present_display_texture() {
 void Renderer::on_render_reset(bool device_lost) {
   if (post_) {
     post_->on_render_reset(device_lost);
+  }
+  glow_ready_.clear();
+  if (normal_) {
+    normal_->reset();
+  }
+  if (device_lost) {
+    for (auto& [view, tex] : glow_tex_) {
+      SDL_DestroyTexture(tex);
+    }
+    glow_tex_.clear();
+    if (snow_) {
+      snow_->on_render_reset();
+    }
+    normal_.reset();
   }
   if (device_lost) {
     // The old device's textures are gone (SDL keeps the handles, without
@@ -355,11 +419,23 @@ void Renderer::render_gpu() {
   }
   // New picture settings: the lit layers are lit again and the frame shown
   // again.
-  if (const fx::Grade grade = frame_grade(); grade != last_grade_) {
-    last_grade_ = grade;
+  const fx::FrameState look = frame_state();
+  if (look != last_state_) {
+    last_state_ = look;
     force_recompose_ = true;
   }
   const LightPass::Strength strength = light_strength();
+  // Normal maps and emissive maps of pictures the pack loaded since.
+  fx::MapStore& maps = fx::MapStore::instance();
+  maps.sync();
+  const bool relief =
+      maps.enabled() && hd_gpu_compositing() && fx::PostFx::is_gpu_driver(r);
+  if (relief && !normal_) {
+    normal_ = std::make_unique<fx::NormalLightPass>(r);
+  }
+  const fx::Sun sun = look.sun_hours >= 0.0f && look.area == fx::Area::City
+                          ? fx::sun_at(look.sun_hours)
+                          : fx::Sun{};
   for (auto& layer : layers_) {
     force_recompose_ |= layer.view->needs_force_recompose();
   }
@@ -394,6 +470,18 @@ void Renderer::render_gpu() {
       const uint64_t t0 = SDL_GetPerformanceCounter();
       view->render(ctx);
       const uint64_t t1 = SDL_GetPerformanceCounter();
+      glow_ready_.erase(view);
+      // Relief from normal maps: the room's lights (or the sun outdoors).
+      bool shaped = false;
+      if (relief && normal_->ready()) {
+        normal_lights_ = fx::normal_lights(
+            lit ? scene : lighting::Scene{}, scale_,
+            static_cast<double>(SDL_GetTicks()) / 1000.0, sun);
+        if (lit || !normal_lights_.empty()) {
+          gpu_->normal_lighting(normal_.get(), &normal_lights_);
+          shaped = true;
+        }
+      }
       // The 1994 look, all or left of the divider: no HD art there.
       int art_from_x = 0;
       if (classic_) {
@@ -404,6 +492,9 @@ void Renderer::render_gpu() {
       }
       gpu_->draw_layer(tex, *layer_surface,
                        view->ignore_fade() ? 1.0f : fade_factor_, art_from_x);
+      if (shaped) {
+        gpu_->normal_lighting(nullptr, nullptr);
+      }
       times_.views_ms += ms_between(t0, t1);
       times_.compose_ms += ms_between(t1, SDL_GetPerformanceCounter());
       gpu_cached_.insert(view);
@@ -439,6 +530,11 @@ void Renderer::render_gpu() {
       else {
         SDL_RenderTexture(r, shown, nullptr, &dest);
       }
+      // Emissive art glows at night, over the lighting.
+      if (look.night > 0.0f) {
+        add_glow(view, *layer_surface, dest,
+                 look.night * (view->ignore_fade() ? 1.0f : fade_factor_));
+      }
       frame_changed = true;
       below_changed |= rerender || relight;
     }
@@ -450,6 +546,21 @@ void Renderer::render_gpu() {
   const bool cursor_changed = (cursor_sprite != last_cursor_sprite_) ||
                               (cursor_sprite && (cursor_x != last_cursor_x_ ||
                                                  cursor_y != last_cursor_y_));
+  // Falling weather moves every frame.
+  const uint64_t now = SDL_GetTicks();
+  const float weather_dt =
+      snow_ticks_ ? static_cast<float>(now - snow_ticks_) / 1000.0f : 0.0f;
+  snow_ticks_ = now;
+  if (look.weather != fx::Weather::None ||
+      (snow_ && !snow_->snowfall().flakes().empty())) {
+    if (!snow_) {
+      snow_ = std::make_unique<fx::SnowLayer>(r);
+    }
+    snow_->snowfall().configure(look.weather, look.reduced_motion,
+                                frame_width(), frame_height());
+    snow_->snowfall().step(weather_dt);
+    frame_changed = true;
+  }
   if (!frame_changed && !cursor_changed) {
     SDL_SetRenderTarget(r, nullptr);
     stream_ahead(stream_budget_ms);
@@ -465,6 +576,12 @@ void Renderer::render_gpu() {
   // the window.
   SDL_SetRenderTarget(r, sdl_.texture.get());
   SDL_RenderTexture(r, back_tex_, nullptr, nullptr);
+  if (snow_) {
+    // Not on the 1994 side of the comparison.
+    const int split = compare_x_ ? *compare_x_ * scale_ : 0;
+    const SDL_Rect right{split, 0, frame_width() - split, frame_height()};
+    snow_->draw(compare_x_ ? &right : nullptr);
+  }
   if (compare_x_) {
     draw_compare_divider();
   }
@@ -525,8 +642,8 @@ void Renderer::render() {
     force_recompose_ = true;
   }
   // New picture settings: the frame is shown again.
-  if (const fx::Grade grade = frame_grade(); grade != last_grade_) {
-    last_grade_ = grade;
+  if (const fx::FrameState look = frame_state(); look != last_state_) {
+    last_state_ = look;
     force_recompose_ = true;
   }
 
