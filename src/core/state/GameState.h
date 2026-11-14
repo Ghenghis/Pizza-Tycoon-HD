@@ -40,9 +40,15 @@
 #include <array>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+namespace core::content {
+struct Scenario;
+}
 
 class GameContext;
 class TurnPresenter;
@@ -225,6 +231,31 @@ public:
   // new game starts and kept until it ends; Classic in every other case,
   // including a loaded save (location-contract.md section 2.3).
   [[nodiscard]] const core::content::Roster& roster() const { return roster_; }
+  // Whether city_id is a place of this game. is_valid_city_id only says it
+  // fits the per-city arrays.
+  [[nodiscard]] bool in_roster(core::CityId city_id) const {
+    return roster_.contains(city_id);
+  }
+  // The name the game shows for a place of the roster.
+  [[nodiscard]] std::string_view city_display_name(core::CityId city_id) const {
+    return roster_.display_name(city_id);
+  }
+  // The scenario of an Expanded game (win rule, objectives); null in a
+  // Classic game.
+  [[nodiscard]] const core::content::Scenario* scenario() const {
+    return scenario_.get();
+  }
+  [[nodiscard]] const std::shared_ptr<const core::content::Scenario>&
+  scenario_document() const {
+    return scenario_;
+  }
+  // For the save loader (version 4): the roster and scenario the game was
+  // started with, set before its cities are rebuilt. A Classic save never
+  // calls it. Throws std::length_error for more places than the per-city
+  // arrays hold.
+  void
+  restore_scenario(core::content::Roster roster,
+                   std::shared_ptr<const core::content::Scenario> scenario);
   core::CityId active_city_id() const;
   ViewPoint city_position() const;
   std::optional<int> last_clicked_property_index() const;
@@ -391,6 +422,10 @@ public:
   void eliminate_player(core::PlayerId id, GameOverCause cause);
   // Returns false if this player has already won this game.
   bool trigger_win_sequence(core::PlayerId pid);
+  // The last page of the win sequence was dismissed. The player has won and
+  // leaves the game, except in a scenario that continues as a sandbox after
+  // its goal, where play simply goes on.
+  void finish_win_sequence(core::PlayerId pid);
 
   GameMode game_mode() const;
   void game_mode(GameMode);
@@ -547,8 +582,18 @@ private:
   std::optional<core::DistrictIndex> active_district_index_;
   // Per-player city view state, persisted across screen transitions.
   std::array<CityViewMapState, NUMBER_OF_PLAYERS> city_view_view_state_;
-  // Only finalize_initialization and reset assign it.
+  // Only finalize_initialization, restore_scenario and reset assign it.
   core::content::Roster roster_ = core::content::Roster::classic();
+  // Null in a Classic game. Assigned with roster_.
+  std::shared_ptr<const core::content::Scenario> scenario_;
+  // The scenario goal was announced (or found reached on load) in this
+  // session; derived again from the career log after a load.
+  bool scenario_goal_settled_{false};
+  // Shows the scenario's victory message once the goal is reached, beneath
+  // the milestones about to be delivered. Returns whether it did.
+  bool
+  announce_scenario_goal(const Player& player,
+                         const std::vector<core::events::MilestoneId>& pending);
   std::array<std::unique_ptr<City>, NUMBER_OF_CITIES> cities_;
   CityInitFlags city_initialised_{};
   City& city_or_create(core::CityId city_id);

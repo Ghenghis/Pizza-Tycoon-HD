@@ -19,6 +19,14 @@ set(GAME_PLEGACY_SOURCES
     src/core/city/MayorOffice.cpp
     src/core/city/PizzaCharts.cpp
     src/core/city/Property.cpp
+    src/core/content/DefinitionCitySource.cpp
+    src/core/content/JsonShape.cpp
+    src/core/content/LocationReader.cpp
+    src/core/content/LocationValidator.cpp
+    src/core/content/Scenario.cpp
+    src/core/content/ScenarioGoals.cpp
+    src/core/content/ScenarioSave.cpp
+    src/core/content/Sha256.cpp
     src/core/conversations/ArmsDealerConversation.cpp
     src/core/conversations/BankConversation.cpp
     src/core/conversations/InsuranceConversation.cpp
@@ -368,7 +376,17 @@ set(PLEGACY_HEADERS
     src/core/common/Ids.h
     src/core/content/ClassicCities.h
     src/core/content/ContentKey.h
+    src/core/content/DefinitionCitySource.h
+    src/core/content/Findings.h
+    src/core/content/JsonShape.h
+    src/core/content/LocationDefinition.h
+    src/core/content/LocationReader.h
+    src/core/content/LocationValidator.h
     src/core/content/Roster.h
+    src/core/content/Scenario.h
+    src/core/content/ScenarioGoals.h
+    src/core/content/ScenarioSave.h
+    src/core/content/Sha256.h
     src/core/conversations/ArmsDealerConversation.h
     src/core/conversations/ArmsDealerLine.h
     src/core/conversations/BankConversation.h

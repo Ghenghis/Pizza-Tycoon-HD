@@ -188,14 +188,15 @@ ValueValidator::validate_restaurant_exists(core::RestaurantId id,
 }
 
 ValidationResult ValueValidator::validate_city_exists(core::CityId id,
-                                                      GameState& /*state*/) {
+                                                      GameState& state) {
   // Cities are created on-demand when accessed, so we only validate that the
-  // ID is in the valid range (0-9). The city will be created if needed when
-  // the command handler runs.
-  if (id.value < 0 || id.value >= NUMBER_OF_CITIES) {
+  // ID is one of the game's places (0-9 in a Classic game). The city will be
+  // created if needed when the command handler runs.
+  if (id.value < 0 || id.value >= NUMBER_OF_CITIES || !state.in_roster(id)) {
     return ValidationResult::failure(
         compat::format("City ID {} is out of range", id.value),
-        "Valid city IDs: 0-9");
+        compat::format("Valid city IDs: 0-{}",
+                       static_cast<int>(state.roster().size()) - 1));
   }
   return ValidationResult::success();
 }

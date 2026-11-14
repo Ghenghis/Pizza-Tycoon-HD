@@ -15,6 +15,8 @@
 #include "core/city/District.h"
 #include "core/city/Property.h"
 #include "core/common/Ids.h"
+#include "core/content/ClassicCities.h"
+#include "core/content/Scenario.h"
 #include "core/events/MilestoneId.h"
 #include "core/finance/Money.h"
 #include "core/restaurant/Restaurant.h"
@@ -31,6 +33,20 @@ int owned_city_count(GameState& gs, core::PlayerId pid) {
     const int city = rest->property().city().id().value;
     if (city >= 0 && city < NUMBER_OF_CITIES) {
       cities[city] = true;
+    }
+  }
+  return static_cast<int>(std::count(cities.begin(), cities.end(), true));
+}
+
+// Original cities the player holds a restaurant in, by original number. In
+// the Classic roster that is owned_city_count.
+int owned_classic_city_count(GameState& gs, core::PlayerId pid) {
+  std::array<bool, NUMBER_OF_CITIES> cities = {};
+  for (const auto* rest : gs.restaurants_for(pid)) {
+    const auto number =
+        gs.roster().classic_number(rest->property().city().id());
+    if (number && *number >= 0 && *number < NUMBER_OF_CITIES) {
+      cities[static_cast<std::size_t>(*number)] = true;
     }
   }
   return static_cast<int>(std::count(cities.begin(), cities.end(), true));
@@ -180,8 +196,12 @@ void MilestoneTracker::check_market_share_milestones(const City& city) {
   using core::events::MilestoneId;
   const auto& control_map = city.control_map();
 
+  // The domination milestones are the original ten's (location-contract.md
+  // section 11.1); other locations have none.
+  const auto classic_number = gs_->roster().classic_number(city.id());
   auto domination_event = static_cast<MilestoneId>(
-      static_cast<int>(MilestoneId::DominatesMarketInParis) + city.id().value);
+      static_cast<int>(MilestoneId::DominatesMarketInParis) +
+      classic_number.value_or(0));
 
   for (int p = 0; p < NUMBER_OF_PLAYERS; ++p) {
     auto pid = core::PlayerId{p};
@@ -192,7 +212,9 @@ void MilestoneTracker::check_market_share_milestones(const City& city) {
     int first_threshold = gs_->rules().fix_legacy_bugs ? 10 : 5;
     if (control_map.has_market_share_at_least(p, 50)) {
       gs_->record_milestone(MilestoneId::Achieved50PctMarketShareInCity, pid);
-      gs_->record_milestone(domination_event, pid);
+      if (classic_number) {
+        gs_->record_milestone(domination_event, pid);
+      }
     }
     if (control_map.has_market_share_at_least(p, 20)) {
       gs_->record_milestone(MilestoneId::Achieved20PctMarketShareInCity, pid);
@@ -215,9 +237,19 @@ void MilestoneTracker::check_world_domination() {
   constexpr int win_threshold = 5;
   const int pid = p->id().value;
 
+  if (const auto* scenario = gs_->scenario()) {
+    if (!scenario_domination(*scenario, pid)) {
+      return;
+    }
+    gs_->trigger_win_sequence(p->id());
+    return;
+  }
+
   switch (gs_->rules().win_condition) {
   case WinCondition::Paris: {
-    auto* paris = gs_->city(core::CityId{0});
+    const auto paris_id =
+        gs_->roster().find(core::content::classic_key(core::CityId{0}));
+    auto* paris = paris_id ? gs_->city(*paris_id) : nullptr;
     if (!paris ||
         !paris->control_map().has_market_share_at_least(pid, win_threshold)) {
       return;
@@ -239,7 +271,7 @@ void MilestoneTracker::check_world_domination() {
   }
   case WinCondition::AllCities: {
     auto cities = gs_->initialized_cities();
-    if (static_cast<int>(cities.size()) < NUMBER_OF_CITIES) {
+    if (cities.size() < gs_->roster().size()) {
       return;
     }
     for (auto* c : cities) {
@@ -252,6 +284,36 @@ void MilestoneTracker::check_world_domination() {
   }
 
   gs_->trigger_win_sequence(p->id());
+}
+
+bool MilestoneTracker::scenario_domination(
+    const core::content::Scenario& scenario, int pid) const {
+  using core::content::WinMode;
+  using core::content::WinScope;
+  if (scenario.win_mode == WinMode::None) {
+    return false;
+  }
+  const int percent = scenario.win_percent;
+  const auto dominated = [&](const City* city) {
+    return city != nullptr &&
+           city->control_map().has_market_share_at_least(pid, percent);
+  };
+  switch (scenario.win_scope) {
+  case WinScope::AnyLocation:
+    return std::ranges::any_of(gs_->initialized_cities(), dominated);
+  case WinScope::AllLocations: {
+    const auto cities = gs_->initialized_cities();
+    return cities.size() >= gs_->roster().size() &&
+           std::ranges::all_of(cities, dominated);
+  }
+  case WinScope::Listed:
+    return std::ranges::all_of(scenario.win_locations,
+                               [&](const core::content::ContentKey& key) {
+                                 const auto id = gs_->roster().find(key);
+                                 return id && dominated(gs_->city(*id));
+                               });
+  }
+  return false;
 }
 
 void MilestoneTracker::check_restaurant_milestones(const Player& player) {
@@ -309,7 +371,8 @@ void MilestoneTracker::check_restaurant_milestones(const Player& player) {
 
 void MilestoneTracker::check_restaurant_acquired(const Player& player) {
   using core::events::MilestoneId;
-  if (owned_city_count(*gs_, player.id()) < NUMBER_OF_CITIES) {
+  // "Every western city" are the original ten, wherever the roster has them.
+  if (owned_classic_city_count(*gs_, player.id()) < NUMBER_OF_CITIES) {
     return;
   }
   gs_->record_milestone(MilestoneId::OutletsInEveryWesternCity, player.id());

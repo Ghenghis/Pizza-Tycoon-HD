@@ -28,6 +28,27 @@ public:
   static std::unique_ptr<City>
   create_city(core::CityId id, bool fix_legacy_bugs,
               const std::vector<std::pair<uint8_t, int>>& player_chars = {});
+  // An original city built from the player's files for classic_number
+  // (dat/city{n}.pc), playing as city id in its game: the two are equal in a
+  // Classic game, and differ only when an Expanded roster puts an original
+  // city at another position.
+  static std::unique_ptr<City>
+  create_city(core::CityId id, int classic_number, bool fix_legacy_bugs,
+              const std::vector<std::pair<uint8_t, int>>& player_chars = {});
+
+  // The start-up a new city gets after its static parts are in place, in the
+  // original's order: advertising rates, known arms dealers, ten economy
+  // ticks, ingredient trends. All of it draws the simulation stream; both
+  // the Classic and the definition source run it the same way
+  // (location-contract.md section 4).
+  static void initialise_new_city(City& city, bool fix_legacy_bugs);
+
+  // The tile categories and their names, as every city gets them.
+  static void tile_types(std::array<uint8_t, /*NUMBER_OF_TILES*/ 256>& types,
+                         std::array<std::string, 10>& type_names);
+
+  // The colour district i is drawn in on the district map.
+  static uint8_t district_color(std::size_t index);
 
 private:
   static constexpr int NUMBER_OF_NAMED_BUILDINGS = 8;

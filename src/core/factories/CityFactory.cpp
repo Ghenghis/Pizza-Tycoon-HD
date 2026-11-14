@@ -19,6 +19,7 @@
 #include <map>
 #include <optional>
 
+#include "core/city/CityNames.h"
 #include "core/city/CityTypes.h"
 #include "core/city/District.h"
 #include "core/city/Property.h"
@@ -70,15 +71,22 @@ static_assert(sizeof(DistrictDataRaw) == 104,
 std::unique_ptr<City> CityFactory::create_city(
     core::CityId cid, bool fix_legacy_bugs,
     const std::vector<std::pair<uint8_t, int>>& player_chars) {
+  return create_city(cid, cid.value, fix_legacy_bugs, player_chars);
+}
+
+std::unique_ptr<City> CityFactory::create_city(
+    core::CityId cid, int classic_number, bool fix_legacy_bugs,
+    const std::vector<std::pair<uint8_t, int>>& player_chars) {
   CityFactory factory;
-  auto id = cid.value;
+  auto id = classic_number;
   factory.load_color_definition();
   factory.load_city_data(id);
   factory.load_district_bez(id);
   factory.load_map_data(id, fix_legacy_bugs);
   factory.populate_types();
 
-  auto city = std::make_unique<City>(core::CityId{id});
+  auto city = std::make_unique<City>(cid);
+  city->name(std::string(core::city_name(core::CityId{classic_number})));
   city->mayor_office().init_private_account();
   factory.populate_properties(*city);
   factory.build_city_object(*city, id, fix_legacy_bugs);
@@ -86,9 +94,25 @@ std::unique_ptr<City> CityFactory::create_city(
   return city;
 }
 
+namespace {
+constexpr std::array<uint8_t, 12> district_colors = {
+    0x0F, 0x09, 0x1B, 0x05, 0x16, 0x14, 0x18, 0x11, 0x01, 0x03, 0x13, 0x0B};
+} // namespace
+
 void CityFactory::load_color_definition() {
-  district_color_list_ = {0x0F, 0x09, 0x1B, 0x05, 0x16, 0x14,
-                          0x18, 0x11, 0x01, 0x03, 0x13, 0x0B};
+  district_color_list_ = district_colors;
+}
+
+uint8_t CityFactory::district_color(std::size_t index) {
+  return district_colors[index % district_colors.size()];
+}
+
+void CityFactory::tile_types(std::array<uint8_t, 256>& types,
+                             std::array<std::string, 10>& type_names) {
+  CityFactory factory;
+  factory.populate_types();
+  types = factory.types_;
+  type_names = factory.type_names_;
 }
 
 void CityFactory::load_map_data(int city_id, bool fix_legacy_bugs) {
@@ -579,6 +603,10 @@ void CityFactory::build_city_object(City& city, int id, bool fix_legacy_bugs) {
   city.suppliers(std::move(suppliers_));
   city.ingredient_base_prices(ingredient_base_prices_);
 
+  initialise_new_city(city, fix_legacy_bugs);
+}
+
+void CityFactory::initialise_new_city(City& city, bool fix_legacy_bugs) {
   city.init_advertising_options();
 
   // Initialize known arms dealers for all players

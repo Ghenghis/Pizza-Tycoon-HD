@@ -14,6 +14,8 @@
 #include <cassert>
 #include <optional>
 #include <ranges>
+#include <stdexcept>
+#include <string>
 #include <utility>
 #include "core/character/Actor.h"
 #include "core/character/Awards.h"
@@ -26,6 +28,9 @@
 #include "core/city/District.h"
 #include "core/city/MayorOffice.h"
 #include "core/city/Property.h"
+#include "core/content/DefinitionCitySource.h"
+#include "core/content/Scenario.h"
+#include "core/content/ScenarioGoals.h"
 #include "core/conversations/MayorConversation.h"
 #include "core/events/MilestoneId.h"
 #include "core/factories/CharacterFactory.h"
@@ -278,10 +283,18 @@ void GameState::initialise_city_for_ai(City& city) {
 
 City& GameState::city_or_create(core::CityId city_id) {
   assert(is_valid_city_id(city_id));
+  // Travel and the console only offer the game's places; anything else is a
+  // caller's bug, stopped here rather than read past the roster.
+  if (!in_roster(city_id)) {
+    fatal("City " + std::to_string(city_id.value) +
+          " is not one of this game's locations");
+  }
   auto& city = cities_[city_id.value];
   if (city == nullptr) {
-    city = CityFactory::create_city(city_id, rules_.fix_legacy_bugs,
-                                    build_player_chars());
+    // An original city from the player's files (for the Classic roster
+    // exactly CityFactory::create_city(city_id, ...)), or a definition.
+    city = core::content::build_roster_city(
+        roster_, city_id, rules_.fix_legacy_bugs, build_player_chars());
   }
   return *city;
 }
@@ -290,7 +303,7 @@ core::CityId GameState::default_city_id() const {
   if (is_valid_city_id(active_city_)) {
     return active_city_;
   }
-  for (int i = 0; i < NUMBER_OF_CITIES; ++i) {
+  for (int i = 0; i < static_cast<int>(roster_.size()); ++i) {
     if (cities_[i]) {
       return core::CityId{i};
     }
@@ -300,6 +313,7 @@ core::CityId GameState::default_city_id() const {
 
 void GameState::active_city(core::CityId city_id) {
   assert(is_valid_city_id(city_id));
+  assert(in_roster(city_id));
   if (city_id != active_city_) {
     clear_city_selection();
   }
@@ -558,10 +572,59 @@ bool GameState::process_pending_milestones() {
   }
 
   auto pending = career_log_.get_pending_for_player(player->id());
+  // Pushed first so that it shows after the milestones that reached it.
+  const bool announced = announce_scenario_goal(*player, pending);
   for (auto msg_id : pending) {
     deliver_milestone(msg_id);
   }
-  return !pending.empty();
+  return !pending.empty() || announced;
+}
+
+bool GameState::announce_scenario_goal(
+    const Player& player,
+    const std::vector<core::events::MilestoneId>& pending) {
+  if (!scenario_ || scenario_goal_settled_) {
+    return false;
+  }
+  const auto progress = core::content::evaluate_goals(
+      *scenario_, career_log_.get_cv_entries_for(player.id()),
+      time_.current_date());
+  if (!progress.reached_on) {
+    return false;
+  }
+  scenario_goal_settled_ = true;
+  // A goal is completed by the delivery of its last milestone. Without one
+  // pending it was reached and announced before (a loaded game).
+  if (!core::content::completes_goal(*scenario_, pending)) {
+    return false;
+  }
+  const bool ends = scenario_->after_goal == core::content::AfterGoal::EndGame;
+  ui_.push<MaestroMessageState>(MaestroMessageState{
+      .text = scenario_->victory_summary,
+      .on_dismiss =
+          [this, pid = player.id(), ends]() {
+            // A scenario that ends at its goal ends like a completed mission;
+            // the sandbox presets simply carry on.
+            if (ends) {
+              eliminate_player(pid, GameOverCause::MissionComplete);
+            }
+          },
+  });
+  return true;
+}
+
+void GameState::restore_scenario(
+    core::content::Roster roster,
+    std::shared_ptr<const core::content::Scenario> scenario) {
+  // Thrown, not fatal: the loader turns it into a refused load.
+  if (roster.size() > static_cast<std::size_t>(NUMBER_OF_CITIES)) {
+    throw std::length_error("the save has " + std::to_string(roster.size()) +
+                            " locations; this build plays at most " +
+                            std::to_string(NUMBER_OF_CITIES));
+  }
+  roster_ = std::move(roster);
+  scenario_ = std::move(scenario);
+  scenario_goal_settled_ = false;
 }
 
 void GameState::suspend_clock() {
@@ -878,6 +941,14 @@ void GameState::show_staff_event_dialog(
   staff_event_presenter_(event, restaurant, std::move(on_done));
 }
 
+void GameState::finish_win_sequence(core::PlayerId pid) {
+  if (scenario_ &&
+      scenario_->after_goal == core::content::AfterGoal::ContinueSandbox) {
+    return;
+  }
+  eliminate_player(pid, GameOverCause::PizzaTycoon);
+}
+
 bool GameState::trigger_win_sequence(core::PlayerId pid) {
   if (!record_milestone(core::events::MilestoneId::ControlsWorld, pid)) {
     return false;
@@ -907,10 +978,14 @@ void GameState::on_city_entered(core::CityId city_id, const Player& player) {
     }
   }
 
+  // The arrival milestones are the original ten's (ArrivalInParis + its
+  // number); other locations have none in contract 1.0 (section 11.1).
   using core::events::MilestoneId;
-  auto arrival = static_cast<MilestoneId>(
-      static_cast<int>(MilestoneId::ArrivalInParis) + city_id.value);
-  record_milestone(arrival, player.id());
+  if (const auto number = roster_.classic_number(city_id)) {
+    auto arrival = static_cast<MilestoneId>(
+        static_cast<int>(MilestoneId::ArrivalInParis) + *number);
+    record_milestone(arrival, player.id());
+  }
   process_pending_milestones();
 }
 
@@ -1093,13 +1168,22 @@ void GameState::finalize_initialization(GameContext& context) {
 
   init::Config cfg = *initializer_;
 
-  // The roster is fixed here for the whole game. The city arrays still hold
-  // one slot per original city, so only the Classic roster can start until
-  // they follow the roster (location-contract.md section 16, step 2).
-  if (!cfg.roster.is_classic()) {
-    fatal("A new game can only start with the Classic roster for now");
+  // The roster is fixed here for the whole game. The per-city arrays keep one
+  // slot per original city, so a roster may hold at most that many places
+  // (location-contract.md section 16, steps 2-4). Missions stay Classic.
+  if (cfg.roster.size() > static_cast<std::size_t>(NUMBER_OF_CITIES)) {
+    fatal("A new game can have at most " + std::to_string(NUMBER_OF_CITIES) +
+          " locations");
+  }
+  if (!cfg.roster.contains(cfg.city_id)) {
+    fatal("A new game must start in one of its locations");
+  }
+  if (!cfg.roster.is_classic() && cfg.mode == GameMode::MISSION_MODE) {
+    fatal("Missions are played in the original ten cities");
   }
   roster_ = cfg.roster;
+  scenario_ = cfg.scenario;
+  scenario_goal_settled_ = false;
 
   rules_ = options_.rules;
   starting_rules_ = options_.rules;
@@ -1565,7 +1649,7 @@ void GameState::game_mode(GameMode mode) { game_mode_ = mode; }
 int GameState::human_player_count() const {
   int h_count = 0;
   for (const auto& player : players_) {
-    if (player->is_human_controlled()) {
+    if (player && player->is_human_controlled()) {
       h_count++;
     }
   }

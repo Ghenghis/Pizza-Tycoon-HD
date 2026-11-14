@@ -10,6 +10,10 @@ class City;
 class GameState;
 class Player;
 
+namespace core::content {
+struct Scenario;
+}
+
 // Scans player and city state for achievement milestones and schedules the
 // matching milestones. Stateless; split out of GameState for cohesion
 // and written against its public API.
@@ -33,12 +37,17 @@ public:
   void check_market_share_milestones(const City& city);
 
   // Win condition: market share domination over as much of the map as
-  // GameRules::win_condition asks for.
+  // GameRules::win_condition asks for, or in a scenario its win rule (none
+  // never wins).
   void check_world_domination();
 
   // Central depot count milestones.
   void check_depot_milestones(const Player& player);
 
 private:
+  // Whether player pid holds the scenario's win rule.
+  [[nodiscard]] bool
+  scenario_domination(const core::content::Scenario& scenario, int pid) const;
+
   GameState* gs_;
 };

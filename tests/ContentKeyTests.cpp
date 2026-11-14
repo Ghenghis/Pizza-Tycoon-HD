@@ -49,10 +49,15 @@ RosterEntry classic_entry(int number) {
                      .classic_number = number};
 }
 
+// A definition entry with a stand-in definition: the roster rules look at
+// its key only.
 RosterEntry definition_entry(std::string_view text) {
+  auto definition = std::make_shared<core::content::LocationDefinition>();
+  definition->key = key(text);
   return RosterEntry{.key = key(text),
                      .source = RosterSource::Definition,
-                     .classic_number = std::nullopt};
+                     .classic_number = std::nullopt,
+                     .definition = std::move(definition)};
 }
 
 // The keys the contract gives the original ten, in city id order.
@@ -240,6 +245,32 @@ TEST_CASE("A roster follows its rules", "[content][roster]") {
     CHECK_FALSE(Roster::from_entries({not_classic}).has_value());
   }
 
+  SECTION("Definition entries carry the definition of their own key") {
+    RosterEntry bare = definition_entry("pthd:santas-pizza-village");
+    bare.definition = nullptr;
+    CHECK_FALSE(Roster::from_entries({bare}).has_value());
+
+    RosterEntry other = definition_entry("pthd:santas-pizza-village");
+    other.definition = definition_entry("pthd:harbor-bay").definition;
+    CHECK_FALSE(Roster::from_entries({other}).has_value());
+
+    RosterEntry classic_with_definition = classic_entry(0);
+    classic_with_definition.definition =
+        definition_entry("pthd:paris").definition;
+    CHECK_FALSE(Roster::from_entries({classic_with_definition}).has_value());
+  }
+
+  SECTION("Positions know their original number and their name") {
+    const auto mixed = Roster::from_entries(
+        {definition_entry("pthd:santas-pizza-village"), classic_entry(6)});
+    REQUIRE(mixed.has_value());
+    CHECK_FALSE(mixed->classic_number(CityId{0}).has_value());
+    CHECK(mixed->classic_number(CityId{1}) == 6);
+    CHECK(mixed->display_name(CityId{1}) == "Madrid");
+    CHECK_FALSE(mixed->classic_number(CityId{2}).has_value());
+    CHECK(Roster::classic().display_name(CityId{9}) == "London");
+  }
+
   SECTION("Other entries stay out of the classic and QA namespaces") {
     CHECK_FALSE(Roster::from_entries({definition_entry("classic:atlantis")})
                     .has_value());
@@ -258,8 +289,11 @@ TEST_CASE("A game state and a new game start with the Classic roster",
   CHECK(state.roster().is_classic());
   CHECK(state.roster() == Roster::classic());
 
+  CHECK(state.scenario() == nullptr);
+
   const init::Config config;
   CHECK(config.roster.is_classic());
+  CHECK(config.scenario == nullptr);
 }
 
 TEST_CASE("A started Classic game keeps the Classic roster",

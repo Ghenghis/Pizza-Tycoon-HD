@@ -17,6 +17,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include "core/city/CentralDepot.h"
 #include "core/city/CityTypes.h"
@@ -85,6 +86,9 @@ public:
 
   core::CityId id() const;
   std::string_view name() const;
+  // The display name: the original name for the ten original cities (set
+  // from CityNames.h), the definition's display name for other locations.
+  void name(std::string name) { name_ = std::move(name); }
 
   uint8_t type(int index) const;
   int data_length() const;
@@ -368,6 +372,7 @@ private:
   void replenish_supplier_stock_levels();
 
   core::CityId id_;
+  std::string name_;
 
   int data_length_ = 0;
   std::vector<uint8_t> data_;

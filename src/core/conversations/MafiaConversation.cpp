@@ -348,8 +348,10 @@ bool MafiaConversation::advance_line_choice(MafiaLine choice) {
       using core::item::Item;
       constexpr Item weapons[] = {Item::FlameThrower, Item::Chemicals,
                                   Item::Bazooka, Item::Bomb};
-      auto tip_city_id = core::CityId{rand_max_n(NUMBER_OF_CITIES)};
-      auto tip_city_name = core::city_name(tip_city_id);
+      // One draw over the game's places: rand_max_n(10) in a Classic game.
+      auto tip_city_id =
+          core::CityId{rand_max_n(static_cast<int>(state_.roster().size()))};
+      auto tip_city_name = state_.city_display_name(tip_city_id);
       int w1 = rand_max_n(4);
       int w2 = (w1 + 1) % 4;
       auto& market = state_.weapon_market();

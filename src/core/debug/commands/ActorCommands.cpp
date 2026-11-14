@@ -843,10 +843,12 @@ Example:
           .handler = [](const CommandContext& ctx) -> CommandResult {
             auto result = CommandResult::success();
             auto& market = ctx.state.weapon_market();
-            for (int i = 0; i < NUMBER_OF_CITIES; ++i) {
+            const int cities = static_cast<int>(ctx.state.roster().size());
+            for (int i = 0; i < cities; ++i) {
               core::CityId city_id{i};
-              result.add_message(compat::format("--- {} (city {}) ---",
-                                                core::city_name(city_id), i));
+              result.add_message(
+                  compat::format("--- {} (city {}) ---",
+                                 ctx.state.city_display_name(city_id), i));
               for (core::item::Item item : core::item::weapon_list) {
                 // Only print weapons
                 if (static_cast<int>(item) <

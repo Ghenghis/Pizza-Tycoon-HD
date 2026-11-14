@@ -32,13 +32,13 @@ std::ostream& operator<<(std::ostream& os, const City& city) {
   return os;
 }
 
-City::City(core::CityId id) : id_(id) {}
+City::City(core::CityId id) : id_(id), name_(core::city_name(id)) {}
 
 City::~City() = default;
 
 core::CityId City::id() const { return id_; }
 
-std::string_view City::name() const { return core::city_name(id_); }
+std::string_view City::name() const { return name_; }
 
 const FoodSupplier* City::supplier_for(IngredientCategory category,
                                        std::optional<int> preferred_id) const {

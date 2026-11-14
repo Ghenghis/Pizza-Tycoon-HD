@@ -246,7 +246,9 @@ working city view, not simulation rules, and they are errors only for Expanded c
 
 - **ROAD-2 continuity:** for every road tile and every direction d in its out set, the next tile
   in d is off the map, or a road tile with a non-empty out set that does not contain the
-  reverse of d (no dead end, no U-turn).
+  reverse of d (no dead end, no U-turn). A car crosses `0x77` in a straight line, so the check
+  steps over `0x77` tiles in d before it looks (calibration: the ten original maps use `0x77`
+  529 times as the middle of junctions, and with this rule none of them has a dead end).
 - **ROAD-3 one network:** all road tiles form one 4-connected component.
 - **ROAD-4 lane pairing:** every straight lane tile (non-corner code with one out direction) has
   a road tile on its return side, because the wrap above can happen at any viewport edge.
@@ -365,6 +367,10 @@ Pipeline: stage 1 is JSON Schema (`SCHEMA-1`); if it fails nothing else runs. St
 rule below and reports all findings with entity refs and tile coordinates. Errors block
 `validated`; warnings are recorded in the receipt. A scratch reference implementation was used to
 confirm that every fixture fails exactly its listed rule; it is not committed (ownership limits).
+The runtime implementation is `src/core/content/LocationReader.cpp` (stage 1: the shape of every
+member the runtime reads, with the JSON pointer of the first bad value, and the identity rules
+of the schema) and `LocationValidator.cpp` (stage 2); `tests/ContentDefinitionTests.cpp` runs
+both over `tests/fixtures/locations/expectations.json`.
 
 | Rule | Sev. | Check |
 |---|---|---|
@@ -374,7 +380,7 @@ confirm that every fixture fails exactly its listed rule; it is not committed (o
 | REF-1 | E | property realtor is a realtor actor |
 | REF-2 | E | every district cell < district count |
 | TILE-1 | E | no owned shop-front codes (low nibble A, high nibble 0..7) |
-| TILE-2 | E/W | `0x77` (road-like, no driving rule) error; `0xE6`, `0xF6` warning |
+| TILE-2 | W | `0xE6`, `0xF6` (road-like codes outside the road rule). `0x77` is allowed: cars cross it straight on, as in the original maps (calibrated, see ROAD-2) |
 | TILE-3 | W | `0xB7`, `0x67`, `0x87` (spawn and driving tables disagree) |
 | ROAD-1 | E | at least one road tile |
 | ROAD-2 | E | lane continuity: no dead end, no U-turn |
@@ -715,6 +721,14 @@ Schema: `scenario.schema.json`.
 - City-scoped milestones (market share 37-39, `RepresentedInAllAreas`) are not tagged with a city;
   a scenario that uses them as objectives must have a single-location roster (SCN-4).
 
+Scenario rules (stage 2 after `scenario.schema.json`, `src/core/content/Scenario.cpp`): SCN-1 a
+location appears once and is pinned `classic` exactly when it is one of the original ten; SCN-2
+the start (and every listed win location) is in the roster; SCN-3 `continue-sandbox` needs win
+mode `none`; SCN-4 city-scoped milestones need a single location; SCN-5 travel `disabled` needs a
+single location. At game creation: SCN-6 every non-Classic entry has a valid definition, equal to
+its pin when the pin is exact; SCN-7 the roster fits the per-game limit of the build (10 while the
+per-city arrays keep `NUMBER_OF_CITIES` slots).
+
 ### 11.2 Objective registry v1
 
 Objectives are MilestoneIds (`MilestoneId.h`) with a verified emitter. Polarity `achieve` is met
@@ -924,7 +938,7 @@ started); no runtime frame exists for any entry.
 
 ---
 
-## 16. Refactor order (runtime code; none done here)
+## 16. Refactor order (runtime code)
 
 Each step lists the code and the test that proves Classic is unchanged. "Golden" means the stage 0
 fingerprint suite: scripted runs with `--seed` (`src/Main.cpp:115`) and `--exec`, ending in
@@ -950,6 +964,13 @@ year rolls, AI expansion, newspaper events, mafia and police, plus loading v1, v
 | 13 | Event resolver (pure) | new | events on and off give equal fingerprints; RNG states unchanged |
 | 14 | Generator library and tool (own RNG) | new | determinism tests in section 7 |
 | 15 | Later, by its own contract: map size | items in 1.4, starting with `Car.cpp:23` and `RestaurantEconomy.cpp:202,204` | golden |
+
+Status (W03, 2026-11-14): steps 0-2 landed; steps 3-6 and 11 are written in `src/core/content/`,
+`GameState`, `MilestoneTracker`, `CityFactory` and the console bounds, with the per-city arrays
+kept at `NUMBER_OF_CITIES` (a roster holds at most that many places). Step 7 is specified as a
+diff for the save owner (`ScenarioSave.h` holds the block reader and writer). The goal observer
+reads the career log only; the victory message is a Maestro message, so neither ending is reused,
+and `GameState::finish_win_sequence` keeps the Classic ending for the win sequence.
 
 ---
 
@@ -1005,6 +1026,12 @@ Still open:
 
 7. Balance thresholds to calibrate against Classic data dumped locally: PROP-5 (16 premises),
    ECON-1 (3 x rent), population weight magnitudes, and whether ROAD-4 holds for the Classic maps.
+   Measured so far (local dump of the original data, nothing copied): `0x77` is a pass-through
+   junction (ROAD-2 and TILE-2 changed accordingly); PROP-3 is stricter than Classic, where about
+   half of the premises face no road; ROAD-4 holds in most original cities; the eight player
+   characters start with $3,000 to $20,000 (character 0: $8,000), which is the reference cash of
+   Santa's Pizza Village; original district rents are 5..70 per tile (median 24) and prices
+   200..6,500 (median 2,000).
 8. Names are limited to ISO-8859-1 by the original fonts; accept for 1.0, or require HD text for
    names outside it (for example scripts for Seoul or Kathmandu signage)?
 9. Event catalog content: which observances, with which local review, beyond the fixture's

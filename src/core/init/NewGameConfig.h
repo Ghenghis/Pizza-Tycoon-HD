@@ -11,9 +11,14 @@
 #include "core/content/Roster.h"
 #include "core/mission/MissionTarget.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace core::content {
+struct Scenario;
+}
 
 namespace init {
 struct PlayerSlot {
@@ -40,9 +45,12 @@ struct Config {
   std::string chosen_character;
   core::CityId city_id{0};
   // The places the game is played in, fixed for the whole game when it
-  // starts; city_id indexes it. The Classic roster is the only one a game can
-  // start with until the city arrays follow the roster.
+  // starts; city_id indexes it. At most NUMBER_OF_CITIES entries while the
+  // per-city arrays keep that size.
   core::content::Roster roster = core::content::Roster::classic();
+  // The scenario an Expanded game plays (win rule, objectives); null for a
+  // Classic game. Set with core::content::configure_new_game.
+  std::shared_ptr<const core::content::Scenario> scenario;
   std::vector<PlayerSlot> players;
   // Target CV; engaged only for GameMode::MISSION_MODE, nullopt otherwise.
   std::optional<core::mission::MissionTarget> mission;
