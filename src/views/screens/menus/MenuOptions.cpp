@@ -167,7 +167,36 @@ void MenuOptions::build_audio(GameState& state) {
       [this](float v) { context_.audio->music_volume(v); }));
 }
 
+std::string to_string(HdResolution r) {
+  switch (r) {
+  case HdResolution::Auto:
+    return "Auto";
+  case HdResolution::Off:
+    return "Off (640x400)";
+  default: {
+    const int k = static_cast<int>(r);
+    return std::to_string(DisplayConstants::SCREEN_WIDTH * k) + "x" +
+           std::to_string(DisplayConstants::SCREEN_HEIGHT * k);
+  }
+  }
+}
+
 void MenuOptions::build_graphics(GameState& state) {
+  hd_resolution_ = static_cast<HdResolution>(state.options().hd_scale);
+  add_menu_item(
+      std::make_unique<EnumMenuItem<HdResolution>>(
+          context_, "HD resolution", hd_resolution_,
+          std::vector{HdResolution::Auto, HdResolution::Off, HdResolution::X2,
+                      HdResolution::X3, HdResolution::X4, HdResolution::X5,
+                      HdResolution::X6, HdResolution::X8},
+          [&state, this] {
+            state.options().hd_scale = static_cast<int>(hd_resolution_);
+            mark_dirty();
+          },
+          face))
+      .help_text("How sharp the remaster draws: Auto fits your screen. "
+                 "F7 shows the 1994 look, F8 both side by side. Takes effect "
+                 "after a restart.");
   add_menu_item(
       std::make_unique<ToggleMenuItem>(
           context_, "CRT Aspect Ratio (4:3)", state.options().crt_aspect_ratio,

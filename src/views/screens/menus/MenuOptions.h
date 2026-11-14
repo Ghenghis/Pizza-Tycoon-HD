@@ -11,6 +11,20 @@
 #include "core/state/UIState.h"
 #include "views/base/Menu.h"
 
+// The HD render scale choices on the graphics options screen (the value is
+// GameOptions::hd_scale).
+enum class HdResolution : int {
+  Auto = 0,
+  Off = 1,
+  X2 = 2,
+  X3 = 3,
+  X4 = 4,
+  X5 = 5,
+  X6 = 6,
+  X8 = 8,
+};
+[[nodiscard]] std::string to_string(HdResolution r);
+
 class MenuOptions : public Menu {
 public:
   // Main choice screen
@@ -34,4 +48,5 @@ private:
   void add_back(std::function<void()> action);
 
   std::string title_;
+  HdResolution hd_resolution_ = HdResolution::Auto;
 };

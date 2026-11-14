@@ -178,9 +178,10 @@ struct GameOptions {
   Smoothing smoothing = Smoothing::Off;
   // HD rendering, read once at startup. hd_scale is how many screen texels
   // back every pixel of the 640x400 game screen (1 = original, 3 = 1920x1200,
-  // 6 = 3840x2400). hd_pack is a folder of replacement art; empty means the
-  // "hd" folder next to the program, when there is one.
-  int hd_scale = 1;
+  // 6 = 3840x2400); 0 = Auto, chosen from the screen's height at startup.
+  // hd_pack is a folder of replacement art; empty means the "hd" folder next
+  // to the program, when there is one.
+  int hd_scale = 0;
   std::string hd_pack;
   FpsOption render_fps = FpsOption::Fps60;
   // Draw walking characters gliding between steps instead of jumping a whole

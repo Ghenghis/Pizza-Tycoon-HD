@@ -1251,6 +1251,28 @@ int Game::get_display_height(bool crt_mode) {
   return height;
 }
 
+int Game::auto_hd_scale() {
+  // Enough texels per game pixel for the primary screen's height (400 game
+  // pixels), so a full screen shows no magnified blocks: 1080p -> 3,
+  // 1440p -> 4, 2160p -> 6.
+  const SDL_DisplayID display = SDL_GetPrimaryDisplay();
+  const SDL_DisplayMode* mode =
+      display != 0 ? SDL_GetDesktopDisplayMode(display) : nullptr;
+  if (!mode || mode->h <= 0) {
+    Logger::info("HD scale Auto: no display mode, using 3");
+    return 3;
+  }
+  const float density = mode->pixel_density > 0 ? mode->pixel_density : 1.0f;
+  const int pixels_high =
+      static_cast<int>(static_cast<float>(mode->h) * density);
+  const int scale =
+      std::clamp((pixels_high + DisplayConstants::SCREEN_HEIGHT - 1) /
+                     DisplayConstants::SCREEN_HEIGHT,
+                 2, gfx::max_hd_scale);
+  Logger::info("HD scale Auto: {} pixels high, {}x", pixels_high, scale);
+  return scale;
+}
+
 SDL_Texture* Game::create_display_texture(int display_height) const {
   const int scale = gfx::hd_scale();
   if (scale == 1) {
@@ -1275,7 +1297,10 @@ SDL_Texture* Game::create_display_texture(int display_height) const {
 }
 
 void Game::configure_hd(const GameOptions& options) const {
-  const int scale = hd_scale_override_.value_or(options.hd_scale);
+  int scale = hd_scale_override_.value_or(options.hd_scale);
+  if (scale == 0) {
+    scale = auto_hd_scale();
+  }
   gfx::hd_scale(std::clamp(scale, 1, gfx::max_hd_scale));
 
   std::filesystem::path pack;

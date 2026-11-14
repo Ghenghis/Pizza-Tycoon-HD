@@ -102,6 +102,8 @@ private:
   std::optional<std::string> export_assets_dir_;
   // Applies hd_scale and finds the HD pack folder. Before init().
   void configure_hd(const GameOptions& options) const;
+  // hd_scale 0 (Auto): from the primary screen's height in pixels.
+  [[nodiscard]] static int auto_hd_scale();
   // --export-assets: writes the PNGs and manifest, returns the exit code.
   int run_asset_export(const std::string& game_path) const;
   std::unique_ptr<BobManager> bob_manager_;
