@@ -189,9 +189,11 @@ TEST_CASE("the 1994 look and the divider between the looks", "[hd][gpu]") {
   }
   CHECK(left_diff == 0);
   CHECK(right_diff == 0);
-  // The letters show in the 1994 look too (HD text is not art).
-  CHECK(classic[static_cast<std::size_t>(22 * k) * w + 12 * k] ==
-        hd[static_cast<std::size_t>(22 * k) * w + 12 * k]);
+  // The letters show in the 1994 look too (HD text is not art): the
+  // letter covers texels x 10..29, y 20..29.
+  const std::size_t in_letter = static_cast<std::size_t>(25) * w + 15;
+  CHECK(classic[in_letter] == hd[in_letter]);
+  CHECK(classic[in_letter] == pack_rgba(200, 10, 10, 255));
 }
 
 TEST_CASE("GPU compositing matches the CPU result", "[hd][gpu]") {
