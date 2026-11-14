@@ -7,16 +7,20 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
+#include "core/save/CheckpointTimer.h"
 #include "core/save/SaveVersions.h"
 #include "core/util/Constants.h"
 
@@ -38,6 +42,13 @@ constexpr std::string_view autosave_prefix = "AUTOSAV";
 // The slot the game keeps a game in progress in before something replaces
 // it; see SaveGameManager::checkpoint.
 constexpr std::string_view checkpoint_filename = "CHECKPNT.plsave";
+
+// The slot timed checkpoints go to. Only TimedCheckpoints writes it, so a
+// worker never meets another writer there.
+constexpr std::string_view timed_checkpoint_filename = "AUTOCHK.plsave";
+
+// What a timed checkpoint waits for before it is a working version.
+constexpr std::string_view awaiting_load_check = "awaiting its load check";
 
 // What is about to replace the game in progress.
 enum class CheckpointReason { BeforeNewGame, BeforeLoad };
@@ -88,6 +99,45 @@ constexpr int HIGH_SCORE_MAX_ENTRIES = 8;
 struct StateFingerprint {
   std::string hash; // 16 hex digits
   json document;    // the state we hashed, everything but the save timestamp
+};
+
+// One save slot as the Recovery Center shows it.
+struct RecoverySlot {
+  std::string name;        // the slot's file name, as "MYGAME.plsave"
+  bool checkpoint = false; // a slot the game writes on its own
+  bool has_file = false;   // whether the slot's own file is there
+  std::optional<SlotManifest> versions; // nothing if it keeps none
+  std::string problem; // why a manifest that is there could not be read
+};
+
+// A timed checkpoint being written and checked off the game thread.
+class CheckpointJob {
+public:
+  CheckpointJob() = default;
+  ~CheckpointJob() = default; // the jthread joins
+  CheckpointJob(const CheckpointJob&) = delete;
+  CheckpointJob& operator=(const CheckpointJob&) = delete;
+
+  [[nodiscard]] bool done() const { return shared_->done.load(); }
+  void wait() {
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+  // Once done: whether the new version waits for its load check, and if
+  // not, why.
+  [[nodiscard]] bool written() const { return shared_->written; }
+  [[nodiscard]] const std::string& error() const { return shared_->error; }
+
+private:
+  friend class SaveGameManager;
+  struct Shared {
+    std::atomic<bool> done{false};
+    bool written = false; // set by the worker before done
+    std::string error;
+  };
+  std::shared_ptr<Shared> shared_ = std::make_shared<Shared>();
+  std::jthread thread_;
 };
 
 // Save and load take a file name in the saves folder; an absolute path is
@@ -161,6 +211,46 @@ public:
                               std::uint64_t sequence,
                               std::string* error = nullptr);
 
+  // Starts a timed checkpoint. The game is captured now, on this thread;
+  // writing the version and every check but the load check run on a worker.
+  // The load check builds a game, which only the game thread may do, so it
+  // waits for verify_pending_checkpoint. Returns no job, with result set to
+  // NoGame or Unchanged, when there is nothing to keep; result is Written
+  // when a job started (and Failed if the game could not be captured).
+  static std::unique_ptr<CheckpointJob>
+  start_timed_checkpoint(const GameState& state, const GameContext& context,
+                         TimedCheckpoint reason,
+                         CheckpointResult* result = nullptr,
+                         const std::filesystem::path& slot_file = {});
+
+  // On the game thread: load-checks the newest timed checkpoint still
+  // waiting, and makes it a working version if it passes. Written when it
+  // did, Unchanged when none was waiting, Failed otherwise.
+  static CheckpointResult
+  verify_pending_checkpoint(const GameState& like, const GameContext& context,
+                            const std::filesystem::path& slot_file = {});
+
+  // The Recovery Center's model: every slot in the folder (the saves folder
+  // if empty), with its versions and their levels, by name.
+  static std::vector<RecoverySlot>
+  recovery_slots(const std::filesystem::path& folder = {});
+
+  // Copies a working version into a new slot, after checking it again apart
+  // from the game. The slot it came from is not touched. Refuses a new name
+  // that is already a save or has versions.
+  static bool restore_as_branch(const GameState& state,
+                                const GameContext& context,
+                                const std::string& filename,
+                                std::uint64_t sequence,
+                                const std::string& new_filename,
+                                std::string* error = nullptr);
+
+  // Undoes the last restore_version of a slot: the version active before it
+  // becomes active again, after the same checks.
+  static bool undo_restore(const GameState& state, const GameContext& context,
+                           const std::string& filename,
+                           std::string* error = nullptr);
+
   // Deletes a save: its file and every version of it.
   static bool delete_save(const std::string& filename,
                           std::string* error = nullptr);
@@ -218,6 +308,27 @@ private:
                         const std::function<void()>& before_replacing);
 
   static std::string get_full_path(const std::string& filename);
+};
+
+// The game's timed checkpoints: give it every frame. It starts a checkpoint
+// every five minutes of play and when a game day or week begins, on a
+// worker, and load-checks the one waiting when a day or week begins, the
+// moment the day's start already stops for the autosave.
+class TimedCheckpoints {
+public:
+  explicit TimedCheckpoints(std::filesystem::path slot_file = {});
+
+  // playing: the game ran this frame, not paused or in a menu.
+  void frame(const GameState& state, const GameContext& context,
+             std::chrono::milliseconds time, bool playing);
+
+  // Waits for a checkpoint still being written, as the game closes.
+  void finish();
+
+private:
+  std::filesystem::path slot_file_;
+  CheckpointTimer timer_;
+  std::unique_ptr<CheckpointJob> job_;
 };
 
 } // namespace save

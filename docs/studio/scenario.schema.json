@@ -178,7 +178,7 @@
           "additionalProperties": false,
           "required": ["all_of"],
           "properties": {
-            "all_of": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "$ref": "#/$defs/objective" } }
+            "all_of": { "type": "array", "minItems": 0, "description": "Every objective at once. Empty for a sandbox preset, which has no goal to announce.", "maxItems": 4, "items": { "$ref": "#/$defs/objective" } }
           }
         },
         "optional": {

@@ -61,6 +61,8 @@ struct SlotManifest {
   std::uint64_t next_sequence = 1;
   // The working version the slot's file holds and loading starts from.
   std::optional<std::uint64_t> active;
+  // The version that was active before the last restore, for undoing it.
+  std::optional<std::uint64_t> previous_active;
   std::vector<SaveVersion> versions; // newest first
   // Versions dropped from the list whose files may still have to go.
   std::vector<std::uint64_t> retired;

@@ -98,29 +98,13 @@ MenuNewGame::MenuNewGame(GameContext& context, GameState& state)
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));
 
-  // Santa's Pizza Village, the Cozy Village preset: the roster, start and
-  // rules come from the scenario; the players are picked as usual, and the
-  // game starts from the character screen without the city map.
+  // Santa's Pizza Village: the North Pole destination, with its presets
+  // chosen on the next screen (MenuNorthPole).
   add_menu_item(std::make_unique<TextMenuItem>(
-      context, std::string(core::content::cozy_village.menu_label),
+      context, std::string(core::content::north_pole_menu_label),
       [this] {
         after_checkpoint(context_, state_, [this] {
-          Logger::debug("New game of {}", core::content::cozy_village.file);
-          state_.begin_initialization();
-          core::content::Findings findings;
-          if (!core::content::prepare_shipped_scenario(
-                  core::content::cozy_village.file, state_.initializer(),
-                  state_.options().rules, findings)) {
-            Logger::warn("Cannot start {}:\n{}",
-                         core::content::cozy_village.file,
-                         core::content::describe(findings));
-            context_.popup->origin(ViewPoint{26, 40});
-            context_.popup->create<AlertPopup>(
-                "Santa's Pizza Village is missing or damaged in the data "
-                "folder.");
-            return;
-          }
-          state_.ui().push<ScreenTag>(ScreenTag::Kind::CharacterSelection);
+          state_.ui().push<ScreenTag>(ScreenTag::Kind::MenuNorthPole);
         });
       },
       face, style, sel_style, item_align));

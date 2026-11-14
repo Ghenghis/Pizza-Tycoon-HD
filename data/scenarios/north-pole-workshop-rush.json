@@ -1,0 +1,108 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:north-pole-workshop-rush",
+  "revision": 1,
+  "preset_group": "pthd:north-pole",
+  "display": {
+    "title": "Workshop Rush",
+    "subtitle": "Santa's Pizza Village",
+    "summary": "Tighter service and stock goals for the workshop's busiest trading days.",
+    "intro": "The workshop crews are hungry and in a hurry. Rent a premises, keep the stock room full and the service fast.",
+    "goal_summary": "Run a perfect delivery week, serve in under 4 minutes and sell 1,000 pizzas in a day.",
+    "victory_summary": "Not a single order lost. The workshop runs on your pizza. Keep playing as long as you like.",
+    "difficulty_label": "demanding"
+  },
+  "roster": [
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": {
+        "revision": 2,
+        "definition_sha256": "d3d1f82ed8227a3a5bce70dab7e742c8725954c81d21dae415f54adb14020355"
+      }
+    }
+  ],
+  "start": {
+    "location_key": "pthd:santas-pizza-village",
+    "game_mode": "freemode",
+    "difficulty": 3
+  },
+  "rules": {
+    "win": {
+      "mode": "none"
+    },
+    "travel": {
+      "model": "disabled"
+    },
+    "game_rules": {
+      "demand_fulfillment_popularity": true,
+      "suppliers_remember_missed_payments": true
+    }
+  },
+  "objectives": {
+    "goal": {
+      "all_of": [
+        {
+          "objective_id": "perfect-week",
+          "milestone": "AbleToMeet100PctDeliveries",
+          "polarity": "achieve",
+          "label": "Lose no orders for a whole week",
+          "within_game_days": null,
+          "hint": "Keep stock up and enough staff on shift"
+        },
+        {
+          "objective_id": "fast-service",
+          "milestone": "AverageServiceTimeLessThan4Minutes",
+          "polarity": "achieve",
+          "label": "Serve in under 4 minutes on average",
+          "within_game_days": null
+        },
+        {
+          "objective_id": "thousand-pizzas",
+          "milestone": "Sold1KPizzasPerDay",
+          "polarity": "achieve",
+          "label": "Sell 1,000 pizzas in one day",
+          "within_game_days": null
+        }
+      ]
+    },
+    "optional": [
+      {
+        "objective_id": "busy-house",
+        "milestone": "Has1000CustomersPerDayInOneRestaurant",
+        "polarity": "achieve",
+        "label": "Serve 1,000 customers in one restaurant in a day",
+        "within_game_days": null
+      },
+      {
+        "objective_id": "no-trouble",
+        "milestone": "FinancialDifficultiesFirstTime",
+        "polarity": "avoid",
+        "label": "Never fall into financial difficulties",
+        "within_game_days": null
+      }
+    ],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  },
+  "presentation": {
+    "suggested_event_mode": "in-game-calendar",
+    "decoration_events": [
+      "pthd-events:north-pole-christmas"
+    ],
+    "default_costumes": [
+      {
+        "role": "staff:waiter",
+        "costume_id": "holiday:winter-server-costume"
+      },
+      {
+        "role": "staff:chef",
+        "costume_id": "holiday:winter-chef-costume"
+      }
+    ],
+    "host_character": "holiday:santa"
+  }
+}

@@ -430,7 +430,7 @@ private:
       const std::string gp = at(p, "goal");
       shape_.object(*goal, gp, {}, {"all_of"});
       if (const json* all = JsonShape::member(*goal, "all_of")) {
-        objective_list(*all, at(gp, "all_of"), 1, 4, out.goal);
+        objective_list(*all, at(gp, "all_of"), 0, 4, out.goal);
       }
     }
     if (const json* optional = JsonShape::member(v, "optional")) {
@@ -505,6 +505,13 @@ void scenario_rules(const Scenario& s, Findings& out) {
                           .severity = Severity::Error,
                           .pointer = "/start/location_key",
                           .message = "the start is not in the roster"});
+  }
+  if (s.goal.empty() && s.after_goal != AfterGoal::ContinueSandbox) {
+    out.push_back(Finding{.rule = "SCN-3",
+                          .severity = Severity::Error,
+                          .pointer = "/objectives/after_goal",
+                          .message = "a preset without a goal is a sandbox: "
+                                     "it can only continue"});
   }
   if (s.after_goal == AfterGoal::ContinueSandbox &&
       s.win_mode != WinMode::None) {

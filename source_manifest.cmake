@@ -106,6 +106,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/restaurant/RestaurantStats.cpp
     src/core/restaurant/StaffEventDialogs.cpp
     src/core/restaurant/StaffEvents.cpp
+    src/core/save/CheckpointTimer.cpp
     src/core/save/SaveGameCharacter.cpp
     src/core/save/SaveGameCity.cpp
     src/core/save/SaveGameFood.cpp
@@ -189,6 +190,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/screens/menus/MenuMain.cpp
     src/views/screens/menus/MenuMissionSelect.cpp
     src/views/screens/menus/MenuNewGame.cpp
+    src/views/screens/menus/MenuNorthPole.cpp
     src/views/screens/menus/MenuOptions.cpp
     src/views/screens/menus/MenuQuickstart.cpp
     src/views/screens/menus/MenuRecipeExport.cpp
@@ -527,6 +529,7 @@ set(PLEGACY_HEADERS
     src/core/restaurant/StaffEventData.h
     src/core/restaurant/StaffEventDialogs.h
     src/core/restaurant/StaffEvents.h
+    src/core/save/CheckpointTimer.h
     src/core/save/SaveGameCharacter.h
     src/core/save/SaveGameCity.h
     src/core/save/SaveGameDate.h
@@ -783,6 +786,7 @@ set(PLEGACY_HEADERS
     src/views/screens/menus/MenuMain.h
     src/views/screens/menus/MenuMissionSelect.h
     src/views/screens/menus/MenuNewGame.h
+    src/views/screens/menus/MenuNorthPole.h
     src/views/screens/menus/MenuOptions.h
     src/views/screens/menus/MenuQuickstart.h
     src/views/screens/menus/MenuRecipeExport.h

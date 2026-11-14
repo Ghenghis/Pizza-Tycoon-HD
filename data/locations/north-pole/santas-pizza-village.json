@@ -2,7 +2,7 @@
   "format": "pthd.location",
   "schema_version": "1.0.0",
   "location_key": "pthd:santas-pizza-village",
-  "revision": 1,
+  "revision": 2,
   "display": {
     "name": "Santa's Pizza Village",
     "short_name": "North Pole",
@@ -99,17 +99,17 @@
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b6060606060263660606060e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060600960606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060606060606060606060606060606060",
-    "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060606060606060606060606060606060",
+    "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4aa2636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4a8e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660606060606060606060606060606060606060606060606060606060606060606060606060606060e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e46060606060606060606060606060606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660606060606060606060606060606060606060606060606060606060606060606060606060606060e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e46060606060606060606060606060606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
-    "60606060606060606060606060606060606060602636606060606060606060606060606060606060aa60606060606060606060606060606060606060ba60e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e46060606060ca6060606060606060606060606060606060da6060606060606060606060606060606060606026366060606060606060606060606060606060606060",
+    "60606060606060606060606060606060606060602636606060606060606060606060606060606060aa60606060606060606060606060606060606060ba60e4e4e4e4e4e4e4e4e4e4e4e4eae4e4e42636e4e4e4e4fae4e4e4e4e4e4e4e4e4e46060606060ca6060606060606060606060606060606060da6060606060606060606060606060606060606026366060606060606060606060606060606060606060",
     "06060606060606060606060606060606060606064666060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060646660606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060646660606060606060606060606060606060606060606",
     "16161616161616161616161616161616161616165676161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161656761616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161656761616161616161616161616161616161616161616",
-    "60606060606060606060606060606060606060602636606060606060606060606060606060606060606060606060ea606060606060606060606060606060e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e460606060606060606060606060fa606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
+    "60606060606060606060606060606060606060602636606060606060606060606060606060606060606060606060ea606060606060606060606060606060e4e4e4e4e4e4e4e4e4e48ae4e4e4e4e42636e4e4e4e4e4e49ae4e4e4e4e4e4e4e460606060606060606060606060fa606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660606060606060606060606060606060606060606060606060606060606060606060606060606060e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e46060606060606060606060606060606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
-    "6060606060606060606060606060606060606060263660606060606060606060606060606060606060606060606060606060606060606060606060606060e4e4e4e4e4e4e8e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4d8e4e4e4e4e4e46060606060606060606060606060606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
+    "6060606060606060606060606060606060606060263660606060606060606060606060606060606060606060606060606060606060606060606060606060e4e4e4e4e4e4e8e4e4e4e4e4e4e4e4e42636bae4e4e4e4e4e4e4d8e4e4e4e4e4e46060606060606060606060606060606060606060606060606060606060606060606060606060606060606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e48b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b60606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e48b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b60606026366060606060606060606060606060606060606060",
     "6060606060606060606060606060606060606060263660608b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8be4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e42636e4e4e4e4e4e4e4e4e4e4e4e4e4e4e48b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b60606026366060606060606060606060606060606060606060",
@@ -170,10 +170,10 @@
   ],
   "districts": [
     {
-      "id": "d-candy-cane-lane",
-      "name": "Candy Cane Lane",
+      "id": "d-candy-cane-market",
+      "name": "Candy Cane Market",
       "number": 1,
-      "type": "residential",
+      "type": "shopping",
       "traffic_intensity": 30,
       "crime_stats": 12,
       "control_screen_alternate_color": false,
@@ -198,8 +198,8 @@
       ]
     },
     {
-      "id": "d-workshop-row",
-      "name": "Workshop Row",
+      "id": "d-toy-workshop-quarter",
+      "name": "Toy Workshop Quarter",
       "number": 2,
       "type": "industrial",
       "traffic_intensity": 45,
@@ -226,10 +226,10 @@
       ]
     },
     {
-      "id": "d-market-square",
-      "name": "Market Square",
+      "id": "d-village-square",
+      "name": "Village Square",
       "number": 3,
-      "type": "shopping",
+      "type": "business",
       "traffic_intensity": 50,
       "crime_stats": 15,
       "control_screen_alternate_color": false,
@@ -254,8 +254,8 @@
       ]
     },
     {
-      "id": "d-reindeer-meadows",
-      "name": "Reindeer Meadows",
+      "id": "d-reindeer-ridge",
+      "name": "Reindeer Ridge",
       "number": 4,
       "type": "leisure",
       "traffic_intensity": 25,
@@ -282,8 +282,8 @@
       ]
     },
     {
-      "id": "d-snowflake-heights",
-      "name": "Snowflake Heights",
+      "id": "d-frostys-snow-gardens",
+      "name": "Frosty's Snow Gardens",
       "number": 5,
       "type": "residential",
       "traffic_intensity": 30,
@@ -310,8 +310,8 @@
       ]
     },
     {
-      "id": "d-frost-fields",
-      "name": "Frost Fields",
+      "id": "d-aurora-harbor",
+      "name": "Aurora Harbor",
       "number": 6,
       "type": "traffic",
       "traffic_intensity": 40,
@@ -1193,13 +1193,13 @@
       "purchase_price_cents": 35100000
     },
     {
-      "id": "p-depot-north",
-      "kind": "depot",
+      "id": "p-shop-39",
+      "kind": "business_premise",
       "tile": {
-        "x": 80,
-        "y": 70
+        "x": 74,
+        "y": 57
       },
-      "street_side": "w",
+      "street_side": "s",
       "interior": {
         "w": 13,
         "h": 14
@@ -1211,8 +1211,140 @@
       "entrance_offset": 3,
       "kitchen_entry_offset": 0,
       "realtor": "a-realtor-chimney",
+      "initial_status": "not_available",
+      "purchase_price_cents": 27300000
+    },
+    {
+      "id": "p-shop-40",
+      "kind": "business_premise",
+      "tile": {
+        "x": 84,
+        "y": 57
+      },
+      "street_side": "s",
+      "interior": {
+        "w": 18,
+        "h": 17
+      },
+      "kitchen": {
+        "w": 17,
+        "h": 15
+      },
+      "entrance_offset": 2,
+      "kitchen_entry_offset": 6,
+      "realtor": "a-realtor-hearthstone",
       "initial_status": "for_sale_rent",
-      "purchase_price_cents": 118300000
+      "purchase_price_cents": 45900000
+    },
+    {
+      "id": "p-shop-41",
+      "kind": "business_premise",
+      "tile": {
+        "x": 72,
+        "y": 60
+      },
+      "street_side": "n",
+      "interior": {
+        "w": 16,
+        "h": 13
+      },
+      "kitchen": {
+        "w": 16,
+        "h": 16
+      },
+      "entrance_offset": 1,
+      "kitchen_entry_offset": 0,
+      "realtor": "a-realtor-icicle",
+      "initial_status": "for_rent",
+      "purchase_price_cents": 31200000
+    },
+    {
+      "id": "p-shop-42",
+      "kind": "business_premise",
+      "tile": {
+        "x": 86,
+        "y": 60
+      },
+      "street_side": "n",
+      "interior": {
+        "w": 14,
+        "h": 16
+      },
+      "kitchen": {
+        "w": 15,
+        "h": 13
+      },
+      "entrance_offset": 12,
+      "kitchen_entry_offset": 2,
+      "realtor": "a-realtor-chimney",
+      "initial_status": "for_sale_rent",
+      "purchase_price_cents": 33600000
+    },
+    {
+      "id": "p-shop-43",
+      "kind": "business_premise",
+      "tile": {
+        "x": 77,
+        "y": 52
+      },
+      "street_side": "e",
+      "interior": {
+        "w": 12,
+        "h": 12
+      },
+      "kitchen": {
+        "w": 12,
+        "h": 10
+      },
+      "entrance_offset": 5,
+      "kitchen_entry_offset": 2,
+      "realtor": "a-realtor-hearthstone",
+      "initial_status": "for_rent",
+      "purchase_price_cents": 21600000
+    },
+    {
+      "id": "p-shop-44",
+      "kind": "business_premise",
+      "tile": {
+        "x": 80,
+        "y": 62
+      },
+      "street_side": "w",
+      "interior": {
+        "w": 17,
+        "h": 15
+      },
+      "kitchen": {
+        "w": 17,
+        "h": 14
+      },
+      "entrance_offset": 2,
+      "kitchen_entry_offset": 7,
+      "realtor": "a-realtor-icicle",
+      "initial_status": "not_available",
+      "purchase_price_cents": 38250000
+    },
+    {
+      "id": "p-depot-north",
+      "kind": "depot",
+      "tile": {
+        "x": 80,
+        "y": 70
+      },
+      "street_side": "w",
+      "interior": {
+        "w": 15,
+        "h": 18
+      },
+      "kitchen": {
+        "w": 16,
+        "h": 15
+      },
+      "entrance_offset": 10,
+      "kitchen_entry_offset": 4,
+      "realtor": "a-realtor-chimney",
+      "initial_status": "for_sale_rent",
+      "purchase_price_cents": 175500000
     }
   ],
   "actors": {
@@ -1751,6 +1883,6 @@
   },
   "integrity": {
     "canonicalization": "jcs-rfc8785",
-    "definition_sha256": "f51912af439058ba587bf4e0b0050ace8669bcde9ed71d0f61210d6633424fa4"
+    "definition_sha256": "d3d1f82ed8227a3a5bce70dab7e742c8725954c81d21dae415f54adb14020355"
   }
 }

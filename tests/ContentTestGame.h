@@ -62,12 +62,18 @@ inline std::shared_ptr<const core::content::LocationDefinition> load_village() {
   return report.definition;
 }
 
-inline std::shared_ptr<const core::content::Scenario> load_cozy_village() {
+// One of the shipped presets, data/scenarios/<file>.json.
+inline std::shared_ptr<const core::content::Scenario>
+load_preset(std::string_view file) {
   const auto read = core::content::read_scenario_file(
-      data_dir() / "scenarios" / "north-pole-cozy-village.json");
-  INFO(core::content::describe(read.findings));
+      data_dir() / "scenarios" / (std::string(file) + ".json"));
+  INFO(file << "\n" << core::content::describe(read.findings));
   REQUIRE(read.ok());
   return read.scenario;
+}
+
+inline std::shared_ptr<const core::content::Scenario> load_cozy_village() {
+  return load_preset("north-pole-cozy-village");
 }
 
 // A game run without views. The quick start loads standard pizzas, which

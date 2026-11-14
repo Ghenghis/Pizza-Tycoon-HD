@@ -35,13 +35,31 @@ struct ShippedScenario {
   std::string_view menu_label;
 };
 
+// The North Pole destination and its presets (NORTH-POLE-FLAGSHIP.md): all
+// four play the same pinned location; they differ in start, goals and rules,
+// and leave the game's five difficulty levels as they are.
+inline constexpr std::string_view north_pole_menu_label =
+    "Santa's Pizza Village";
+
 inline constexpr ShippedScenario cozy_village{
     .file = "north-pole-cozy-village",
-    .menu_label = "Santa's Pizza Village",
+    .menu_label = "Cozy Village",
+};
+inline constexpr ShippedScenario workshop_rush{
+    .file = "north-pole-workshop-rush",
+    .menu_label = "Workshop Rush",
+};
+inline constexpr ShippedScenario pizza_empire{
+    .file = "north-pole-pizza-empire",
+    .menu_label = "Santa's Pizza Empire",
+};
+inline constexpr ShippedScenario village_sandbox{
+    .file = "north-pole-sandbox",
+    .menu_label = "Sandbox",
 };
 
-inline constexpr std::array<ShippedScenario, 1> shipped_scenarios = {
-    cozy_village};
+inline constexpr std::array<ShippedScenario, 4> north_pole_presets = {
+    cozy_village, workshop_rush, pizza_empire, village_sandbox};
 
 // data/ as the game finds it (platform_paths::data_dir()).
 [[nodiscard]] std::filesystem::path shipped_data_dir();

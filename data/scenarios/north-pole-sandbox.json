@@ -1,0 +1,67 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:north-pole-sandbox",
+  "revision": 1,
+  "preset_group": "pthd:north-pole",
+  "display": {
+    "title": "Village Sandbox",
+    "subtitle": "Santa's Pizza Village",
+    "summary": "Free play in the village: no goals, no clock, no ending.",
+    "intro": "The whole village is yours to try things out. Rent a premises, build your pizzeria and play as long as you like.",
+    "goal_summary": "No goals: play however you like.",
+    "victory_summary": "There is nothing to win here. Keep playing as long as you like.",
+    "difficulty_label": "forgiving"
+  },
+  "roster": [
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": {
+        "revision": 2,
+        "definition_sha256": "d3d1f82ed8227a3a5bce70dab7e742c8725954c81d21dae415f54adb14020355"
+      }
+    }
+  ],
+  "start": {
+    "location_key": "pthd:santas-pizza-village",
+    "game_mode": "freemode",
+    "difficulty": 2
+  },
+  "rules": {
+    "win": {
+      "mode": "none"
+    },
+    "travel": {
+      "model": "disabled"
+    },
+    "game_rules": {}
+  },
+  "objectives": {
+    "goal": {
+      "all_of": []
+    },
+    "optional": [],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  },
+  "presentation": {
+    "suggested_event_mode": "in-game-calendar",
+    "decoration_events": [
+      "pthd-events:north-pole-christmas"
+    ],
+    "default_costumes": [
+      {
+        "role": "staff:waiter",
+        "costume_id": "holiday:winter-server-costume"
+      },
+      {
+        "role": "staff:chef",
+        "costume_id": "holiday:winter-chef-costume"
+      }
+    ],
+    "host_character": "holiday:santa"
+  }
+}

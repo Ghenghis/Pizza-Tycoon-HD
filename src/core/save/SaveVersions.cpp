@@ -329,6 +329,9 @@ json manifest_to_json(const SlotManifest& manifest,
       {"slot", slot_name},
       {"next_sequence", manifest.next_sequence},
       {"active", manifest.active ? json(*manifest.active) : json(nullptr)},
+      {"previous_active", manifest.previous_active
+                              ? json(*manifest.previous_active)
+                              : json(nullptr)},
       {"versions", std::move(versions)},
       {"retired", manifest.retired},
   };
@@ -387,6 +390,17 @@ SlotManifest manifest_from_json(const json& j) {
               " is not a working version");
     }
     manifest.active = sequence;
+  }
+
+  // Optional: manifests from before undo had none. One that no longer
+  // names a working version has nothing left to undo to.
+  if (const auto it = j.find("previous_active");
+      it != j.end() && !it->is_null()) {
+    const std::uint64_t sequence = unsigned_value(*it, "previous_active");
+    const SaveVersion* v = manifest.find(sequence);
+    if (v != nullptr && v->status == VersionStatus::Working) {
+      manifest.previous_active = sequence;
+    }
   }
 
   const json& retired = member(j, "retired", "the manifest");

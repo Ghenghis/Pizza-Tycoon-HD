@@ -779,6 +779,16 @@ available, no date lock. Fixtures: `tests/fixtures/locations/scenarios/`.
 | Workshop Rush (tighter service and stock) | free mode | 3 NORMAL | AbleToMeet100PctDeliveries; AverageServiceTimeLessThan4Minutes; Sold1KPizzasPerDay | Has1000CustomersPerDayInOneRestaurant; avoid FinancialDifficultiesFirstTime |
 | Pizza Empire (longer expansion) | free mode | 3 NORMAL | HasFiveRestaurants; Achieved20PctMarketShareInCity; YouHaveAssetsOf500K | RepresentedInAllAreas; FirstThreeStarRestaurant |
 
+| Sandbox (no goals) | free mode | 2 EASY | none: an empty goal never announces and can only continue (SCN-3) | none |
+
+Shipped in `data/scenarios/` (`north-pole-*.json`), all pinned to revision 2 of
+`data/locations/north-pole/santas-pizza-village.json`, whose six districts follow
+NORTH-POLE-FLAGSHIP.md: Village Square (business, centre), Candy Cane Market (shopping),
+Toy Workshop Quarter (industrial), Reindeer Ridge (leisure), Frosty's Snow Gardens
+(residential, with the depot) and Aurora Harbor (the outskirts and the frozen harbour), each with
+premises on the one road network. Christmas decoration is a suggestion of the presentation block,
+switchable and never date-locked (`availability.calendar_lock` is `false`).
+
 Difficulty acts through the existing levels (`NewGameConfig.h:27-33`), for example supplier price
 factors 0.6..1.9 (`docs/blueprint/content-data.md` 3.2). The village definition must allow these
 goals: at least 16 business premises (PROP-5) with five affordable at Pizza Empire difficulty, and

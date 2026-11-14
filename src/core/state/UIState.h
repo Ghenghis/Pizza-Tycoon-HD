@@ -56,6 +56,9 @@ struct ScreenTag {
     Advertising,
     StaffView,
     Newspaper,
+
+    // Added later, so the values above stay put.
+    MenuNorthPole,
   };
 
   Kind kind;

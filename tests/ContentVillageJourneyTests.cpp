@@ -410,3 +410,41 @@ TEST_CASE("Santa's Pizza Village journey: a scripted run starts the village",
   content_test::play_days(state, 2);
   CHECK(state.player(core::PlayerId{0})->status() == PlayerStatus::Active);
 }
+
+TEST_CASE("Every North Pole preset starts, plays a day and reloads",
+          "[content][journey][game][village][save]") {
+  CONTENT_REQUIRE_GAME_DATA();
+  const auto village = content_test::load_village();
+  for (const auto& preset : core::content::north_pole_presets) {
+    INFO(preset.file);
+    content_test::TestGame game;
+    const auto scenario = content_test::load_preset(preset.file);
+    content_test::start_village_game(game, 0x4E50, scenario, village);
+    auto& state = game.state;
+    REQUIRE(state.scenario() == scenario.get());
+    // Quick start brings a pizzeria; the free-mode presets start empty.
+    CHECK(state.restaurants_for(core::PlayerId{0}).size() ==
+          (scenario->start == core::content::ScenarioStart::QuickStart ? 1u
+                                                                       : 0u));
+    content_test::close_dialogs(state);
+    content_test::play_day(state);
+    CHECK(state.player(core::PlayerId{0})->status() == PlayerStatus::Active);
+
+    test_support::TempDir dir;
+    const fs::path file = dir.path() / "preset.plsave";
+    std::string error;
+    REQUIRE(SaveGameManager::save(state, game.context, file.string(), &error));
+    REQUIRE(SaveGameManager::get_save_version(file.string()) ==
+            core::content::expanded_save_version);
+    const std::string saved = fingerprint(game);
+
+    content_test::TestGame fresh;
+    engine::random::seed(0xBEEF);
+    REQUIRE(SaveGameManager::load(fresh.state, fresh.context, file.string(),
+                                  &error));
+    CHECK(fingerprint(fresh) == saved);
+    REQUIRE(fresh.state.scenario() != nullptr);
+    CHECK(fresh.state.scenario()->id == scenario->id);
+    CHECK(fresh.state.roster() == state.roster());
+  }
+}

@@ -787,3 +787,339 @@ TEST_CASE("Checkpoints keep the game before a load replaces it",
   CHECK(manifest->newest_working()->made_for ==
         "checkpoint before loading a save");
 }
+
+// Timed checkpoints and the Recovery Center
+
+namespace {
+
+GameTime at_day(int day) {
+  GameTime time;
+  time.time_blocks(day * GameTime::BLOCKS_PER_DAY + 9 * 6);
+  return time;
+}
+
+std::unique_ptr<save::CheckpointJob>
+start_timed(LiveGame& game, const fs::path& slot,
+            save::CheckpointResult* result = nullptr) {
+  return SaveGameManager::start_timed_checkpoint(
+      game.state, game.context, save::TimedCheckpoint::Interval, result, slot);
+}
+
+} // namespace
+
+TEST_CASE("Timed checkpoints come every five minutes of play and each new "
+          "day and week",
+          "[save][versions][checkpoint]") {
+  save::CheckpointTimer timer;
+  timer.observe(at_day(0));
+  CHECK_FALSE(timer.due());
+
+  SECTION("five minutes of play") {
+    timer.played(std::chrono::minutes(4) + std::chrono::seconds(59));
+    CHECK_FALSE(timer.due());
+    timer.played(std::chrono::milliseconds(-5000)); // never runs backwards
+    timer.played(std::chrono::seconds(1));
+    CHECK(timer.due() == save::TimedCheckpoint::Interval);
+    timer.taken();
+    CHECK_FALSE(timer.due());
+  }
+  SECTION("a new day") {
+    timer.observe(at_day(0));
+    CHECK_FALSE(timer.due());
+    timer.observe(at_day(1));
+    CHECK(timer.boundary_pending());
+    timer.played(std::chrono::minutes(10));
+    CHECK(timer.due() == save::TimedCheckpoint::NewDay);
+    timer.taken();
+    CHECK_FALSE(timer.due());
+  }
+  SECTION("a new week") {
+    int end_of_week = 0;
+    while (!at_day(end_of_week).current_date().is_end_of_week()) {
+      ++end_of_week;
+    }
+    timer.observe(at_day(end_of_week));
+    timer.taken();
+    timer.observe(at_day(end_of_week + 1));
+    CHECK(timer.due() == save::TimedCheckpoint::NewWeek);
+  }
+}
+
+TEST_CASE("A timed checkpoint is written and checked off the game thread",
+          "[save][versions][checkpoint]") {
+  TempDir dir;
+  LiveGame game;
+  const PreparedSlot slot = prepare_slot(dir, game);
+  const SaveSlot versions(slot.file);
+
+  // The same game as the working version: nothing to keep.
+  save::CheckpointResult result = save::CheckpointResult::Failed;
+  CHECK_FALSE(start_timed(game, slot.file, &result));
+  CHECK(result == save::CheckpointResult::Unchanged);
+
+  move_on(game.state);
+  const std::string later = hash_of(game.state, game.context);
+
+  SECTION("it waits for its load check, costing nothing") {
+    auto job = start_timed(game, slot.file, &result);
+    REQUIRE(job);
+    CHECK(result == save::CheckpointResult::Written);
+    job->wait();
+    CHECK(job->done());
+    CHECK(job->written());
+    CHECK(job->error().empty());
+    const auto manifest = SaveGameManager::versions(slot.file.string());
+    REQUIRE(manifest);
+    const SaveVersion* pending = manifest->find(2);
+    REQUIRE(pending != nullptr);
+    CHECK(pending->status == VersionStatus::Candidate);
+    CHECK(pending->level == VersionLevel::IntegrityChecked);
+    CHECK(pending->reason == save::awaiting_load_check);
+    CHECK(pending->fingerprint == later);
+    CHECK(pending->made_for == "checkpoint after five minutes");
+    // Waiting, it counts as the newest checkpoint.
+    CHECK_FALSE(start_timed(game, slot.file, &result));
+    CHECK(result == save::CheckpointResult::Unchanged);
+  }
+  SECTION("the disk fills up on the worker") {
+    ScopedAtomicFault fault(version_files(),
+                            {.kind = AtomicFault::Kind::DiskFull, .bytes = 64});
+    auto job = start_timed(game, slot.file);
+    REQUIRE(job);
+    job->wait();
+    CHECK_FALSE(job->written());
+    CHECK_FALSE(job->error().empty());
+  }
+  SECTION("the game is killed while the worker writes") {
+    ScopedAtomicFault fault(version_files(),
+                            {.kind = AtomicFault::Kind::Interrupted});
+    auto job = start_timed(game, slot.file);
+    REQUIRE(job);
+    job->wait();
+    CHECK_FALSE(job->written());
+    for (const auto& name : names_in(versions.folder())) {
+      if (util::is_temp_file_name(name)) {
+        fs::remove(versions.folder() / name);
+      }
+    }
+  }
+  require_untouched(slot);
+
+  // There is no game in the menus' placeholder state.
+  GameState empty;
+  CHECK_FALSE(SaveGameManager::start_timed_checkpoint(
+      empty, game.context, save::TimedCheckpoint::NewDay, &result, slot.file));
+  CHECK(result == save::CheckpointResult::NoGame);
+}
+
+TEST_CASE("The Recovery Center lists every slot with its versions",
+          "[save][versions][recovery]") {
+  TempDir dir;
+  LiveGame game;
+  const PreparedSlot slot = prepare_slot(dir, game);
+  REQUIRE(SaveGameManager::save(game.state, game.context,
+                                (dir.path() / "plain.plsave").string()));
+  const SaveSlot lost(dir.path() / "CHECKPNT.plsave");
+  fs::create_directories(lost.folder());
+  write_file(lost.manifest_path(), "{ damaged");
+
+  const auto slots = SaveGameManager::recovery_slots(dir.path());
+  REQUIRE(slots.size() == 3);
+  CHECK(slots[0].name == "CHECKPNT.plsave");
+  CHECK(slots[0].checkpoint);
+  CHECK_FALSE(slots[0].has_file);
+  CHECK_FALSE(slots[0].versions);
+  CHECK_FALSE(slots[0].problem.empty());
+
+  CHECK(slots[1].name == "game.plsave");
+  CHECK_FALSE(slots[1].checkpoint);
+  CHECK(slots[1].has_file);
+  REQUIRE(slots[1].versions);
+  REQUIRE(slots[1].versions->versions.size() == 1);
+  CHECK(slots[1].versions->versions[0].level == VersionLevel::LoadVerified);
+
+  CHECK(slots[2].name == "plain.plsave");
+  CHECK(slots[2].has_file);
+  CHECK_FALSE(slots[2].versions);
+  CHECK(slots[2].problem.empty());
+}
+
+TEST_CASE("A branch or an undo that can't be made changes nothing",
+          "[save][versions][recovery]") {
+  TempDir dir;
+  LiveGame game;
+  const PreparedSlot slot = prepare_slot(dir, game);
+  const fs::path branch = dir.path() / "branch.plsave";
+  std::string error;
+
+  SECTION("a name that is taken") {
+    write_file(branch, "someone's save");
+    CHECK_FALSE(SaveGameManager::restore_as_branch(game.state, game.context,
+                                                   slot.file.string(), 1,
+                                                   branch.string(), &error));
+    CHECK(error == "There is already a save of that name.");
+    CHECK(read_file(branch) == "someone's save");
+  }
+  SECTION("a damaged version") {
+    const SaveSlot versions(slot.file);
+    std::string bytes = slot.bytes;
+    bytes[bytes.size() / 2] ^= 0x01;
+    write_file(versions.version_path(1), bytes);
+    CHECK_FALSE(SaveGameManager::restore_as_branch(game.state, game.context,
+                                                   slot.file.string(), 1,
+                                                   branch.string(), &error));
+    CHECK_FALSE(fs::exists(branch));
+    CHECK_FALSE(fs::exists(SaveSlot(branch).folder()));
+    write_file(versions.version_path(1), slot.bytes);
+  }
+  SECTION("a version that is not there") {
+    CHECK_FALSE(SaveGameManager::restore_as_branch(game.state, game.context,
+                                                   slot.file.string(), 9,
+                                                   branch.string(), &error));
+    CHECK_FALSE(fs::exists(branch));
+  }
+  SECTION("an undo with no restore") {
+    CHECK_FALSE(SaveGameManager::undo_restore(game.state, game.context,
+                                              slot.file.string(), &error));
+    CHECK(error == "There is no restore of this save to undo.");
+  }
+  require_untouched(slot);
+}
+
+TEST_CASE("A waiting timed checkpoint becomes working once load-checked",
+          "[save][versions][game][checkpoint]") {
+  REQUIRE_GAME_DATA();
+  TempDir dir;
+  GameContext context;
+  GameState state;
+  start_free_game(state, context);
+  const fs::path slot = dir.path() / "AUTOCHK.plsave";
+
+  CHECK(SaveGameManager::verify_pending_checkpoint(state, context, slot) ==
+        save::CheckpointResult::Unchanged);
+  auto job = SaveGameManager::start_timed_checkpoint(
+      state, context, save::TimedCheckpoint::NewDay, nullptr, slot);
+  REQUIRE(job);
+  job->wait();
+  REQUIRE(job->written());
+  const std::string kept = hash_of(state, context);
+
+  CHECK(SaveGameManager::verify_pending_checkpoint(state, context, slot) ==
+        save::CheckpointResult::Written);
+  const auto manifest = SaveGameManager::versions(slot.string());
+  REQUIRE(manifest);
+  CHECK(manifest->active == std::optional<std::uint64_t>{1});
+  CHECK(manifest->find(1)->level == VersionLevel::LoadVerified);
+  CHECK(manifest->find(1)->made_for == "checkpoint at a new day");
+  CHECK(load_hash(slot, context) == kept);
+}
+
+TEST_CASE("TimedCheckpoints keeps the game as it is played",
+          "[save][versions][game][checkpoint]") {
+  REQUIRE_GAME_DATA();
+  TempDir dir;
+  GameContext context;
+  GameState state;
+  start_free_game(state, context);
+  const fs::path slot = dir.path() / "AUTOCHK.plsave";
+  save::TimedCheckpoints checkpoints(slot);
+
+  checkpoints.frame(state, context, std::chrono::minutes(5), true);
+  checkpoints.finish();
+  const std::string first = hash_of(state, context);
+
+  // The next day: the waiting one is load-checked, a new one starts.
+  GameTime next = state.time();
+  next.time_blocks(next.time_blocks() + GameTime::BLOCKS_PER_DAY);
+  state.set_time(next);
+  checkpoints.frame(state, context, std::chrono::milliseconds(16), true);
+  checkpoints.finish();
+
+  const auto manifest = SaveGameManager::versions(slot.string());
+  REQUIRE(manifest);
+  REQUIRE(manifest->find(1) != nullptr);
+  CHECK(manifest->find(1)->status == VersionStatus::Working);
+  CHECK(manifest->find(1)->fingerprint == first);
+  REQUIRE(manifest->find(2) != nullptr);
+  CHECK(manifest->find(2)->reason == save::awaiting_load_check);
+}
+
+TEST_CASE("Restore as a branch, and undo a restore",
+          "[save][versions][game][recovery]") {
+  REQUIRE_GAME_DATA();
+  TempDir dir;
+  GameContext context;
+  GameState state;
+  start_free_game(state, context);
+  const fs::path file = dir.path() / "game.plsave";
+  REQUIRE(SaveGameManager::save_to_slot(state, context, file.string()));
+  const std::string first = hash_of(state, context);
+  move_on(state);
+  REQUIRE(SaveGameManager::save_to_slot(state, context, file.string()));
+  const std::string second = hash_of(state, context);
+  const std::string manifest_before = read_file(SaveSlot(file).manifest_path());
+
+  const fs::path branch = dir.path() / "branch.plsave";
+  REQUIRE(SaveGameManager::restore_as_branch(state, context, file.string(), 1,
+                                             branch.string()));
+  CHECK(load_hash(branch, context) == first);
+  const auto branched = SaveGameManager::versions(branch.string());
+  REQUIRE(branched);
+  CHECK(sequences(*branched) == std::vector<std::uint64_t>{1});
+  CHECK(branched->find(1)->made_for ==
+        "branch of version 1 of " + file.string());
+  // The slot it came from is as it was.
+  CHECK(read_file(SaveSlot(file).manifest_path()) == manifest_before);
+  CHECK(load_hash(file, context) == second);
+
+  REQUIRE(SaveGameManager::restore_version(state, context, file.string(), 1));
+  CHECK(load_hash(file, context) == first);
+  REQUIRE(SaveGameManager::undo_restore(state, context, file.string()));
+  CHECK(load_hash(file, context) == second);
+  // And the undo can be undone.
+  REQUIRE(SaveGameManager::undo_restore(state, context, file.string()));
+  CHECK(load_hash(file, context) == first);
+}
+
+// What a checkpoint costs on the game thread, for the frame budget. Hidden:
+//   PLEGACY_TEST_GAME_PATH=... test_plegacy "[bench][checkpoint]"
+TEST_CASE("Checkpoint costs", "[.][bench][checkpoint]") {
+  REQUIRE_GAME_DATA();
+  TempDir dir;
+  GameContext context;
+  GameState state;
+  start_free_game(state, context);
+  using clock = std::chrono::steady_clock;
+  const auto ms = [](clock::duration d) {
+    return std::chrono::duration<double, std::milli>(d).count();
+  };
+  constexpr int rounds = 5;
+  double capture = 0;
+  double plain = 0;
+  double slot = 0;
+  double load = 0;
+  for (int i = 0; i < rounds; ++i) {
+    move_on(state);
+    auto t = clock::now();
+    static_cast<void>(SaveGameManager::fingerprint(state, context));
+    capture += ms(clock::now() - t);
+    t = clock::now();
+    REQUIRE(SaveGameManager::save(state, context,
+                                  (dir.path() / "plain.plsave").string()));
+    plain += ms(clock::now() - t);
+    t = clock::now();
+    REQUIRE(SaveGameManager::save_to_slot(
+        state, context, (dir.path() / "slot.plsave").string()));
+    slot += ms(clock::now() - t);
+    GameState loaded;
+    t = clock::now();
+    REQUIRE(SaveGameManager::load(loaded, context,
+                                  (dir.path() / "plain.plsave").string()));
+    load += ms(clock::now() - t);
+  }
+  WARN("per checkpoint, ms: capture (state to JSON and fingerprint) "
+       << capture / rounds << "; plain save " << plain / rounds
+       << "; verified slot save " << slot / rounds
+       << "; so the load check about " << (slot - plain) / rounds
+       << "; a load (two builds) " << load / rounds << "; frame budget 16");
+}

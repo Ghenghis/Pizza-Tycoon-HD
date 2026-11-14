@@ -445,7 +445,7 @@ TEST_CASE("The New Game entry finds the village in the data folder",
                                    findings, data_dir()));
   INFO(describe(findings));
   CHECK(config.roster.size() == 1);
-  CHECK(config.roster.display_name(core::CityId{0}) == cozy_village.menu_label);
+  CHECK(config.roster.display_name(core::CityId{0}) == north_pole_menu_label);
   CHECK(config.mode == GameMode::QUICKSTART);
   REQUIRE(config.scenario != nullptr);
   CHECK(config.scenario->id.str() == "pthd:north-pole-cozy-village");
@@ -559,4 +559,70 @@ TEST_CASE("A definition city starts up like a Classic one",
   CHECK(first->mayor() != nullptr);
   CHECK(first->business_premises().size() ==
         second->business_premises().size());
+}
+
+TEST_CASE("Every North Pole preset plays the same pinned village",
+          "[content][scenario][village]") {
+  const auto definition = village();
+  // The six districts of NORTH-POLE-FLAGSHIP.md, each with premises.
+  const std::vector<std::string> districts = {
+      "Candy Cane Market", "Toy Workshop Quarter",  "Village Square",
+      "Reindeer Ridge",    "Frosty's Snow Gardens", "Aurora Harbor"};
+  REQUIRE(definition->districts.size() == districts.size());
+  std::vector<int> premises(districts.size(), 0);
+  for (const auto& p : definition->properties) {
+    if (p.kind == PropertyType::BUSINESS_PREMISE) {
+      ++premises[static_cast<std::size_t>(
+          definition->district_of_tile(p.x, p.y))];
+    }
+  }
+  for (std::size_t i = 0; i < districts.size(); ++i) {
+    INFO(districts[i]);
+    CHECK(definition->districts[i].name == districts[i]);
+    CHECK(premises[i] >= 3);
+  }
+
+  for (const auto& preset : north_pole_presets) {
+    INFO(preset.file);
+    const auto read = read_scenario_file(data_dir() / "scenarios" /
+                                         (std::string(preset.file) + ".json"));
+    INFO(describe(read.findings));
+    REQUIRE(read.ok());
+    const auto& s = *read.scenario;
+    REQUIRE(s.roster.size() == 1);
+    CHECK(s.roster[0].pin == Pin::Exact);
+    CHECK(s.roster[0].revision == definition->revision);
+    CHECK(s.roster[0].definition_sha256 == definition->sha256);
+    CHECK(s.win_mode == WinMode::None);
+    CHECK(s.after_goal == AfterGoal::ContinueSandbox);
+    // Every objective is one the observer can read.
+    for (const auto& o : s.goal) {
+      CHECK(supported_milestone(milestone_name(o.milestone)).has_value());
+    }
+
+    init::Config config;
+    Findings findings;
+    CHECK(prepare_shipped_scenario(preset.file, config, GameRules{}, findings,
+                                   data_dir()));
+  }
+
+  // Goals by preset: Cozy and Workshop Rush and the Empire have them, the
+  // sandbox has none and never announces one.
+  const auto goals = [&](const ShippedScenario& preset) {
+    return read_scenario_file(data_dir() / "scenarios" /
+                              (std::string(preset.file) + ".json"))
+        .scenario->goal.size();
+  };
+  CHECK(goals(cozy_village) == 2);
+  CHECK(goals(workshop_rush) == 3);
+  CHECK(goals(pizza_empire) == 3);
+  CHECK(goals(village_sandbox) == 0);
+}
+
+TEST_CASE("A preset without a goal can only continue", "[content][scenario]") {
+  json doc = read_json(data_dir() / "scenarios" / "north-pole-sandbox.json");
+  CHECK(read_scenario(doc).ok());
+  doc["objectives"]["after_goal"] = "end-game";
+  CHECK(error_rules(read_scenario(doc).findings) ==
+        std::vector<std::string>{"SCN-3"});
 }
