@@ -590,9 +590,14 @@ load_effect_pack(const fs::path& folder,
           layer.is_object()
               ? bounded(layer, "max_voices", 0.0, Mixer::MAX_EXTRA_VOICES, 0.0)
               : std::optional{0.0};
-      const auto interval = layer.is_object()
-                                ? range(layer, "interval_ms")
-                                : std::optional<std::pair<double, double>>{};
+      // Read into plain values: GCC's -O3 flow analysis reports the members
+      // of a ternary-built optional<pair> as maybe uninitialized.
+      const auto interval_read =
+          layer.is_object() ? range(layer, "interval_ms")
+                            : std::optional<std::pair<double, double>>{};
+      const bool has_interval = interval_read.has_value();
+      const double interval_least = has_interval ? interval_read->first : 0.0;
+      const double interval_most = has_interval ? interval_read->second : 0.0;
       const auto pan = layer.is_object() && layer.contains("pan")
                            ? range(layer, "pan")
                            : std::optional{std::pair{0.0, 0.0}};
@@ -610,8 +615,8 @@ load_effect_pack(const fs::path& folder,
         reason = layer.contains("variants") ? bad_variants(layer)
                                             : "it has no variants";
       }
-      else if (!interval || interval->first < limits.min_interval_ms ||
-               interval->second > limits.max_interval_ms) {
+      else if (!has_interval || interval_least < limits.min_interval_ms ||
+               interval_most > limits.max_interval_ms) {
         reason = "its interval_ms must be [least, most], from " +
                  std::to_string(limits.min_interval_ms) + " to " +
                  std::to_string(limits.max_interval_ms);
@@ -636,8 +641,8 @@ load_effect_pack(const fs::path& folder,
           made.layers.push_back(Mixer::EffectBank::Layer{
               .name = outcome.layer,
               .variants = std::move(sounds),
-              .min_interval_ms = static_cast<std::uint32_t>(interval->first),
-              .max_interval_ms = static_cast<std::uint32_t>(interval->second),
+              .min_interval_ms = static_cast<std::uint32_t>(interval_least),
+              .max_interval_ms = static_cast<std::uint32_t>(interval_most),
               .min_pan = static_cast<float>(pan->first),
               .max_pan = static_cast<float>(pan->second),
               .rules = *rules,
