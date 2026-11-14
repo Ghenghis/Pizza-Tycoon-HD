@@ -61,6 +61,7 @@ saves/
 | `slot` | The slot's file name. For people reading the file only; it is not checked. |
 | `next_sequence` | One more than the newest sequence the slot has used. A save also skips past any version file already on disk, listed or not. |
 | `active` | The working version that the slot's file holds and that loading tries first, or `null`. Always a working version. |
+| `previous_active` | The version that was active before the last `restore_version`, for `undo_restore`. Optional: older manifests don't have it, and one that names no working version is ignored. |
 | `versions` | Newest first. At most 64 entries are read. |
 | `retired` | Versions dropped from the list whose files may still exist. Each save removes those files first, so pruning picks up where it stopped. |
 
@@ -158,6 +159,43 @@ Makes a working version the active one:
 If the restore is cut short between steps 2 and 3, loading already takes the restored version.
 Every other version stays, so restoring the previous one undoes a restore. The running game is not
 touched.
+
+## Timed checkpoints: `TimedCheckpoints`, `start_timed_checkpoint`, `verify_pending_checkpoint`
+
+The game calls `TimedCheckpoints::frame` every frame, telling it whether the game itself ran.
+`CheckpointTimer` asks for a checkpoint after five minutes of play, and when a game day or a game
+week begins. A week counts over a day, and a boundary over the interval. They go to the slot
+`AUTOCHK.plsave`, which nothing else writes.
+
+- **On the game thread, at a consistent tick:** capture `state_to_json` and its fingerprint. If the
+  fingerprint equals the newest checkpoint's, working or still waiting, nothing more happens
+  (`Unchanged`).
+- **On a worker:** encode, list, write and integrity-check the version (steps 1 to 3 above), then
+  decode, migrate and validate it. The document must read back to the captured fingerprint. The
+  version is then committed as a candidate at `integrity-checked`, with the reason
+  `awaiting its load check`.
+- **On the game thread, when a day or week begins** (the moment the day's start already stops for
+  the autosave): `verify_pending_checkpoint` builds the newest waiting checkpoint apart from the
+  game and promotes it to a working, active version.
+
+The load check stays on the game thread for now, for two reasons:
+
+- Building a game uses the shared simulation random stream (`engine::random`, a plain global).
+- It fills the factories' caches, which have no locks.
+
+Building on a worker would corrupt the running game's sequence. Moving it off the frame needs that
+stream to be per-thread and those caches to be locked. The hidden `[bench][checkpoint]` test
+measures what each step costs.
+
+## Recovery Center model
+
+- `recovery_slots(folder)` lists every slot, sorted by name: its file if it has one, its versions
+  with their status and level, and why a manifest could not be read. Checkpoint slots
+  (`CHECKPNT`, `AUTOCHK`) are flagged.
+- `restore_as_branch(slot, n, new_slot)` checks version `n` again apart from the game. It then
+  writes a new slot: its version 1, its manifest, its file. The original slot is never touched. A
+  name that is already a save is refused. A failure partway removes the new slot.
+- `undo_restore(slot)` restores `previous_active`. Undoing twice goes back again.
 
 ## Fault tests
 
