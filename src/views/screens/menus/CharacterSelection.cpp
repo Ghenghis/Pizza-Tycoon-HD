@@ -70,6 +70,12 @@ CharacterSelection::CharacterSelection(GameContext& context, GameState& state)
         // Copy: the view stays alive (and may render) until the deferred
         // view swap happens.
         state_.initializer().players = player_items_;
+        // A scenario fixes where the game starts; only a Classic game picks
+        // its city on the map.
+        if (state_.initializer().scenario) {
+          state_.finalize_initialization(context_);
+          return;
+        }
         state_.ui().push<EuroMapState>(MapMode::GAME_INIT);
       },
       face, style, sel_style, item_align));

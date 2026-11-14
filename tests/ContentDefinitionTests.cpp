@@ -32,6 +32,7 @@
 #include "core/content/Roster.h"
 #include "core/content/Scenario.h"
 #include "core/content/Sha256.h"
+#include "core/content/ShippedScenarios.h"
 #include "core/events/MilestoneId.h"
 #include "core/init/NewGameConfig.h"
 #include "core/state/GameRules.h"
@@ -431,6 +432,32 @@ TEST_CASE("The Cozy Village scenario starts a sandbox in the village",
   CHECK(config.city_id == core::CityId{0});
   CHECK(config.roster == *roster);
   CHECK(config.scenario == read.scenario);
+  // The scenario's rules travel with the game, not in the player's options.
+  REQUIRE(config.rules.has_value());
+  CHECK(*config.rules == rules);
+}
+
+TEST_CASE("The New Game entry finds the village in the data folder",
+          "[content][scenario][village]") {
+  init::Config config;
+  Findings findings;
+  REQUIRE(prepare_shipped_scenario(cozy_village.file, config, GameRules{},
+                                   findings, data_dir()));
+  INFO(describe(findings));
+  CHECK(config.roster.size() == 1);
+  CHECK(config.roster.display_name(core::CityId{0}) == cozy_village.menu_label);
+  CHECK(config.mode == GameMode::QUICKSTART);
+  REQUIRE(config.scenario != nullptr);
+  CHECK(config.scenario->id.str() == "pthd:north-pole-cozy-village");
+
+  Findings missing;
+  CHECK_FALSE(find_shipped_location(*ContentKey::parse("pthd:atlantis"),
+                                    missing, data_dir()));
+  CHECK(has_rule(missing, "SCN-6"));
+  init::Config untouched;
+  CHECK_FALSE(prepare_shipped_scenario("no-such-scenario", untouched,
+                                       GameRules{}, missing, data_dir()));
+  CHECK(untouched.roster.is_classic());
 }
 
 TEST_CASE("A scenario's roster holds each definition to its pin",

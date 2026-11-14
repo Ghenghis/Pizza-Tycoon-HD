@@ -7,9 +7,14 @@
 #include "views/screens/menus/MenuNewGame.h"
 
 #include <cassert>
+#include "core/content/Findings.h"
+#include "core/content/ShippedScenarios.h"
 #include "core/state/GameState.h"
 #include "core/tutorial/TutorialGame.h"
+#include "engine/Logger.h"
 #include "views/screens/menus/MenuTheme.h"
+#include "views/ui/PopupManager.h"
+#include "views/ui/popups/AlertPopup.h"
 #include "views/ui/widgets/PositionMarkerMenuItem.h"
 #include "views/ui/widgets/SpacerMenuItem.h"
 #include "views/ui/widgets/TextMenuItem.h"
@@ -54,6 +59,31 @@ MenuNewGame::MenuNewGame(GameContext& context, GameState& state)
         state.begin_initialization();
         state.initializer().mode = GameMode::QUICKSTART;
         state.ui().push<ScreenTag>(ScreenTag::Kind::MenuQuickstart);
+      },
+      face, style, sel_style, item_align));
+  add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));
+
+  // Santa's Pizza Village, the Cozy Village preset: the roster, start and
+  // rules come from the scenario; the players are picked as usual, and the
+  // game starts from the character screen without the city map.
+  add_menu_item(std::make_unique<TextMenuItem>(
+      context, std::string(core::content::cozy_village.menu_label),
+      [this] {
+        Logger::debug("New game of {}", core::content::cozy_village.file);
+        state_.begin_initialization();
+        core::content::Findings findings;
+        if (!core::content::prepare_shipped_scenario(
+                core::content::cozy_village.file, state_.initializer(),
+                state_.options().rules, findings)) {
+          Logger::warn("Cannot start {}:\n{}", core::content::cozy_village.file,
+                       core::content::describe(findings));
+          context_.popup->origin(ViewPoint{26, 40});
+          context_.popup->create<AlertPopup>(
+              "Santa's Pizza Village is missing or damaged in the data "
+              "folder.");
+          return;
+        }
+        state_.ui().push<ScreenTag>(ScreenTag::Kind::CharacterSelection);
       },
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));

@@ -166,11 +166,12 @@ scenario_roster(const Scenario& scenario, const DefinitionLookup& lookup,
                 Findings& findings);
 
 // Sets up a new game for the scenario: roster, start position, mode, size
-// and difficulty in config, the scenario's game_rules in rules. False, with
-// a finding, when the game cannot start this way (SCN-7: more locations than
-// this build simulates at once).
+// and difficulty in config, and config.rules as base_rules (the player's
+// options) with the scenario's game_rules on top. False, with a finding,
+// when the game cannot start this way (SCN-7: more locations than this
+// build simulates at once).
 bool configure_new_game(const std::shared_ptr<const Scenario>& scenario,
                         const Roster& roster, init::Config& config,
-                        GameRules& rules, Findings& findings);
+                        const GameRules& base_rules, Findings& findings);
 
 } // namespace core::content

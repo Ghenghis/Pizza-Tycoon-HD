@@ -10,6 +10,7 @@
 #include "core/common/Ids.h"
 #include "core/content/Roster.h"
 #include "core/mission/MissionTarget.h"
+#include "core/state/GameRules.h"
 
 #include <memory>
 #include <optional>
@@ -51,6 +52,9 @@ struct Config {
   // The scenario an Expanded game plays (win rule, objectives); null for a
   // Classic game. Set with core::content::configure_new_game.
   std::shared_ptr<const core::content::Scenario> scenario;
+  // The rules the game is played by when they are not the player's options
+  // (a scenario's game_rules applied to them).
+  std::optional<GameRules> rules;
   std::vector<PlayerSlot> players;
   // Target CV; engaged only for GameMode::MISSION_MODE, nullopt otherwise.
   std::optional<core::mission::MissionTarget> mission;

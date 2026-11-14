@@ -679,7 +679,7 @@ std::optional<Roster> scenario_roster(const Scenario& scenario,
 
 bool configure_new_game(const std::shared_ptr<const Scenario>& scenario,
                         const Roster& roster, init::Config& config,
-                        GameRules& rules, Findings& findings) {
+                        const GameRules& base_rules, Findings& findings) {
   if (!scenario) {
     return false;
   }
@@ -714,6 +714,7 @@ bool configure_new_game(const std::shared_ptr<const Scenario>& scenario,
   config.difficulty = static_cast<init::DifficultyLevel>(scenario->difficulty);
   config.mission.reset();
 
+  GameRules rules = base_rules;
   const auto& r = scenario->game_rules;
   rules.fix_legacy_bugs = r.fix_legacy_bugs.value_or(rules.fix_legacy_bugs);
   rules.mafia_shakedowns_target_all_restaurants =
@@ -728,6 +729,7 @@ bool configure_new_game(const std::shared_ptr<const Scenario>& scenario,
   rules.suppliers_remember_missed_payments =
       r.suppliers_remember_missed_payments.value_or(
           rules.suppliers_remember_missed_payments);
+  config.rules = rules;
   return true;
 }
 

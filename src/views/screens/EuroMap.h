@@ -9,6 +9,7 @@
 #include <optional>
 #include "core/GameTypes.h"
 #include "core/common/Ids.h"
+#include "core/content/Roster.h"
 #include "core/finance/Money.h"
 #include "core/food/IngredientCategoryType.h"
 #include "engine/DebugLabel.h"
@@ -42,6 +43,8 @@ private:
   void on_city_click(core::CityId city, views::ui::MouseButton btn);
   bool player_has_depot_in_city(core::CityId city_id);
   void attempt_flight();
+  // The places of the game being played, or of the one being set up.
+  const core::content::Roster& roster() const;
 
   MapState map_state_{MapState::NO_ACTION};
   ViewRect big_popup_box_;
@@ -49,4 +52,7 @@ private:
   std::optional<core::CityId> last_clicked_city_;
   MapMode map_mode_;
   std::optional<IngredientCategory> category_;
+  // Travel and exports are off in this game (a scenario with travel
+  // disabled): the map closes as soon as it opens.
+  bool closes_at_once_{false};
 };

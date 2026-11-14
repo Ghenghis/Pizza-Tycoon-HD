@@ -94,6 +94,6 @@ void WinSequenceView::dismiss() {
         .line_index = line_index_ + 1, .player_id = player_id_});
   }
   else {
-    state_.eliminate_player(player_id_, GameOverCause::PizzaTycoon);
+    state_.finish_win_sequence(player_id_);
   }
 }

@@ -528,10 +528,12 @@ Surface PlayerProfile::create_company(const Player* player) {
   // city rows
   int y = 132;
   constexpr int row_height = 18;
-  for (int i = 0; i < NUMBER_OF_CITIES; ++i) {
+  // One row per place of the game: the original ten in a Classic game.
+  const int cities = static_cast<int>(state_.roster().size());
+  for (int i = 0; i < cities; ++i) {
     auto city_id = core::CityId{i};
 
-    font->render_line_onto(page, core::city_name(city_id), {78, y},
+    font->render_line_onto(page, state_.city_display_name(city_id), {78, y},
                            FontFace::PIZ_NUMB, text_color);
 
     if (state_.is_city_loaded(city_id)) {

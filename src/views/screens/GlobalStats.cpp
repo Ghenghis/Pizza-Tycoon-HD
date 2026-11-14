@@ -661,7 +661,8 @@ void GlobalStats::render_loans(const RenderContext& ctx) {
           TextStyle{.color = 240, .character_spacing = 1});
     }
     else {
-      context_.font->render_text_onto(*ctx.surface, core::city_name(city_id),
+      context_.font->render_text_onto(*ctx.surface,
+                                      state_.city_display_name(city_id),
                                       {col_city, y}, FontFace::PIZ_NUMB, 240);
     }
 
@@ -708,7 +709,7 @@ void GlobalStats::render_loans(const RenderContext& ctx) {
     }
     else {
       context_.font->render_text_onto(*ctx.surface,
-                                      core::city_name(inv->city_id()),
+                                      state_.city_display_name(inv->city_id()),
                                       {col_city, y}, FontFace::PIZ_NUMB, 240);
     }
 

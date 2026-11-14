@@ -613,6 +613,10 @@ bool GameState::announce_scenario_goal(
   return true;
 }
 
+bool GameState::travel_enabled() const {
+  return !scenario_ || !scenario_->travel_disabled;
+}
+
 void GameState::restore_scenario(
     core::content::Roster roster,
     std::shared_ptr<const core::content::Scenario> scenario) {
@@ -1185,8 +1189,10 @@ void GameState::finalize_initialization(GameContext& context) {
   scenario_ = cfg.scenario;
   scenario_goal_settled_ = false;
 
-  rules_ = options_.rules;
-  starting_rules_ = options_.rules;
+  // A scenario brings its own copy of the rules; the player's options stay
+  // as they are.
+  rules_ = cfg.rules.value_or(options_.rules);
+  starting_rules_ = rules_;
   rules_changed_ = false;
 
   // Use initializer to set permanent state

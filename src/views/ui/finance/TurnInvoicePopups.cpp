@@ -140,7 +140,7 @@ void show_weekly_city_invoice_popup(GameContext& context, GameState& gs,
   cfg.lines.push_back(empty_line);
   for (const auto& entry : profits.entries) {
     cfg.lines.push_back(
-        {std::string(core::city_name(entry.city_id)), entry.profit});
+        {std::string(gs.city_display_name(entry.city_id)), entry.profit});
   }
   cfg.lines.push_back(empty_line);
   cfg.lines.push_back({"", profits.total});

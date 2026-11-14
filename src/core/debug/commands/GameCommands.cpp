@@ -5,6 +5,8 @@
  */
 
 #include "GameCommands.h"
+#include "core/content/Findings.h"
+#include "core/content/ShippedScenarios.h"
 #include "core/events/CareerLog.h"
 #include "core/events/MilestoneId.h"
 #include "core/food/PizzaJudging.h"
@@ -1168,11 +1170,63 @@ Example:
   };
 }
 
+static CommandDef make_game_scenario() {
+  return CommandDef{
+      .name = "scenario",
+      .description = "Start a new game of a shipped scenario",
+      .help_text = R"(Usage: game scenario <name> [seed]
+
+Starts a new game of a scenario from data/scenarios, as the New Game menu
+does: player 1 is the only person, the original characters 0-7 play. The
+seed, if given, seeds the game first.
+
+Examples:
+  game scenario north-pole-cozy-village        # Santa's Pizza Village
+  game scenario north-pole-cozy-village 1224   # the same, seeded
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "name",
+                  .type = ArgType::String,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Scenario file name without .json",
+              },
+              ArgSpec{
+                  .name = "seed",
+                  .type = ArgType::Int,
+                  .optional = true,
+                  .description = "Random seed for the new game",
+                  .min_value = 0,
+                  .max_value = 4294967295LL,
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        const std::string name = ctx.string_arg(0);
+        std::optional<std::uint32_t> seed;
+        if (ctx.has_arg(1)) {
+          seed = static_cast<std::uint32_t>(ctx.int_arg(1));
+        }
+        core::content::Findings findings;
+        if (!core::content::start_shipped_scenario(ctx.state, ctx.context, name,
+                                                   seed, findings)) {
+          return CommandResult::error(
+              compat::format("Cannot start scenario {}:\n{}", name,
+                             core::content::describe(findings)));
+        }
+        return CommandResult::success().add_message(compat::format(
+            "Started scenario {} in {}", name,
+            ctx.state.city_display_name(ctx.state.active_city_id())));
+      },
+  };
+}
+
 CommandDef make_game_commands() {
   return CommandDef{
       .name = "game",
       .description = "Game state management",
-      .help_text = "Manage game state: save, load, exit",
+      .help_text = "Manage game state: save, load, exit, scenario",
   }
       .add_subcommand(make_game_save())
       .add_subcommand(make_game_load())
@@ -1188,7 +1242,8 @@ CommandDef make_game_commands() {
       .add_subcommand(make_game_timescale())
       .add_subcommand(make_game_realtime())
       .add_subcommand(make_game_turn())
-      .add_subcommand(make_game_tick());
+      .add_subcommand(make_game_tick())
+      .add_subcommand(make_game_scenario());
 }
 
 } // namespace debug::commands

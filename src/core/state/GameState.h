@@ -245,6 +245,9 @@ public:
   [[nodiscard]] const core::content::Scenario* scenario() const {
     return scenario_.get();
   }
+  // Whether players may travel between places: always in a Classic game, as
+  // the scenario says otherwise.
+  [[nodiscard]] bool travel_enabled() const;
   [[nodiscard]] const std::shared_ptr<const core::content::Scenario>&
   scenario_document() const {
     return scenario_;

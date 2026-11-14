@@ -34,7 +34,9 @@ constexpr uint8_t city_name_color = 255;
 constexpr ViewPoint city_name_pos{(DisplayConstants::SCREEN_WIDTH / 2) - 40,
                                   190};
 
-// Indexed by core::CityId. Our render coordinates are 2x these.
+// Indexed by the original city number (the CityId of a Classic game). Our
+// render coordinates are 2x these. Places other than the original ten have
+// no spot on this map.
 struct CityCoord {
   int x, y;
 };
@@ -75,11 +77,23 @@ EuroMap::EuroMap(GameContext& context, GameState& state, MapMode mode,
           mark_dirty();
         }
       });
-  for (int i = 0; i < NUMBER_OF_CITIES; ++i) {
+  closes_at_once_ = map_mode_ != MapMode::GAME_INIT && !state_.travel_enabled();
+  if (closes_at_once_) {
+    return;
+  }
+  // Only the game's own places, each at its original spot. In a Classic game
+  // that is all ten, with the ids euromap.Paris and so on.
+  const auto& places = roster();
+  for (int i = 0; i < static_cast<int>(places.size()); ++i) {
     core::CityId city{i};
-    auto r = dest_box(ViewPoint{city_coords[i].x * 2, city_coords[i].y * 2});
+    const auto number = places.classic_number(city);
+    if (!number) {
+      continue;
+    }
+    const auto& coord = city_coords[*number];
+    auto r = dest_box(ViewPoint{coord.x * 2, coord.y * 2});
     interactions_.create_persistent_item(
-        r, compat::format("euromap.{}", core::city_name(city)),
+        r, compat::format("euromap.{}", places.display_name(city)),
         [this, city](views::ui::InteractionEvent ev) {
           if (ev.type == views::ui::InteractionEvent::Type::ButtonDown) {
             on_city_click(city, ev.button);
@@ -91,7 +105,7 @@ EuroMap::EuroMap(GameContext& context, GameState& state, MapMode mode,
             return std::nullopt;
           }
           return TooltipRequest{
-              .text = std::string(core::city_name(city)),
+              .text = std::string(roster().display_name(city)),
               .anchor = TooltipAnchor::Fixed,
               .pos = city_name_pos,
               .font = FontFace::ASTANDAR,
@@ -113,7 +127,20 @@ ViewRect EuroMap::dest_box(ViewPoint p) {
   return r;
 }
 
-void EuroMap::tick() {}
+const core::content::Roster& EuroMap::roster() const {
+  // While a new game is set up its roster lives in the initializer.
+  if (map_mode_ == MapMode::GAME_INIT) {
+    return state_.initializer().roster;
+  }
+  return state_.roster();
+}
+
+void EuroMap::tick() {
+  if (closes_at_once_) {
+    closes_at_once_ = false;
+    state_.ui().pop();
+  }
+}
 
 void EuroMap::render(const RenderContext& ctx) {
   interactions_.begin_frame();
@@ -133,13 +160,13 @@ void EuroMap::render(const RenderContext& ctx) {
           popup_surface, "a central depot", ViewPoint{center_x, 50},
           FontFace::ASTANDAR, dark_text_color, TextAnchor::Middle);
       context_.font->render_text_onto(
-          popup_surface, compat::format("in {}", core::city_name(target)),
+          popup_surface, compat::format("in {}", roster().display_name(target)),
           ViewPoint{center_x, 70}, FontFace::ASTANDAR, dark_text_color,
           TextAnchor::Middle);
     }
     else {
       context_.font->render_text_onto(
-          popup_surface, core::city_name(target), ViewPoint{center_x, 30},
+          popup_surface, roster().display_name(target), ViewPoint{center_x, 30},
           FontFace::ASTANDAR, dark_text_color, TextAnchor::Middle);
       context_.font->render_text_onto(
           popup_surface, "market leader", ViewPoint{center_x, 50},
@@ -173,7 +200,8 @@ void EuroMap::render(const RenderContext& ctx) {
       if (state_.rules().fix_legacy_bugs && state_.is_city_loaded(target) &&
           dest_city->trade_embargo_counter(*category_)) {
         context_.font->render_text_onto(
-            popup_surface, compat::format("{} is", core::city_name(target)),
+            popup_surface,
+            compat::format("{} is", roster().display_name(target)),
             ViewPoint{center_x, 12}, FontFace::ASTANDAR, dark_text_color,
             TextAnchor::Middle);
         context_.font->render_text_onto(
@@ -260,8 +288,16 @@ Surface EuroMap::create_popup(const RenderContext& ctx, int w, int h) {
 }
 
 Money EuroMap::calculate_cost(core::CityId from, core::CityId to) {
-  int dx = std::abs(city_coords[from.value].x - city_coords[to.value].x);
-  int dy = std::abs(city_coords[from.value].y - city_coords[to.value].y);
+  // By the original spots; in a Classic game the number is the id.
+  const auto a = roster().classic_number(from);
+  const auto b = roster().classic_number(to);
+  if (!a || !b) {
+    // A place off this map: the Expanded world map prices that trip
+    // (location-contract.md section 16, step 9).
+    return Money{0};
+  }
+  int dx = std::abs(city_coords[*a].x - city_coords[*b].x);
+  int dy = std::abs(city_coords[*a].y - city_coords[*b].y);
   int manhattan = dx + dy;
 
   // Original used difficulty 1-5 with multiplier (difficulty + 1).

@@ -32,9 +32,11 @@
 #include "core/city/City.h"
 #include "core/city/Property.h"
 #include "core/content/ScenarioSave.h"
+#include "core/content/ShippedScenarios.h"
 #include "core/debug/command/CommandRegistry.h"
 #include "core/debug/command/CommandResult.h"
 #include "core/debug/commands/CityCommands.h"
+#include "core/debug/commands/GameCommands.h"
 #include "core/debug/commands/RestaurantCommands.h"
 #include "core/debug/commands/StaffCommands.h"
 #include "core/food/PlayerRecipes.h"
@@ -56,6 +58,7 @@ debug::command::CommandRegistry& console() {
     r.register_command(debug::commands::make_city_commands());
     r.register_command(debug::commands::make_restaurant_commands());
     r.register_command(debug::commands::make_staff_commands());
+    r.register_command(debug::commands::make_game_commands());
     return r;
   }();
   return registry;
@@ -271,4 +274,31 @@ TEST_CASE("Santa's Pizza Village journey: reload a saved game in a new process",
   CHECK_FALSE(game.state.roster().is_classic());
   content_test::play_days(game.state, 7);
   CHECK(game.state.player(core::PlayerId{0})->status() == PlayerStatus::Active);
+}
+
+TEST_CASE("Santa's Pizza Village journey: a scripted run starts the village",
+          "[content][journey][game][village]") {
+  CONTENT_REQUIRE_GAME_DATA();
+  const auto scenario_file =
+      core::content::shipped_data_dir() / "scenarios" /
+      (std::string(core::content::cozy_village.file) + ".json");
+  if (!fs::exists(scenario_file)) {
+    SKIP("The game's data folder ("
+         << core::content::shipped_data_dir().string()
+         << ") has no scenarios; run from the build "
+            "folder");
+  }
+  // What `--exec "game scenario north-pole-cozy-village 23"` does.
+  content_test::TestGame game;
+  game.state.options().autosave_frequency = AutosaveFrequency::Off;
+  run(game, "game scenario north-pole-cozy-village 23");
+  auto& state = game.state;
+  REQUIRE(state.scenario() != nullptr);
+  CHECK(state.city_display_name(state.active_city_id()) ==
+        "Santa's Pizza Village");
+  REQUIRE(state.active_player() != nullptr);
+  CHECK(state.restaurants_for(core::PlayerId{0}).size() == 1);
+  content_test::close_dialogs(state);
+  content_test::play_days(state, 2);
+  CHECK(state.player(core::PlayerId{0})->status() == PlayerStatus::Active);
 }
