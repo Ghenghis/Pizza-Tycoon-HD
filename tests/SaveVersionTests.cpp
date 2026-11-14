@@ -925,6 +925,10 @@ void settle_all(GameState& state) {
 
 TEST_CASE("A background autosave that fails keeps the last one",
           "[save][versions][autosave]") {
+  // Autosaves other tests' games started are finished first, so the list
+  // holds only this test's job.
+  SaveGameManager::finish_background_saves();
+  REQUIRE(SaveGameManager::background_saves() == 0);
   TempDir dir;
   LiveGame game;
   game.state.options().autosave_count = 1;
@@ -1072,6 +1076,8 @@ TEST_CASE("A timed checkpoint is built and checked on its worker",
 TEST_CASE("The autosave is written and checked on its worker",
           "[save][versions][game][autosave]") {
   REQUIRE_GAME_DATA();
+  SaveGameManager::finish_background_saves();
+  REQUIRE(SaveGameManager::background_saves() == 0);
   TempDir dir;
   GameContext context;
   GameState state;

@@ -2292,6 +2292,17 @@ bool SaveGameManager::autosave_in_background(const GameState& state,
   const fs::path path =
       folder.empty() ? fs::path(get_full_path(name)) : folder / name;
   wait_for_background(path);
+  // Where nothing settles every frame (a test, a script), finished jobs
+  // would pile up: promote those that passed now. One that failed stays
+  // for settle_background_saves to tell the player of.
+  std::erase_if(background_autosaves(),
+                [](const std::unique_ptr<CheckpointJob>& job) {
+                  if (!job->done() || (!job->ready() && !job->unchanged())) {
+                    return false;
+                  }
+                  job->wait();
+                  return promote(*job) != CheckpointResult::Failed;
+                });
   json document;
   try {
     document = capture(state, context);
