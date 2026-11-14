@@ -181,6 +181,14 @@ close_dialogs(GameState& state,
       }
       closed = s->on_done;
     }
+    else if (auto* s = ui.top_as<RestaurantStatsState>();
+             s && s->automatic_mode) {
+      // The end-of-day report holds the turn until its dismiss button,
+      // which resumes the pipeline (RestaurantStats.cpp:73-77).
+      ui.pop();
+      state.turn().advance_pipeline();
+      continue;
+    }
     else if (ui.is_top<GameOverState>()) {
       return; // the game is over; the caller looks at why
     }

@@ -207,7 +207,7 @@ void add_properties(City& city, const LocationDefinition& def) {
   city.properties(std::move(properties));
 }
 
-void add_suppliers(City& city, const LocationDefinition& def) {
+void add_suppliers(City& city, const LocationDefinition& def, bool roll_stock) {
   std::vector<std::unique_ptr<FoodSupplier>> suppliers;
   suppliers.reserve(def.food_suppliers.size());
   for (const auto& s : def.food_suppliers) {
@@ -221,11 +221,18 @@ void add_suppliers(City& city, const LocationDefinition& def) {
         Money::from_dollars(s.loyalty_level_dollars));
     suppliers.push_back(std::move(supplier));
   }
-  city.suppliers(std::move(suppliers));
+  if (roll_stock) {
+    // Where Classic rolls the opening stock (City::suppliers), in the same
+    // place of the build.
+    city.suppliers(std::move(suppliers));
+  }
+  else {
+    city.suppliers_without_stock(std::move(suppliers));
+  }
 }
 
 // Everything a definition fixes, set on city without drawing any number.
-void fill_static(City& city, const LocationDefinition& def) {
+void fill_static(City& city, const LocationDefinition& def, bool roll_stock) {
   std::array<std::array<std::string, names_per_type>, named_building_types>
       names{};
   std::array<int, named_building_types> counts{};
@@ -264,7 +271,7 @@ void fill_static(City& city, const LocationDefinition& def) {
 
   add_properties(city, def);
   add_actors(city, def);
-  add_suppliers(city, def);
+  add_suppliers(city, def, roll_stock);
 
   IngredientPrices prices{};
   for (std::size_t i = 0; i < ingredient_price_count; ++i) {
@@ -279,7 +286,7 @@ std::unique_ptr<City> build_static_city(core::CityId id,
                                         const LocationDefinition& def) {
   auto city = std::make_unique<City>(id);
   city->name(def.name);
-  fill_static(*city, def);
+  fill_static(*city, def, false);
   return city;
 }
 
@@ -293,7 +300,7 @@ build_city(core::CityId id, const LocationDefinition& def, bool fix_legacy_bugs,
   auto city = std::make_unique<City>(id);
   city->name(def.name);
   city->mayor_office().init_private_account();
-  fill_static(*city, def);
+  fill_static(*city, def, true);
   CityFactory::initialise_new_city(*city, fix_legacy_bugs);
   city->job_market().init(player_chars);
   return city;

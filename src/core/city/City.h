@@ -129,7 +129,14 @@ public:
   std::vector<Property*> properties() const;
   Property* property_by_index(int index) const;
   void districts(std::vector<std::unique_ptr<District>> d);
+  // Sets the suppliers and rolls their opening stock (draws the simulation
+  // stream, as every new city does).
   void suppliers(std::vector<std::unique_ptr<FoodSupplier>> s);
+  // The suppliers with no stock and no draw: for a preview that must leave
+  // the simulation stream alone. Not a playable city.
+  void suppliers_without_stock(std::vector<std::unique_ptr<FoodSupplier>> s) {
+    suppliers_ = std::move(s);
+  }
   void types(const std::array<uint8_t, NUMBER_OF_TYPES>& types);
   void
   type_names(const std::array<std::string, /*NUMBER_OF_TYPES*/ 10>& type_names);

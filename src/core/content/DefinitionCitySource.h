@@ -23,18 +23,19 @@ class Roster;
 // Builds a City from a validated LocationDefinition (location-contract.md
 // section 4). The static parts (map, cells, districts, properties exactly as
 // realized, actors in Classic id order, suppliers, prices, building names)
-// draw no random numbers; the start-up after them is the Classic one
-// (CityFactory::initialise_new_city, then the job market), in the Classic
-// order, so the simulation stream is drawn exactly where a Classic city
-// draws it. The definition must have passed validate_location without
-// errors.
+// draw nothing of their own; the draws a Classic city makes besides
+// populate_properties happen at the same points and in the same order: the
+// mayor's account, the suppliers' opening stock (City::suppliers), then
+// CityFactory::initialise_new_city and the job market. The definition must have
+// passed validate_location without errors.
 [[nodiscard]] std::unique_ptr<City>
 build_city(core::CityId id, const LocationDefinition& definition,
            bool fix_legacy_bugs,
            const std::vector<std::pair<std::uint8_t, int>>& player_chars);
 
-// Only the static parts, without any start-up: for tests and previews that
-// must not touch the simulation stream. The result is not playable.
+// Only the static parts, without any start-up and with empty supplier
+// stock: for tests and previews that must not touch the simulation stream.
+// The result is not playable.
 [[nodiscard]] std::unique_ptr<City>
 build_static_city(core::CityId id, const LocationDefinition& definition);
 
