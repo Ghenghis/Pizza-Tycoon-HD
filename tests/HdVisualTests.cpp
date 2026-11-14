@@ -46,6 +46,8 @@ constexpr uint8_t water = 0x0D;
 constexpr uint8_t road = 0x0E;
 constexpr uint8_t building = 0x15;
 
+// shift stands for another season: it changes the ground colour too, as the
+// seasons do, since the far map only uses the colours its tiles have.
 std::vector<Color> test_palette(uint8_t shift = 0) {
   std::vector<Color> pal(256);
   for (int i = 0; i < 256; ++i) {
@@ -54,7 +56,7 @@ std::vector<Color> test_palette(uint8_t shift = 0) {
               static_cast<uint8_t>((i * 91 + 40) & 0xFF),
               static_cast<uint8_t>((i * 53 + 90) & 0xFF)};
   }
-  pal[ground] = {90, 150, 70};
+  pal[ground] = {static_cast<uint8_t>(90 + shift), 150, 70};
   pal[water] = {40, 80, 190};
   pal[road] = {120, 120, 120};
   pal[building] = {200, 120, 90};
