@@ -42,7 +42,10 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageFilter
 
-import pixelart
+# The sibling module, found even under `python -I` (which leaves the
+# script's folder off sys.path).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pixelart  # noqa: E402
 
 # Must match resources::HdPack::aspect_tolerance in the engine.
 ASPECT_TOLERANCE = 0.02
