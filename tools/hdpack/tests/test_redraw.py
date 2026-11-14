@@ -45,3 +45,15 @@ def test_workflow_is_wired_through_the_depth_controlnet() -> None:
     assert wf["9"]["inputs"]["positive"] == ["8", 0]
     assert wf["8"]["inputs"]["image"] == ["5", 0]
     assert wf["5"]["inputs"]["image"] == "dep"
+
+
+def test_baked_in_shadow_is_kept() -> None:
+    sprite = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+    for x in range(0, 40):
+        for y in range(0, 20):
+            sprite.putpixel((x, y), (200, 120, 40, 255))  # the object
+        for y in range(20, 40):
+            sprite.putpixel((x, y), (48, 48, 48, 255))  # its drop shadow
+    out = redraw.finish(Image.new("RGB", (512, 512), (0, 255, 0)), sprite)
+    assert out.getpixel((20, 35))[:3] == (48, 48, 48)
+    assert out.getpixel((20, 5))[:3] == (0, 255, 0)

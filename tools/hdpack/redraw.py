@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageDraw
+from numpy.typing import NDArray
+from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hdpack  # noqa: E402
@@ -99,11 +100,28 @@ def prepare(sprite: Image.Image, depth: Image.Image, size: tuple[int, int]) -> t
     return flat.resize(size, Image.Resampling.LANCZOS), depth_rgb.resize(size, Image.Resampling.BICUBIC)
 
 
+def shadow_mask(sprite: Image.Image) -> NDArray[np.float32]:
+    """1 where the sprite shows its baked-in drop shadow (dark, grey), softened
+    over a couple of pixels; those pixels are kept as they are."""
+    a = np.asarray(sprite.convert("RGBA")).astype(np.int16)
+    rgb = a[..., :3]
+    grey = (rgb.max(axis=-1) - rgb.min(axis=-1)) < 14
+    dark = rgb.max(axis=-1) < 80
+    m = Image.fromarray(((grey & dark & (a[..., 3] > 0)) * 255).astype(np.uint8))
+    radius = max(1, round(min(sprite.size) / 150))
+    m = m.filter(ImageFilter.GaussianBlur(radius))
+    return np.asarray(m, dtype=np.float32) / 255.0
+
+
 def finish(generated: Image.Image, sprite: Image.Image) -> Image.Image:
-    """Back to the sprite's size, inside the sprite's own outline."""
-    out = generated.convert("RGB").resize(sprite.size, Image.Resampling.LANCZOS).convert("RGBA")
-    out.putalpha(sprite.getchannel("A"))
-    return out
+    """Back to the sprite's size, inside the sprite's own outline, with the
+    sprite's own drop shadow kept."""
+    out = generated.convert("RGB").resize(sprite.size, Image.Resampling.LANCZOS)
+    m = shadow_mask(sprite)[..., None]
+    mixed = np.asarray(out, dtype=np.float32) * (1 - m) + np.asarray(sprite.convert("RGB"), dtype=np.float32) * m
+    result = Image.fromarray(np.clip(mixed + 0.5, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+    result.putalpha(sprite.getchannel("A"))
+    return result
 
 
 def sheet(rows: list[tuple[str, list[Image.Image]]], labels: list[str], path: Path) -> None:
