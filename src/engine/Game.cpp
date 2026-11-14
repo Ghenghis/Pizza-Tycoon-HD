@@ -157,6 +157,13 @@ int Game::run() {
   }
 
   platform_paths::init();
+  // And to a file in the user's folder: the Windows build has no console,
+  // so this is where warnings can be found afterwards.
+  const std::string log_file = Logger::start_log_file(
+      (std::filesystem::path(platform_paths::base_dir()) / "logs").string());
+  if (!log_file.empty()) {
+    Logger::info("Pizza Tycoon HD log: {}", log_file);
+  }
 
   // Use CLI-provided config path, or fall back to platform default
   std::string effective_config =
@@ -291,8 +298,9 @@ int Game::run() {
     debug_console.add_command(std::move(command));
   }
 
-  // And logger that logs to in-game console
-  Logger::add_sink(debug_console.make_sink());
+  // And logger that logs to in-game console (removed with the console).
+  const Logger::ScopedSink console_sink(
+      Logger::add_sink(debug_console.make_sink()));
   Logger::info("Logger initialized");
 
   std::optional<Overlays> overlays;
@@ -655,7 +663,7 @@ int Game::run() {
       title_fps = fps.current_fps();
       SDL_SetWindowTitle(
           sdl_.window.get(),
-          std::string(compat::format("Pizza Legacy {} [{} fps]",
+          std::string(compat::format("{} {} [{} fps]", game_meta::PRODUCT,
                                      game_meta::VERSION, title_fps))
               .c_str());
     }

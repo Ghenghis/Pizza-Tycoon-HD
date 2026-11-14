@@ -3,20 +3,30 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 cmake_minimum_required(VERSION 3.25)
-project(plegacy VERSION 1.0.0 LANGUAGES C CXX)
+# Pizza Tycoon HD's version: the one source of truth. The game shows it,
+# the Windows resource carries it, and scripts/release.ps1 and
+# build-windows-cross.sh read it from <build>/version.txt.
+project(plegacy VERSION 1.1.0 LANGUAGES C CXX)
 
-# SemVer pre-release suffix (e.g. "-beta.1"); empty for final releases.
-# CMake's project(VERSION) only accepts numeric components, so the full
-# version string is assembled here.
-set(PLEGACY_VERSION_SUFFIX "-beta.2")
+# SemVer pre-release suffix (e.g. "-beta.1" or "-dev"); empty for final
+# releases. CMake's project(VERSION) only accepts numeric components, so the
+# full version string is assembled here.
+set(PLEGACY_VERSION_SUFFIX "")
 set(PLEGACY_VERSION_FULL "${PROJECT_VERSION}${PLEGACY_VERSION_SUFFIX}")
+# The Pizza Legacy release this fork is based on, shown next to ours.
+set(PLEGACY_UPSTREAM_VERSION "1.0.0-beta.2")
 
-# Generate Version.h from the project version
+# Generate Version.h from the project version into the build tree (each
+# build directory gets its own; nothing is written into src/), and the plain
+# version for the release scripts.
+file(REMOVE "${CMAKE_CURRENT_SOURCE_DIR}/src/engine/Version.h") # old in-tree copy
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/Version.h.in
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/Version.h
+    ${CMAKE_BINARY_DIR}/generated/engine/Version.h
     @ONLY
 )
+file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/version.txt"
+     CONTENT "@PLEGACY_VERSION_FULL@\n" @ONLY)
 
 # Load shared README partials
 foreach(_partial INTRO REQUIREMENTS STATUS LICENSE)
@@ -328,6 +338,8 @@ endif()
 
 # We expose include dirs so that dependent targets can #include headers directly.
 target_include_directories(game_plegacy PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# Generated headers (engine/Version.h).
+target_include_directories(game_plegacy PUBLIC ${CMAKE_BINARY_DIR}/generated)
 
 if(APPLE)
     # ZLIB::ZLIB adds the macOS SDK path as a plain -I, which breaks the
@@ -557,6 +569,22 @@ if(PLEGACY_BUILD_TESTS)
     endif()
 endif()
 
+# ---------------------------------------------------------
+#  Warnings are errors in this project's own targets
+#  (third_party/libadlmidi keeps its own settings)
+# -----------------------------------------------------
+option(PLEGACY_WERROR "Treat compiler warnings as errors" ON)
+foreach(_plegacy_target plegacy game_plegacy test_plegacy)
+    if(TARGET ${_plegacy_target})
+        set_target_properties(${_plegacy_target} PROPERTIES
+            COMPILE_WARNING_AS_ERROR ${PLEGACY_WERROR})
+    endif()
+endforeach()
+if(MSVC AND PLEGACY_WERROR)
+    # Linker warnings too (LNK4xxx).
+    target_link_options(plegacy PRIVATE /WX)
+endif()
+
 
 # ---------------------------------------------------------
 #  Release packaging targets
@@ -577,18 +605,6 @@ if(UNIX AND NOT APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "Haiku")
                 "${PLEGACY_VERSION_FULL}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Packaging Linux AppImage v${PLEGACY_VERSION_FULL}"
-        VERBATIM
-    )
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
-    add_custom_target(release_haiku
-        DEPENDS plegacy
-        COMMAND "${PLEGACY_TOOLS_DIR}/package_haiku_zip.sh"
-                "${CMAKE_BINARY_DIR}"
-                "${PLEGACY_VERSION_FULL}"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Packaging Haiku ZIP v${PLEGACY_VERSION_FULL}"
         VERBATIM
     )
 endif()

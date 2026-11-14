@@ -330,8 +330,9 @@ void Renderer::render_gpu() {
       if (cursor_tex_) {
         SDL_DestroyTexture(cursor_tex_);
       }
-      SDL_Surface_unique_ptr rgba =
-          to_sdl_surface(*cursor_sprite, 1.0f, scale_);
+      SDL_Surface_unique_ptr rgba = CursorManager::smooth_picture(
+          *cursor_sprite, cursor_sprite->width() * scale_,
+          cursor_sprite->height() * scale_);
       cursor_tex_ = SDL_CreateTextureFromSurface(r, rgba.get());
       if (cursor_tex_) {
         SDL_SetTextureBlendMode(cursor_tex_, SDL_BLENDMODE_BLEND);

@@ -60,8 +60,9 @@ MenuMain::MenuMain(GameContext& context, GameState& state)
       .color = 11,
   };
   {
-    std::string version_str =
-        std::string("Pizza Legacy version ") + game_meta::VERSION;
+    std::string version_str = std::string(game_meta::PRODUCT) + " " +
+                              game_meta::VERSION + " (Pizza Legacy " +
+                              game_meta::UPSTREAM_VERSION + ")";
 #ifndef NDEBUG
     version_str += " (DEBUG)";
 #endif

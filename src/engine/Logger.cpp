@@ -5,10 +5,25 @@
  */
 
 #include "engine/Logger.h"
+#include <algorithm>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <mutex>
 #include "engine/FormatCompat.h"
 
-std::vector<Logger::SinkFunc>& Logger::sinks_() {
-  static std::vector<SinkFunc> v;
+namespace {
+// Recursive: a sink may log (a warning about itself, say).
+std::recursive_mutex& log_mutex() {
+  static std::recursive_mutex m;
+  return m;
+}
+Logger::SinkId next_sink_id = 1;
+} // namespace
+
+std::vector<Logger::Sink>& Logger::sinks_() {
+  static std::vector<Sink> v;
   return v;
 }
 
@@ -31,15 +46,85 @@ Logger::TimePoint& Logger::last_time_() {
   return t;
 }
 
-void Logger::add_sink(SinkFunc sink) { sinks_().push_back(std::move(sink)); }
+Logger::SinkId Logger::add_sink(SinkFunc sink, std::optional<LogLevel> min) {
+  std::lock_guard lock(log_mutex());
+  const SinkId id = next_sink_id++;
+  sinks_().push_back({id, std::move(sink), min});
+  return id;
+}
 
-void Logger::clear_sinks() { sinks_().clear(); }
+void Logger::remove_sink(SinkId id) {
+  std::lock_guard lock(log_mutex());
+  std::erase_if(sinks_(), [id](const Sink& s) { return s.id == id; });
+}
 
-void Logger::global_min_level(LogLevel lvl) { min_lvl_() = lvl; }
-LogLevel Logger::global_min_level() { return min_lvl_(); }
+void Logger::clear_sinks() {
+  std::lock_guard lock(log_mutex());
+  sinks_().clear();
+}
+
+void Logger::global_min_level(LogLevel lvl) {
+  std::lock_guard lock(log_mutex());
+  min_lvl_() = lvl;
+}
+
+LogLevel Logger::global_min_level() {
+  std::lock_guard lock(log_mutex());
+  return min_lvl_();
+}
+
+std::string Logger::start_log_file(const std::string& folder, int keep) {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  fs::create_directories(folder, ec);
+  // Oldest first by name (the names sort by time): keep the newest keep-1
+  // plus the one started now.
+  std::vector<fs::path> old;
+  for (const auto& entry : fs::directory_iterator(folder, ec)) {
+    const auto name = entry.path().filename().string();
+    if (entry.is_regular_file(ec) && name.starts_with("plegacy-") &&
+        name.ends_with(".log")) {
+      old.push_back(entry.path());
+    }
+  }
+  std::sort(old.begin(), old.end());
+  while (!old.empty() && static_cast<int>(old.size()) > std::max(0, keep - 1)) {
+    fs::remove(old.front(), ec);
+    old.erase(old.begin());
+  }
+  const std::time_t now = std::time(nullptr);
+  std::tm local{};
+#if defined(_WIN32)
+  localtime_s(&local, &now);
+#else
+  localtime_r(&now, &local);
+#endif
+  char stamp[32];
+  std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &local);
+  const fs::path path =
+      fs::path(folder) / ("plegacy-" + std::string(stamp) + ".log");
+  auto file =
+      std::make_shared<std::ofstream>(path, std::ios::out | std::ios::trunc);
+  if (!*file) {
+    return {};
+  }
+  add_sink(
+      [file](LogLevel lvl, const std::string& msg) {
+        // Flushed per line: the log is for finding out what happened
+        // before a crash.
+        *file << level_prefix(lvl) << msg << '\n' << std::flush;
+      },
+      LogLevel::Info);
+  return path.string();
+}
 
 void Logger::log(LogLevel lvl, const std::string& msg) {
-  if (lvl < min_lvl_()) {
+  std::lock_guard lock(log_mutex());
+  LogLevel lowest = min_lvl_();
+  for (const auto& s : sinks_()) {
+    lowest = std::min(lowest, s.min.value_or(min_lvl_()));
+  }
+  if (lvl < lowest) {
     return;
   }
 
@@ -58,8 +143,12 @@ void Logger::log(LogLevel lvl, const std::string& msg) {
   auto stamped = compat::format("[{}.{:03d} +{}.{:03d}ms] {}", elapsed_s,
                                 elapsed_ms, delta_ms, delta_us, msg);
 
-  for (auto& s : sinks_()) {
-    s(lvl, stamped);
+  // A copy: a sink that logs must not see the list change under it.
+  const auto sinks = sinks_();
+  for (const auto& s : sinks) {
+    if (lvl >= s.min.value_or(min_lvl_())) {
+      s.func(lvl, stamped);
+    }
   }
 }
 

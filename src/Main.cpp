@@ -29,11 +29,19 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+
+// On laptops with two GPUs, ask the NVIDIA and AMD drivers for the fast one:
+// they look for these exported names in the program itself.
+extern "C" {
+__declspec(dllexport) DWORD NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
 #endif
 
 namespace { // anonymous
 [[noreturn]] void version() {
-  std::cout << "Version: Pizza Legacy " << game_meta::VERSION << "\n";
+  std::cout << "Version: " << game_meta::PRODUCT << " " << game_meta::VERSION
+            << " (Pizza Legacy " << game_meta::UPSTREAM_VERSION << ")\n";
   std::cout << "Copyright: 2026 Cowomaly\n";
   std::cout << "License: GPL-3.0-or-later\n";
   std::cout << "Website: https://pizzalegacy.nl/\n";

@@ -8,8 +8,10 @@
 #include <algorithm>
 #include <cmath>
 
+#include <vector>
 #include "engine/DisplayConstants.h"
 #include "engine/Renderer.h"
+#include "engine/gfx/Mmpx.h"
 #include "engine/gfx/Surface.h"
 #include "resources/Upscaling.h"
 
@@ -186,6 +188,45 @@ void CursorManager::update_palette(gfx::PaletteHandle palette) {
   }
 }
 
+SDL_Surface_unique_ptr CursorManager::smooth_picture(const Surface& surface,
+                                                     int out_w, int out_h) {
+  out_w = std::max(1, out_w);
+  out_h = std::max(1, out_h);
+  SDL_Surface_unique_ptr big;
+  const int k = gfx::hd_scale();
+  if (surface.has_hd() && k > 1) {
+    big = Renderer::to_sdl_surface(surface, 1.0f, k);
+  }
+  else {
+    int w = surface.width();
+    int h = surface.height();
+    std::vector<uint8_t> px(surface.pixels().begin(), surface.pixels().end());
+    const gfx::LumaTable luma = gfx::luma_table(surface.palette());
+    constexpr int max_side = 1024;
+    while ((w < out_w || h < out_h) && w * 2 <= max_side && h * 2 <= max_side) {
+      std::vector<uint8_t> next(static_cast<std::size_t>(w) * h * 4);
+      gfx::mmpx(px.data(), w, w, h, next.data(), w * 2, gfx::UpscaleEdge::Blank,
+                luma);
+      px.swap(next);
+      w *= 2;
+      h *= 2;
+    }
+    Surface up = Surface::from_indexed(px, w, h, surface.palette(), 1,
+                                       gfx::Upscaler::Double);
+    up.colors() = surface.colors();
+    big = Renderer::to_sdl_surface(up);
+  }
+  if (!big || (big->w == out_w && big->h == out_h)) {
+    return big;
+  }
+  SDL_Surface_unique_ptr out{SDL_CreateSurface(out_w, out_h, big->format)};
+  if (out) {
+    SDL_BlitSurfaceScaled(big.get(), nullptr, out.get(), nullptr,
+                          SDL_SCALEMODE_LINEAR);
+  }
+  return out;
+}
+
 void CursorManager::hw_apply_cursor(const Surface& source_surface,
                                     bool centered) {
   hw_free_cursor();
@@ -198,10 +239,8 @@ void CursorManager::hw_apply_cursor(const Surface& source_surface,
   if (std::abs(scale_x - 1.f) > 0.01f || std::abs(scale_y - 1.f) > 0.01f) {
     int scaled_w = int(sdl_src->w * scale_x);
     int scaled_h = int(sdl_src->h * scale_y);
-    SDL_Surface_unique_ptr sdl_scaled{
-        SDL_CreateSurface(scaled_w, scaled_h, sdl_src->format)};
-    SDL_BlitSurfaceScaled(sdl_src.get(), nullptr, sdl_scaled.get(), nullptr,
-                          SDL_SCALEMODE_NEAREST);
+    SDL_Surface_unique_ptr sdl_scaled =
+        smooth_picture(source_surface, scaled_w, scaled_h);
 
     int hot_x = centered ? scaled_w / 2 : 0;
     int hot_y = centered ? scaled_h / 2 : 0;

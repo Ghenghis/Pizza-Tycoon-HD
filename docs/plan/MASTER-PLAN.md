@@ -21,7 +21,7 @@ A finished document, build or agent run never counts as verified. Nothing in thi
 
 | Where | Head | Contents |
 |---|---|---|
-| PC checkout `C:\Users\Admin\Pizza-Tycoon-HD-Work\repo` | `94d616e` | HD text v1. This is what the Codex review read. |
+| PC checkout `<work>\repo` (`<work>` is the Pizza-Tycoon-HD-Work folder on the owner's PC) | `94d616e` | HD text v1. This is what the Codex review read. |
 | Cloud checkout (integrator) | `8b92b4f` plus uncommitted work | `8b92b4f`: blueprint and HD audit. Uncommitted: render and perf work W00 (see below). |
 | GitHub `Ghenghis/Pizza-Tycoon-HD` main | `94d616e` | `8b92b4f` is not pushed yet. It goes up with W00, once the gates pass. |
 
@@ -134,7 +134,7 @@ The new docs are `WORLD-REGIONS-AND-PAGINATION.md`, `REGIONAL-ART-STORIES-AND-SE
 
 ### Asset inventory
 
-Read from `C:\Users\Admin\Pizza-Tycoon-HD-Work\world-region-art\ASSET-INDEX.json`. Its own status line reads: "candidate asset library; no runtime integration or gameplay acceptance".
+Read from `<work>\world-region-art\ASSET-INDEX.json`. Its own status line reads: "candidate asset library; no runtime integration or gameplay acceptance".
 
 | Set | Count | State |
 |---|---|---|

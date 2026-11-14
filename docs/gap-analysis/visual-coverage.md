@@ -10,7 +10,7 @@ Inputs: `docs/blueprint/screens.md` (screen list), `docs/blueprint/file-formats.
 `src/resources/Font.cpp`, `HdTypeface.*`, `src/engine/ui/CursorManager.*`,
 `src/engine/LightPass.cpp`, `src/views/**`), the pack tools (`tools/hdpack/*`,
 `data/fonts/hd_fonts.json`), a file listing of the local game folder, and the local export and
-packs (`/home/claude/w/export`, `pack6`, `/tmp/pack12`). The exports were looked at only to
+packs (an export of the original art, `pack6`, `pack12`). The exports were looked at only to
 find out which pictures carry lettering. No original art or text is reproduced here; assets
 are named by file only.
 

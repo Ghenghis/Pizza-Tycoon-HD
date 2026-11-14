@@ -46,6 +46,14 @@ public:
   const gfx::Surface* software_cursor_sprite() const;
   bool software_cursor_centered() const;
 
+  // A cursor picture at out_w x out_h screen pixels, smooth at any size:
+  // from its HD texels when it has them, else from its indexed pixels
+  // doubled with MMPX until at least that big (clean diagonals for pixel
+  // art), then filtered to the size wanted. Hardware and software cursors
+  // both use it, so the arrow is never a blow-up of 11x11 pixels.
+  [[nodiscard]] static SDL_Surface_unique_ptr
+  smooth_picture(const gfx::Surface& surface, int out_w, int out_h);
+
 private:
   // sync_hardware_cursor() is what turns cursor state into SDL cursor state. In
   // software mode this is a noop (because our renderer draws the cursor).

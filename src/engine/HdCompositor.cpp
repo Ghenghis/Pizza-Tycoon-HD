@@ -626,14 +626,58 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
   }
   flush_atlas();
   std::size_t pos = 0;
+  batch_tex_ = nullptr;
   for (std::size_t i = 0; i < cmds.size(); ++i) {
-    draw_runs(runs_, pos, static_cast<uint32_t>(i), k);
+    if (pos < runs_.size() && runs_[pos].floor == i) {
+      flush_batch();
+      draw_runs(runs_, pos, static_cast<uint32_t>(i), k);
+    }
     const gfx::HdCmd& c = cmds[i];
     const Placed at = locate(c.img);
     SDL_Texture* tex = at.tex;
     if (!tex) {
       continue;
     }
+    if (!c.half) {
+      // 1:1 copies (sprites, text, letters) go into one triangle list per
+      // texture: a screen of text is hundreds of letters, and a draw call
+      // each was the biggest cost on Direct3D.
+      if (tex != batch_tex_) {
+        flush_batch();
+        batch_tex_ = tex;
+      }
+      const SDL_FColor colour =
+          c.tint != 0
+              ? SDL_FColor{fade * static_cast<float>(gfx::red(c.tint)) / 255.0f,
+                           fade * static_cast<float>(gfx::green(c.tint)) /
+                               255.0f,
+                           fade * static_cast<float>(gfx::blue(c.tint)) /
+                               255.0f,
+                           1.0f}
+              : SDL_FColor{fade, fade, fade, 1.0f};
+      // The same corners and texture coordinates SDL_RenderTexture makes.
+      const auto tw = static_cast<float>(tex->w);
+      const auto th = static_cast<float>(tex->h);
+      const float u0 = static_cast<float>(c.sx + at.x) / tw;
+      const float v0 = static_cast<float>(c.sy + at.y) / th;
+      const float u1 = static_cast<float>(c.sx + at.x + c.sw) / tw;
+      const float v1 = static_cast<float>(c.sy + at.y + c.sh) / th;
+      const auto x0 = static_cast<float>(c.dx);
+      const auto y0 = static_cast<float>(c.dy);
+      const auto x1 = static_cast<float>(c.dx + c.dw());
+      const auto y1 = static_cast<float>(c.dy + c.dh());
+      const auto first = static_cast<int>(batch_vertices_.size());
+      batch_vertices_.push_back({{x0, y0}, colour, {u0, v0}});
+      batch_vertices_.push_back({{x1, y0}, colour, {u1, v0}});
+      batch_vertices_.push_back({{x1, y1}, colour, {u1, v1}});
+      batch_vertices_.push_back({{x0, y1}, colour, {u0, v1}});
+      for (int v : {0, 1, 2, 0, 2, 3}) {
+        batch_indices_.push_back(first + v);
+      }
+      ++stats_.quads;
+      continue;
+    }
+    flush_batch();
     if (c.tint != 0) {
       // A coverage mask (white): the colour is the GPU's modulation.
       SDL_SetTextureColorModFloat(
@@ -654,5 +698,22 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
     SDL_RenderTexture(renderer_, tex, &src, &dst);
     ++stats_.quads;
   }
+  flush_batch();
   draw_runs(runs_, pos, static_cast<uint32_t>(cmds.size()), k);
+}
+
+void HdCompositor::flush_batch() {
+  if (batch_tex_ && !batch_indices_.empty()) {
+    // The colour (fade, text colour) is in the vertices.
+    SDL_SetTextureColorModFloat(batch_tex_, 1.0f, 1.0f, 1.0f);
+    SDL_SetTextureScaleMode(batch_tex_, SDL_SCALEMODE_NEAREST);
+    SDL_RenderGeometry(renderer_, batch_tex_, batch_vertices_.data(),
+                       static_cast<int>(batch_vertices_.size()),
+                       batch_indices_.data(),
+                       static_cast<int>(batch_indices_.size()));
+    ++stats_.batches;
+  }
+  batch_vertices_.clear();
+  batch_indices_.clear();
+  batch_tex_ = nullptr;
 }

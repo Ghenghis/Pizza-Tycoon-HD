@@ -88,6 +88,7 @@ public:
   // Stats of the last draw_layer, for tests and the frame-time overlay.
   struct Stats {
     std::size_t quads = 0;     // HD pictures drawn
+    std::size_t batches = 0;   // draw calls they took (1:1 ones are batched)
     std::size_t base_runs = 0; // indexed pixel runs redrawn between them
   };
   [[nodiscard]] const Stats& last_stats() const noexcept { return stats_; }
@@ -145,6 +146,8 @@ private:
   };
 
   void upload_base(const gfx::Surface& layer, float fade);
+  // Draws the quads gathered for batch_tex_ in one call.
+  void flush_batch();
   void draw_runs(const std::vector<Run>& runs, std::size_t& pos, uint32_t floor,
                  int k);
   void evict(Entry& e);
@@ -172,6 +175,9 @@ private:
   int base_h_ = 0;
   std::vector<uint32_t> scratch_;
   std::vector<Run> runs_;
+  SDL_Texture* batch_tex_ = nullptr;
+  std::vector<SDL_Vertex> batch_vertices_;
+  std::vector<int> batch_indices_;
   uint64_t frame_ = 1;
   std::size_t bytes_ = 0;
   std::size_t budget_ = std::size_t{1536} << 20; // 1.5 GiB of textures
