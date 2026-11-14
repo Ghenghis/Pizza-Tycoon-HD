@@ -17,13 +17,52 @@ Status words are strict:
 
 A finished document, build or agent run never counts as verified. Nothing in this file is verified unless an evidence link says so.
 
-## Source lineage
+## Source lineage and evidence ledger
 
 | Where | Head | Contents |
 |---|---|---|
-| PC checkout `<work>\repo` (`<work>` is the Pizza-Tycoon-HD-Work folder on the owner's PC) | `94d616e` | HD text v1. This is what the Codex review read. |
-| Cloud checkout (integrator) | `8b92b4f` plus uncommitted work | `8b92b4f`: blueprint and HD audit. Uncommitted: render and perf work W00 (see below). |
-| GitHub `Ghenghis/Pizza-Tycoon-HD` main | `94d616e` | `8b92b4f` is not pushed yet. It goes up with W00, once the gates pass. |
+| PC checkout `<work>\repo` (`<work>` is the Pizza-Tycoon-HD-Work folder on the owner's PC) | `94d616e` | HD text v1; what the Codex review read |
+| GitHub `main` | `94d616e` | Moves forward only after the PC gates pass |
+| GitHub `integration/2026-11-14` | `39c56ee` | Every integrated commit below. Use it as an immutable baseline for the AMD worker. |
+| Bundle for the AMD worker | `<work>\bundles\pizza-tycoon-hd-94d616e..39c56ee.bundle` | `94d616e..39c56ee`, sha256 `b0513dc31cb0fb49d429dc2e5b99edb849c01fc070783ed3debb56a2192a61c7`; tree `ea5e47230b4bd9d424f123c12e38dda2a9a5f2a8` |
+
+### Integrated commits (oldest first)
+
+| Commit | What | Lane |
+|---|---|---|
+| `8b92b4f` | Blueprint docs; HD audit | blueprint agent |
+| `15c9a2a` | Glyph sheets, atlas pages, ARGB8888 textures, pooled targets, device reset, upload failures, bench breakdown | integrator |
+| `97a253e` | Audio mixing and atomics, PNG budgets, prefetch boundary, manifest containment | platform agent |
+| `0507159` | CI gates, scans, docs, Pillow 13, black 26.10 | quality agent |
+| `4303862` | Batched quads, smooth cursor, log file, Optimus exports, single version 1.1.0, warnings as errors | integrator |
+| `1582b96` | Atomic saves, settings and bindings; bounded and validated loads; the scratch-state commit | persistence agent |
+| `1fd2a9e` | Studio location, content and save contract (design only) | architect agent |
+| `223f5ef` | F7: 1994 look; F8: 1994 and HD side by side | integrator |
+| `9c5b776` | No geometry batching on SDL's software renderer (premultiplied blend bug there) | integrator |
+| `39c56ee` | Contract decisions from the owner; references to the unrelated projects removed | integrator |
+
+### Test and gate results
+
+Clean worktree `integ`; cloud build lane with 2 cores.
+
+| Build | Result |
+|---|---|
+| Round 1: `15c9a2a` plus the audio patch | 60 cases: 58 passed, 2 skipped; [audio] and [budget] 16 of 16; 0 warnings |
+| Round 2: `1fd2a9e` (warnings as errors) | 85 cases: 78 passed, 1 **failed**, 6 skipped. The failure is the tinted-coverage GPU/CPU test (254/255); `9c5b776` fixes it. [audio], [budget] and [save] all passed. The Windows build was stopped, as `39c56ee` replaces it. |
+| Round 3: `39c56ee` | Running: tests, then the Windows exe |
+| PC: `PizzaTycoonHD-text-9.exe` (glyph sheets, before the ARGB, base-texture and batching changes) | Steady avg 3.3–4.3 ms, p99 5.0–5.7 ms. First frame **16.8–17.4 ms: FAILS** the 16 ms gate. HD text off: 10.7–11.8 ms. |
+| PC gates for round 3 | **Blocked.** The broker denied this request at rev 16/17 while the workstation freezes were being diagnosed. `bench-gate.ps1` is ready and parse-checked; a fresh grant is needed. |
+
+### Lanes and their current tasks
+
+| Lane | Status | Current task |
+|---|---|---|
+| Integrator (build lane) | active | Round 3 build; PC bench gate when granted; then play folder (with rollback), `main` and a release |
+| Core/catalog (former architect) | assigned | Steps 0–2 of the contract: golden Classic fingerprints, content keys, per-game roster. On the path to Santa's Pizza Village, the first playable slice |
+| Persistence | assigned | `checked_enum` for the 16 enum casts; atomic recipe, fingerprint and mission writers; cleanup of stale temp files; design note for `GameState::adopt_loaded` |
+| Platform/audio | assigned | Audio device loss and change recovery, mute on focus loss, master volume; path containment in the other pack tools; music-library design (R35) |
+| Quality/release | assigned | Screen-coverage gate (N14); release gate (unpack, allowlist, checksums, smoke run); workflow for the owner's self-hosted runner |
+| AMD worker | parent received the `94d616e` baseline | Use `integration/2026-11-14` (`39c56ee`) or the bundle; don't repeat the newer fixes |
 
 ## Owner decisions (fixed inputs)
 
@@ -76,9 +115,9 @@ The reliability work and the first playable slice come before broad command expa
 | 6 | **Single version source, tags, release gate** (exe plus zip plus checksums; the bare exe must not depend on a missing `data/`) | R20 | quality agent, then integrator | in progress |
 | 7 | **Docs match the code:** 20 stale claims; SECURITY risky surfaces; ARCHITECTURE covers the GPU draw-list path | R21 | quality agent | in progress |
 | 8 | **W02 location/content/save contract:** inventory of fixed-city uses, stable IDs, LocationDefinition schema, save contract, regions and paging, fixtures | R04 R05 R08 R11 | architect agent | in progress |
-| 9 | **Classic/HD instant toggle and compare slider**, plus HD settings in the menus (Auto scale, pack picker, presets) | R19 | integrator | planned |
+| 9 | **Classic/HD instant toggle and compare slider** (F7/F8, `223f5ef`), plus HD settings in the menus (Auto scale, pack picker, presets) | R19 | integrator | toggle and compare implemented (not yet verified on the PC); options page planned |
 | 10 | **HD visual gaps, top tier:** HD cursor with sub-pixel motion (H1, N3); city far map (H4); portraits (H3); newspaper paper (N1); feathered sprite edges (H2); hatching and diagonal primitives (M2, M3) drawn with tinted HD commands | R12 R27 | integrator plus art lane | planned |
-| 11 | **Log file, crash dump, portable mode;** audio focus mute and master volume | R17 R26 | platform agent (next) | planned |
+| 11 | **Log file** (`4303862`), crash dumps, portable mode; mute on focus loss and master volume | R17 R26 | integrator / platform agent | log file implemented; the rest assigned |
 | 12 | **W03 first playable generated location:** one trading day and a fresh-process reload | R05 R06 R11 | core agent (after #8) | planned |
 | 13 | **W04 native Studio entry:** Quick Create, browser with previous and next, one command and undo model | R07 R08 R09 | Studio agent (after #8) | planned |
 | 14 | **W05 input parity:** touch commit and cancel semantics, gamepad pointer | R10 | platform agent | planned |
@@ -165,3 +204,15 @@ Read from `<work>\world-region-art\ASSET-INDEX.json`. Its own status line reads:
 
 - **3090 Ti:** under the shared-GPU broker. Codex holds grant rev13 until 18:50 UTC and will stop, unload and release the card explicitly. Until it does: **no GPU work, no game runs and no ComfyUI batch from this lane.** This includes the PC gate runs, because the game itself uses the GPU. After that, check the broker and request a fresh grant before each batch.
 - **AMD PC:** offline over Chrome Remote Desktop since 11:03 Phoenix. It is not counted as a live worker.
+
+### Recording and private music (R34, R35)
+
+Source: `RECORDING-AND-MUSIC.md`. These come after the reliability work and the playable slice.
+
+- **R35 private music library.** Original, My music and Off; named playlists; imports chosen from local files or Drive, kept with their source IDs and hashes; decoding on a bounded worker; optional playlists for events. Barros Pizza and PC3 are unrelated projects, and nothing from them is reused.
+- **R34 game-only recording.**
+  - Explicit start and stop with an indicator; 60 minutes by default.
+  - A codec is offered only after it has actually been opened on that machine. NVENC H.264/HEVC on Ampere; no AV1 there. AMF on the RX 7800 XT once probed.
+  - Recoverable segments, a byte quota and a free-space reserve.
+  - The official FFmpeg/SDK setup is approved by the owner.
+- **Owner's lane: platform/audio, design first** (`docs/studio/notes/music-library.md`). Recording follows the playable slice.
