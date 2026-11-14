@@ -7,6 +7,7 @@
 #include "GameCommands.h"
 #include "core/content/Findings.h"
 #include "core/content/ShippedScenarios.h"
+#include "core/debug/ScriptedPlayer.h"
 #include "core/events/CareerLog.h"
 #include "core/events/MilestoneId.h"
 #include "core/food/PizzaJudging.h"
@@ -1332,6 +1333,75 @@ Examples:
   };
 }
 
+static CommandDef make_game_dismiss() {
+  return CommandDef{
+      .name = "dismiss",
+      .description = "Close every dialog, as a scripted player does",
+      .help_text = R"(Usage: game dismiss
+
+Closes whatever is above the city view the way a person who closes every
+dialog at once does: each dialog is told it was closed, the year's pizza
+competition gets no entry, and the end-of-day report is dismissed. The same
+on every run, so a script plays the same game every time. Stops at a game
+over. `game day` does this as it plays.
+)",
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        const std::size_t before = ctx.state.ui().size();
+        debug::scripted::close_dialogs(ctx.state);
+        return CommandResult::success().add_message(compat::format(
+            "Closed {} dialog(s)", before > ctx.state.ui().size()
+                                       ? before - ctx.state.ui().size()
+                                       : 0));
+      },
+  };
+}
+
+static CommandDef make_game_day() {
+  return CommandDef{
+      .name = "day",
+      .description = "Play whole days, as a scripted player does",
+      .help_text = R"(Usage: game day [n]
+
+Plays n days (default 1) as a person who ends each day at once and closes
+every dialog the moment it appears: the person's turn ends, the simulation
+runs (the computer players' turns, the night, the morning) and stops once the
+person's next day has begun. The same on every run, so `dump fingerprint`
+after it can be compared between runs.
+
+Example:
+  game day 7
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "count",
+                  .type = ArgType::Int,
+                  .optional = true,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Number of days (default 1)",
+                  .min_value = 1,
+                  .max_value = 3650,
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        if (!ctx.state.active_player()) {
+          return CommandResult::error("No game in progress");
+        }
+        const int days = ctx.has_arg(0) ? static_cast<int>(ctx.int_arg(0)) : 1;
+        for (int i = 0; i < days; ++i) {
+          if (!debug::scripted::play_day(ctx.state)) {
+            return CommandResult::error(compat::format(
+                "Day {} of {} did not end within {} ticks; now {}", i + 1, days,
+                debug::scripted::max_ticks_per_day,
+                ctx.state.time().to_string()));
+          }
+        }
+        return CommandResult::success().add_message(compat::format(
+            "Played {} day(s); now {}", days, ctx.state.time().to_string()));
+      },
+  };
+}
+
 CommandDef make_game_commands() {
   return CommandDef{
       .name = "game",
@@ -1355,6 +1425,8 @@ CommandDef make_game_commands() {
       .add_subcommand(make_game_realtime())
       .add_subcommand(make_game_turn())
       .add_subcommand(make_game_tick())
+      .add_subcommand(make_game_dismiss())
+      .add_subcommand(make_game_day())
       .add_subcommand(make_game_scenario());
 }
 

@@ -7,7 +7,9 @@
 #include "core/debug/commands/CityCommands.h"
 
 #include <algorithm>
+#include <charconv>
 #include <string>
+#include <system_error>
 #include <vector>
 #include "core/character/Actor.h"
 #include "core/character/AiMenuSlot.h"
@@ -456,20 +458,26 @@ static CommandDef make_rent() {
   return CommandDef{
       .name = "rent",
       .description = "Rent a premise for the active player",
-      .help_text = R"(Usage: city rent <index>
+      .help_text = R"(Usage: city rent <index|cheapest>
 
 Rents the premise at a map index for the active player, as agreeing to a
-realtor's rent does, and opens a restaurant there.
+realtor's rent does, and opens a restaurant there. 'cheapest' rents the free
+premise with the lowest monthly rent (the first of them in the city's order),
+so a script needs no map index. The new restaurant becomes the active one, so
+the next command can name it '@'.
+
+Examples:
+  city rent 6407
+  city rent cheapest
 )",
       .args =
           {
               ArgSpec{
                   .name = "index",
-                  .type = ArgType::Int,
+                  .type = ArgType::String,
                   .optional = false,
-                  .description = "Map index of the premise",
-                  .min_value = 0,
-                  .max_value = MAP_TILES_PER_ROW * MAP_TILES_PER_COLUMN - 1,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Map index of the premise, or cheapest",
               },
           },
       .handler = [](const CommandContext& ctx) -> CommandResult {
@@ -478,21 +486,46 @@ realtor's rent does, and opens a restaurant there.
         if (!city || !player) {
           return CommandResult::error("No active city or player");
         }
-        const auto index = static_cast<int>(ctx.int_arg(0));
-        auto* property = city->property_by_index(index);
-        if (!property || property->type() != PropertyType::BUSINESS_PREMISE ||
-            !property->is_for_rent()) {
-          return CommandResult::error(
-              compat::format("No premise for rent at index {}", index));
+        const std::string which = ctx.string_arg(0);
+        Property* property = nullptr;
+        if (which == "cheapest") {
+          for (Property* p : city->business_premises()) {
+            if (p->is_for_rent() && !p->has_restaurant() &&
+                (!property ||
+                 p->get_monthly_rent() < property->get_monthly_rent())) {
+              property = p;
+            }
+          }
+          if (!property) {
+            return CommandResult::error("No premise is for rent");
+          }
+        }
+        else {
+          int index = -1;
+          const auto [ptr, ec] =
+              std::from_chars(which.data(), which.data() + which.size(), index);
+          if (ec != std::errc{} || ptr != which.data() + which.size() ||
+              index < 0 || index >= MAP_TILES_PER_ROW * MAP_TILES_PER_COLUMN) {
+            return CommandResult::error(compat::format(
+                "Expected a map index or cheapest, got '{}'", which));
+          }
+          property = city->property_by_index(index);
+          if (!property || property->type() != PropertyType::BUSINESS_PREMISE ||
+              !property->is_for_rent()) {
+            return CommandResult::error(
+                compat::format("No premise for rent at index {}", index));
+          }
         }
         auto* restaurant =
             ctx.state.real_estate().rent_restaurant(*property, *player);
         if (!restaurant) {
           return CommandResult::error("Could not rent the premise");
         }
+        // So a following command can reach it as '@'.
+        ctx.state.active_restaurant(restaurant->id());
         return CommandResult::success().add_message(
-            compat::format("Rented premise {} as restaurant {}", index,
-                           restaurant->id().value));
+            compat::format("Rented premise {} as restaurant {}",
+                           property->index(), restaurant->id().value));
       },
   };
 }

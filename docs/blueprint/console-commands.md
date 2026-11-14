@@ -184,6 +184,7 @@ Defined by `make_restaurant_commands()` in `src/core/debug/commands/RestaurantCo
 | `restaurant furniture` |  | - | Manage restaurant furniture (group) |
 | `restaurant furniture list` |  | `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | List all furniture in restaurant |
 | `restaurant info` |  | `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Show restaurant information |
+| `restaurant menu` |  | `<dollars:Int>` `[restaurant_id:RestaurantId]` | Put the owner's standard pizzas on the menu at one price |
 | `restaurant inspection-timer` |  | `<days:Int>` `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Set the mayor inspection countdown on a restaurant |
 | `restaurant open` |  | `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Open a restaurant for business |
 | `restaurant qs` |  | `[city_id:CityId]` `[player_id:PlayerId]` | Quick start: Create fully functional restaurant |
@@ -317,6 +318,8 @@ Defined by `make_game_commands()` in `src/core/debug/commands/GameCommands.cpp`.
 | `game competition monthly` |  | - | Trigger the monthly pizza competition |
 | `game date` |  | - | Date management (runs, and has sub-commands) |
 | `game date set` |  | `<date:String>` | Set the game date |
+| `game day` |  | `[count:Int]` | Play whole days, as a scripted player does (ends each day at once, closes every dialog) |
+| `game dismiss` |  | - | Close every dialog, as a scripted player does |
 | `game end` |  | `<cause:String>` | Trigger game over for the active player |
 | `game exit` | `quit` | - | Exit the game |
 | `game levent` |  | `<id:Int>` | Fire a life event (CV milestone) for the active player |
@@ -387,9 +390,11 @@ Defined by `make_nav_commands()` in `src/core/debug/commands/NavCommands.cpp`.
 | `nav gameloc` |  | - | game location |
 | `nav globalstats` | `gs` | `[screen:Int]` | Navigate to the company statistics screens |
 | `nav intro` | `is` | - | intro screen |
+| `nav kitchen` | `kv` | `[restaurant_id:RestaurantId]` | Navigate to a restaurant's kitchen |
 | `nav load` |  | - | game load menu |
 | `nav main` | `mm` | - | main menu |
 | `nav ng` |  | - | new game menu |
+| `nav northpole` | `np` | - | North Pole preset chooser |
 | `nav op` |  | `[section:String]` | Navigate to the options menu |
 | `nav order` |  | `<category:String>` `<supplier_id:Int>` `[depot:String]` | Navigate to an ingredient order screen |
 | `nav pizza` |  | - | Pizza designer/recipes (group) |
@@ -404,6 +409,7 @@ Defined by `make_nav_commands()` in `src/core/debug/commands/NavCommands.cpp`.
 | `nav stock` | `st` | `[category:String]` | Stock management |
 | `nav suppliers` | `sl` | - | Supplier list |
 | `nav terminal` | `tm` | - | Terminal |
+| `nav worldmap` | `wm` | `[view:String]` | Expanded world map, browse only (a region id, 0-7, `bonus` or 8) |
 
 Argument details:
 
@@ -567,7 +573,7 @@ Defined by `make_city_commands()` in `src/core/debug/commands/CityCommands.cpp`.
 | `city districts` |  | `[city_id:CityId]` | List the active city's districts |
 | `city investigation` |  | `<district_id:Int>` | Set the district id the police are investigating |
 | `city property` | `properties` | `[index:Int]` | Show premises with their price, rent and realtor |
-| `city rent` |  | `<index:Int>` | Rent a premise for the active player |
+| `city rent` |  | `<index:String>` | Rent a premise for the active player (a map index, or `cheapest`); the new restaurant becomes the active one |
 | `city suppliers` |  | - | List the active city's food suppliers |
 
 Argument details:
@@ -579,7 +585,7 @@ Argument details:
 | `city districts` | `city_id` | CityId | no | min 0; max 9; default: ActiveCity | City ID (@ for active city) |
 | `city investigation` | `district_id` | Int | yes | min 0; max 255 | District id to investigate |
 | `city property` | `index` | Int | no |  | Map index of a single premise |
-| `city rent` | `index` | Int | yes | min 0; max MAP_TILES_PER_ROW * MAP_TILES_PER_COLUMN - 1 | Map index of the premise |
+| `city rent` | `index` | String | yes | a map index (0 .. MAP_TILES_PER_ROW * MAP_TILES_PER_COLUMN - 1) or `cheapest` | Map index of the premise, or cheapest |
 
 Usage lines from the help text:
 
@@ -590,7 +596,7 @@ Usage lines from the help text:
 * `city districts [city_id]`
 * `city investigation <district_id>`
 * `city property [index]`
-* `city rent <index>`
+* `city rent <index|cheapest>`
 * `city suppliers`
 
 ### `mafia`

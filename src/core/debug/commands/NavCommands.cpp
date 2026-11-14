@@ -173,6 +173,49 @@ Examples:
   };
 }
 
+static CommandDef make_nav_kitchen() {
+  return CommandDef{
+      .name = "kitchen",
+      .aliases = {"kv"},
+      .description = "Navigate to a restaurant's kitchen",
+      .help_text = R"(Usage: nav kitchen <restaurant_id>
+
+Opens the restaurant view on its kitchen, as its kitchen button does.
+
+Examples:
+  nav kitchen @        # The active restaurant's kitchen
+  nav kitchen 0
+)",
+      .args =
+          {
+              active_restaurant_arg(),
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        auto rid = ctx.restaurant_id(0);
+        ctx.state.bootstrap_minimal_playable_world(ctx.context);
+        auto* rest = ctx.state.restaurant(rid);
+        if (!rest) {
+          return CommandResult::error(
+              compat::format("Restaurant {} does not exist", rid.value));
+        }
+        const auto city_id = rest->property().city().id();
+        if (city_id != ctx.state.active_city_id()) {
+          ctx.state.active_city(city_id);
+          if (auto* player = ctx.state.active_player()) {
+            ctx.state.on_city_entered(city_id, *player);
+          }
+        }
+        ctx.state.active_restaurant(rid);
+        ctx.state.ui().push<RestaurantViewState>(
+            RestaurantViewState{.id = rid,
+                                .mode = RestaurantViewMode::PLAYER_DEFAULT,
+                                .kitchen_view = true});
+        return CommandResult::success().add_message(compat::format(
+            "Navigated to the kitchen (restaurant {})", rid.value));
+      },
+  };
+}
+
 // Index of the week's takings button among the statistics screens.
 constexpr int weeks_takings_screen_index = 3;
 
@@ -521,6 +564,7 @@ CommandDef make_nav_commands() {
       // Views with arguments
       .add_subcommand(make_nav_cityview())
       .add_subcommand(make_nav_restaurant())
+      .add_subcommand(make_nav_kitchen())
       .add_subcommand(make_nav_stats())
       .add_subcommand(make_nav_globalstats())
       .add_subcommand(make_nav_profile())

@@ -24,6 +24,7 @@
 #include "core/content/LocationValidator.h"
 #include "core/content/Roster.h"
 #include "core/content/Scenario.h"
+#include "core/debug/ScriptedPlayer.h"
 #include "core/init/NewGameConfig.h"
 #include "core/state/CompetitionSession.h"
 #include "core/state/EndOfDayCause.h"
@@ -145,69 +146,16 @@ inline void start_classic_game(TestGame& game, std::uint32_t seed,
 // A person who closes every dialog at once, the same way on every run: what
 // is above the city view is popped and told it was closed, and the year's
 // pizza competition gets no entry. Calls seen(text) for each Maestro message.
+// The console's `game dismiss` and `game day` are the same player
+// (core/debug/ScriptedPlayer.h).
 inline void
 close_dialogs(GameState& state,
               const std::function<void(const std::string&)>& seen = nullptr) {
-  auto& ui = state.ui();
-  for (int guard = 0;
-       guard < 64 && ui.size() > 1 && !ui.is_top<CityViewState>(); ++guard) {
-    std::function<void()> closed;
-    if (auto* s = ui.top_as<FullscreenStatusState>()) {
-      closed = s->on_dismiss;
-    }
-    else if (auto* s = ui.top_as<MaestroMessageState>()) {
-      if (seen) {
-        seen(s->text);
-      }
-      closed = s->on_dismiss;
-    }
-    else if (auto* s = ui.top_as<PlayerTurnCardState>()) {
-      closed = s->on_closed;
-    }
-    else if (auto* s = ui.top_as<WeeksTakingsState>()) {
-      closed = s->on_done;
-    }
-    else if (auto* s = ui.top_as<PizzaJudgesState>()) {
-      closed = s->on_complete;
-    }
-    else if (auto* s = ui.top_as<PoliceState>()) {
-      closed = s->on_complete;
-    }
-    else if (auto* s = ui.top_as<MayorState>()) {
-      closed = s->on_complete;
-    }
-    else if (auto* s = ui.top_as<PizzaDesignState>()) {
-      if (s->competition_session &&
-          s->initial_mode == PizzaDesignMode::AnnualCompetitionDesign) {
-        CompetitionSession session = *s->competition_session;
-        ui.pop();
-        state.competitions().finalize_annual_pizza_competition(
-            std::move(session));
-        continue;
-      }
-      closed = s->on_done;
-    }
-    else if (auto* s = ui.top_as<RestaurantStatsState>();
-             s && s->automatic_mode) {
-      // The end-of-day report holds the turn until its dismiss button,
-      // which resumes the pipeline (RestaurantStats.cpp:73-77).
-      ui.pop();
-      state.turn().advance_pipeline();
-      continue;
-    }
-    else if (ui.is_top<GameOverState>()) {
-      return; // the game is over; the caller looks at why
-    }
-    ui.pop();
-    if (closed) {
-      closed();
-    }
-  }
+  debug::scripted::close_dialogs(state, seen);
 }
 
 inline bool human_turn(const GameState& state) {
-  const auto* player = state.active_player();
-  return player && player->is_human_controlled();
+  return debug::scripted::human_turn(state);
 }
 
 // Ends the human player's day at once and runs the simulation until their
@@ -215,24 +163,11 @@ inline bool human_turn(const GameState& state) {
 inline void
 play_day(GameState& state,
          const std::function<void(const std::string&)>& seen = nullptr) {
-  constexpr int max_ticks_per_day = 200'000;
   const GameDate start = state.time().current_date();
-  for (int tick = 0; tick < max_ticks_per_day; ++tick) {
-    const bool new_day = state.time().current_date() != start;
-    if (new_day && human_turn(state) &&
-        !state.turn().is_pipeline_blocking_input()) {
-      return;
-    }
-    if (!new_day && human_turn(state) &&
-        !state.turn().is_processing_end_of_turn()) {
-      state.turn().request_end_of_turn(EndOfDayCause::PlayerAction);
-    }
-    state.update(simulation_tick_ms);
-    state.tutorial().tick();
-    close_dialogs(state, seen);
+  if (!debug::scripted::play_day(state, seen)) {
+    FAIL("The day " << start.to_string() << " did not end within "
+                    << debug::scripted::max_ticks_per_day << " ticks");
   }
-  FAIL("The day " << start.to_string() << " did not end within "
-                  << max_ticks_per_day << " ticks");
 }
 
 inline void

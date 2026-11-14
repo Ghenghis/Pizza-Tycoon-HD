@@ -4,22 +4,33 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// Golden fingerprints of an Expanded game: the first week in Santa's Pizza
-// Village under the Cozy Village preset. It works the way the Classic golden
-// suite (ClassicFingerprintTests.cpp) does: a fixed seed, a fixed script with
-// no view (the console commands of a scripted run: rent, furnish piece by
-// piece, menu, stock, staff, open), and SaveGameManager::fingerprint at a
-// checkpoint after every day, compared with
-// tests/fixtures/content/golden-fingerprints.json. The fingerprint hashes the
-// whole save document except the time it was written, random state included,
-// so a change to Expanded behaviour shows up as a changed value and has to be
+// Golden fingerprints of an Expanded game: the North Pole slice, Santa's
+// Pizza Village under the Cozy Village preset through its first week. The
+// run is data/review/north-pole-slice.exec, the very script the Windows and
+// Linux builds run with --exec: this test reads it and runs each line through
+// the console in-process, the same commands in the same order (new game with
+// a fixed seed, rent, furnish piece by piece, menu, stock, staff, open, seven
+// days, save, load). At each `dump fingerprint` it takes
+// SaveGameManager::fingerprint, under the name of the "#@checkpoint" line
+// before it, and compares it with
+// tests/fixtures/content/golden-fingerprints.json, the way the Classic golden
+// suite (ClassicFingerprintTests.cpp) does. The fingerprint hashes the whole
+// save document except the time it was written, random state included, so a
+// change to Expanded behaviour shows up as a changed value and has to be
 // recorded on purpose.
 //
 // The values are recorded per platform. Nothing is ever recorded silently: a
 // missing value fails. To record, run on the reference build with
 // PLEGACY_UPDATE_GOLDEN=1, review the warnings and commit the file. The Classic
 // golden file is a separate file and this test never reads or writes it.
-// Needs the original game; SKIPs without PLEGACY_TEST_GAME_PATH.
+//
+// Hidden ([.]): it needs the original game (PLEGACY_TEST_GAME_PATH) and the
+// game's data folder next to the test binary (run it from the build folder),
+// and `game scenario` keeps a checkpoint in the saves folder as it does in
+// the game. Run it by name or tag: test_plegacy "[slice]". The script's save
+// and load go to a temporary folder instead of the saves folder, and its
+// screenshots are skipped (there is no screen here); they come after the
+// last fingerprint.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -28,13 +39,20 @@
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
-#include "ContentJourney.h"
 #include "ContentTestGame.h"
+#include "TestSupport.h"
 #include "core/character/Player.h"
 #include "core/common/Ids.h"
+#include "core/content/ShippedScenarios.h"
+#include "core/debug/DebugCommands.h"
+#include "core/debug/command/CommandDef.h"
+#include "core/debug/command/CommandRegistry.h"
+#include "core/debug/command/CommandResult.h"
 #include "core/restaurant/Restaurant.h"
 #include "core/restaurant/RestaurantStats.h"
 #include "core/save/SaveGameManager.h"
@@ -127,10 +145,9 @@ struct Observation {
   json summary; // what is stored and compared
 };
 
-// The Classic summary, plus what the person's pizzeria did, so a reviewer
+// The Classic summary, plus what the person's pizzerias did, so a reviewer
 // reading a changed value sees at once whether trading changed.
-Observation observe(const content_test::TestGame& game,
-                    const Restaurant& trading) {
+Observation observe(const content_test::TestGame& game) {
   Observation o{.fingerprint =
                     SaveGameManager::fingerprint(game.state, game.context),
                 .summary = json::object()};
@@ -141,9 +158,14 @@ Observation observe(const content_test::TestGame& game,
   o.summary["restaurants"] = restaurant_count(game.state);
   o.summary["cities_built"] =
       static_cast<int>(game.state.initialized_cities().size());
-  o.summary["pizzas_sold"] = trading.stats().total_pizzas_sold;
-  o.summary["revenue_cents"] =
-      static_cast<std::int64_t>(trading.stats().total_revenue);
+  int sold = 0;
+  std::int64_t revenue = 0;
+  for (const Restaurant* r : game.state.restaurants_for(core::PlayerId{0})) {
+    sold += r->stats().total_pizzas_sold;
+    revenue += static_cast<std::int64_t>(r->stats().total_revenue);
+  }
+  o.summary["pizzas_sold"] = sold;
+  o.summary["revenue_cents"] = revenue;
   o.summary["cash_cents"] = static_cast<std::int64_t>(
       game.state.player(core::PlayerId{0})->cash_balance());
   return o;
@@ -240,27 +262,122 @@ private:
 
 } // namespace
 
-TEST_CASE("Content golden: the first week in the village under Cozy Village",
-          "[content][golden][game]") {
+namespace {
+
+fs::path slice_script() {
+  return fs::path(__FILE__).parent_path().parent_path() / "data" / "review" /
+         "north-pole-slice.exec";
+}
+
+// One line of an --exec script as Game::run_exec_script reads it: blanks
+// stripped; empty and '#' lines are not commands.
+std::string trimmed(std::string line) {
+  while (!line.empty() &&
+         (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
+    line.pop_back();
+  }
+  const std::size_t start = line.find_first_not_of(" \t");
+  return start == std::string::npos ? std::string{} : line.substr(start);
+}
+
+} // namespace
+
+TEST_CASE("Content golden: the North Pole slice script, its first week in "
+          "the village",
+          "[.][content][golden][slice][game]") {
   CONTENT_REQUIRE_GAME_DATA();
+  if (!fs::exists(core::content::shipped_data_dir() / "scenarios" /
+                  "north-pole-cozy-village.json")) {
+    SKIP("The game's data folder ("
+         << core::content::shipped_data_dir().string()
+         << ") has no scenarios; run from the build folder");
+  }
+  std::ifstream script(slice_script());
+  REQUIRE(script.good());
+
+  // The console of the game, without the screen: `screenshot` is the one
+  // command the script uses that needs a screen, and it does nothing here.
+  debug::command::CommandRegistry console;
+  register_core_commands(console);
+  console.register_command(debug::command::CommandDef{
+      .name = "screenshot",
+      .description = "Skipped: no screen in this test",
+      .args = {debug::command::ArgSpec{
+          .name = "file",
+          .type = debug::command::ArgType::String,
+          .optional = true,
+          .default_provider = debug::command::DefaultProvider::None,
+          .description = "Ignored",
+      }},
+      .handler =
+          [](const debug::command::CommandContext&) {
+            return debug::command::CommandResult::success();
+          },
+  });
+
+  test_support::TempDir saves;
   Golden golden;
   content_test::TestGame game;
-  // Seeded with content_journey::journey_seed; rents the cheapest premise,
-  // furnishes it piece by piece, sets the menu, stocks, hires and opens.
-  const content_journey::Journey j =
-      content_journey::set_up_shop(game, content_journey::Fit::PieceByPiece);
-  REQUIRE(j.trading != nullptr);
-  const GameDate first_day = game.state.time().current_date();
-  golden.check("first-week/started", observe(game, *j.trading));
+  std::string checkpoint;
+  std::vector<std::string> taken;
+  std::optional<std::string> day_7;
+  std::optional<std::string> reloaded;
+  std::string line;
+  while (std::getline(script, line)) {
+    line = trimmed(line);
+    if (line.empty()) {
+      continue;
+    }
+    if (line.starts_with("#@checkpoint ")) {
+      checkpoint = trimmed(line.substr(13));
+      continue;
+    }
+    if (line[0] == '#') {
+      continue;
+    }
+    // The save and the load go to a temporary folder (an absolute name
+    // replaces the saves folder).
+    for (const std::string_view verb : {"game save ", "game load "}) {
+      if (line.starts_with(verb)) {
+        line = std::string(verb) +
+               (saves.path() / line.substr(verb.size())).string();
+      }
+    }
+    INFO("script line: " << line);
+    const auto result = console.execute(line, game.state, game.context);
+    INFO((result.error_message ? *result.error_message : std::string{}));
+    REQUIRE(result.status == debug::command::CommandStatus::Success);
 
-  for (int day = 1; day <= 7; ++day) {
-    content_test::play_day(game.state);
-    REQUIRE(game.state.time().current_date() == first_day.add_days(day));
-    golden.check("first-week/day-" + std::to_string(day),
-                 observe(game, *j.trading));
+    if (line == "dump fingerprint") {
+      REQUIRE_FALSE(checkpoint.empty());
+      const Observation o = observe(game);
+      golden.check(checkpoint, o);
+      taken.push_back(checkpoint);
+      if (checkpoint == "first-week/day-7") {
+        day_7 = o.fingerprint.hash;
+      }
+      if (checkpoint == "first-week/reloaded") {
+        reloaded = o.fingerprint.hash;
+      }
+      checkpoint.clear();
+    }
   }
-  // Not part of the golden value, only a sanity check on the script: the
-  // pizzeria traded during the week.
-  CHECK(j.trading->stats().total_pizzas_sold > 0);
+
+  // Every checkpoint of the week, in order, and nothing else.
+  const std::vector<std::string> expected = {
+      "first-week/started", "first-week/day-1", "first-week/day-2",
+      "first-week/day-3",   "first-week/day-4", "first-week/day-5",
+      "first-week/day-6",   "first-week/day-7", "first-week/reloaded"};
+  CHECK(taken == expected);
+  // The save loads back to the game it was.
+  REQUIRE(day_7.has_value());
+  REQUIRE(reloaded.has_value());
+  CHECK(*reloaded == *day_7);
+  // The pizzerias traded during the week (not part of the golden value).
+  int sold = 0;
+  for (const Restaurant* r : game.state.restaurants_for(core::PlayerId{0})) {
+    sold += r->stats().total_pizzas_sold;
+  }
+  CHECK(sold > 0);
   golden.finish();
 }

@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
@@ -375,11 +376,15 @@ TEST_CASE("Santa's Pizza Village is a valid location",
   CHECK(v.actors.mayor.has_value());
   CHECK(v.actors.realtors.size() >= 2);
 
-  // Every tile is a code of the original vocabulary.
+  // Every tile is a code of the original landsym vocabulary (revision 3:
+  // the districts' own tiles, zebra crossings and shadowed lanes too).
   const std::set<std::uint8_t> vocabulary = {
-      0x60, 0xA0, 0x8B, 0xE4, 0x09, 0xF3, 0x06, 0x16, 0x26, 0x36, 0x46, 0x56,
-      0x66, 0x76, 0x86, 0x96, 0xA6, 0xB6, 0x04, 0x8A, 0x9A, 0xAA, 0xBA, 0xCA,
-      0xDA, 0xEA, 0xFA, 0x88, 0x98, 0xA8, 0xB8, 0xC8, 0xD8, 0xE8, 0xF8};
+      0x00, 0x04, 0x06, 0x09, 0x10, 0x14, 0x16, 0x17, 0x19, 0x20, 0x24, 0x26,
+      0x29, 0x30, 0x34, 0x36, 0x39, 0x40, 0x43, 0x46, 0x49, 0x50, 0x53, 0x56,
+      0x59, 0x60, 0x64, 0x66, 0x69, 0x70, 0x74, 0x76, 0x79, 0x80, 0x86, 0x88,
+      0x89, 0x8A, 0x90, 0x96, 0x97, 0x98, 0x99, 0x9A, 0x9F, 0xA0, 0xA6, 0xA8,
+      0xAA, 0xAB, 0xB6, 0xB8, 0xBA, 0xBB, 0xC1, 0xC7, 0xC8, 0xCA, 0xCB, 0xD1,
+      0xD7, 0xD8, 0xDA, 0xDB, 0xE4, 0xE7, 0xE8, 0xEA, 0xF3, 0xF8, 0xFA, 0xFB};
   for (const auto t : v.tiles) {
     INFO("tile code " << static_cast<int>(t));
     CHECK(vocabulary.contains(t));
@@ -581,6 +586,34 @@ TEST_CASE("Every North Pole preset plays the same pinned village",
     CHECK(definition->districts[i].name == districts[i]);
     CHECK(premises[i] >= 3);
   }
+
+  // Each district reads differently (revision 3): leaving out the base
+  // grass, roads, premises, named buildings and the depot, its most common
+  // tile is its own: shopfronts, workshop roofs, the plaza, meadow, lawns,
+  // the frozen harbour.
+  std::vector<std::map<std::uint8_t, int>> counts(districts.size());
+  for (int y = 0; y < grid_height; ++y) {
+    for (int x = 0; x < grid_width; ++x) {
+      const std::uint8_t t = definition->tile(x, y);
+      const int low = t & 0x0F;
+      if (t == 0x60 || t == 0x04 || low == 0x06 || low == 0x07 || low == 0x0A ||
+          (low == 0x08 && t >= 0x80)) {
+        continue;
+      }
+      ++counts[static_cast<std::size_t>(definition->district_of_tile(x, y))][t];
+    }
+  }
+  std::set<std::uint8_t> signatures;
+  for (std::size_t i = 0; i < districts.size(); ++i) {
+    INFO(districts[i]);
+    REQUIRE_FALSE(counts[i].empty());
+    const auto top =
+        std::ranges::max_element(counts[i], [](const auto& a, const auto& b) {
+          return a.second < b.second;
+        });
+    CHECK(signatures.insert(top->first).second);
+  }
+  CHECK(signatures.size() == districts.size());
 
   for (const auto& preset : north_pole_presets) {
     INFO(preset.file);

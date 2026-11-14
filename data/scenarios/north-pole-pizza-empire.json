@@ -17,8 +17,8 @@
     {
       "location_key": "pthd:santas-pizza-village",
       "pin": {
-        "revision": 2,
-        "definition_sha256": "d3d1f82ed8227a3a5bce70dab7e742c8725954c81d21dae415f54adb14020355"
+        "revision": 3,
+        "definition_sha256": "523ecf4a3c4727b077e68c78846ec17bfe281606a2acadc2a59f73dbee643320"
       }
     }
   ],

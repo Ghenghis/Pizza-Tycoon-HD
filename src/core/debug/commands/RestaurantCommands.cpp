@@ -20,6 +20,7 @@
 #include "core/finance/Ledger.h"
 #include "core/food/IngredientCategory.h"
 #include "core/food/IngredientCategoryType.h"
+#include "core/food/PlayerRecipes.h"
 #include "core/food/ToppingSize.h"
 #include "core/restaurant/Furniture.h"
 #include "core/restaurant/FurniturePlacement.h"
@@ -1262,6 +1263,66 @@ Examples:
   };
 }
 
+static CommandDef make_restaurant_menu() {
+  return CommandDef{
+      .name = "menu",
+      .description = "Put the owner's standard pizzas on the menu",
+      .help_text = R"(Usage: restaurant menu <dollars> [restaurant_id]
+
+Puts every standard pizza the restaurant's owner has a recipe for on the
+restaurant's menu at one price, in whole dollars, as setting them one by one
+in the menu screen does. Pizzas already on the menu get the new price.
+
+Examples:
+  restaurant menu 8          # The active restaurant, $8 each
+  restaurant menu 10 2       # Restaurant 2, $10 each
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "dollars",
+                  .type = ArgType::Int,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Price of each pizza in dollars",
+                  .min_value = 1,
+                  .max_value = 99,
+              },
+              active_restaurant_arg(),
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        const auto dollars = ctx.int_arg(0);
+        const auto restaurant_id = ctx.restaurant_id(1);
+        auto* restaurant = ctx.state.restaurant(restaurant_id);
+        if (!restaurant) {
+          return CommandResult::error(
+              compat::format("Restaurant {} not found", restaurant_id.value));
+        }
+        const auto owner = restaurant->property().owner_or_tenant();
+        auto* player = owner ? ctx.state.player(*owner) : nullptr;
+        if (!player) {
+          return CommandResult::error(compat::format(
+              "Restaurant {} has no owner", restaurant_id.value));
+        }
+        int on_menu = 0;
+        for (const auto& slot : player->recipes().standard) {
+          if (slot.created()) {
+            restaurant->menu().add_or_set(slot.recipe->id(),
+                                          Money::from_dollars(dollars));
+            ++on_menu;
+          }
+        }
+        if (on_menu == 0) {
+          return CommandResult::error(compat::format(
+              "Player {} has no standard recipes", owner->value));
+        }
+        return CommandResult::success().add_message(
+            compat::format("{} standard pizzas on restaurant {}'s menu at ${}",
+                           on_menu, restaurant_id.value, dollars));
+      },
+  };
+}
+
 CommandDef make_restaurant_commands() {
   return CommandDef{
       .name = "restaurant",
@@ -1269,7 +1330,7 @@ CommandDef make_restaurant_commands() {
       .description = "Restaurant management commands",
       .help_text =
           "Manage restaurants: info, clear, open, close, shutdown, ai-layout, "
-          "furniture, stock, create, qs, place, inspection-timer",
+          "furniture, stock, create, qs, place, menu, inspection-timer",
   }
       .add_subcommand(make_restaurant_info())
       .add_subcommand(make_restaurant_clear())
@@ -1283,6 +1344,7 @@ CommandDef make_restaurant_commands() {
       .add_subcommand(make_restaurant_create())
       .add_subcommand(make_restaurant_qs())
       .add_subcommand(make_restaurant_place())
+      .add_subcommand(make_restaurant_menu())
       .add_subcommand(make_restaurant_inspection_timer());
 }
 

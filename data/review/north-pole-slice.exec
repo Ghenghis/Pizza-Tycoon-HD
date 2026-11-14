@@ -1,0 +1,117 @@
+# North Pole slice: Santa's Pizza Village under the Cozy Village preset,
+# from a new game through its first week, a save and a reload, then pictures
+# of the city map, the restaurant, its kitchen and the preset chooser.
+#
+# Real console commands only, one per line (docs/blueprint/console-commands.md).
+# With --exec the window stays hidden and the game exits at the end, so one
+# bounded run of the game does it all:
+#
+#   "Pizza Legacy" --config <empty folder>/slice.ini --game-path <PT folder> \
+#       --exec data/review/north-pole-slice.exec > slice.log
+#
+# A fresh --config keeps the player's own options out of it. The rules that
+# change the game are set to their defaults below anyway.
+#
+# What it prints: each `game date` line is followed by `dump fingerprint`'s
+# hash. Same build, same hashes, run after run; the hidden test
+# ContentGoldenTests.cpp runs this file in-process and compares them with
+# tests/fixtures/content/golden-fingerprints.json. A line "#@checkpoint <name>"
+# names the fingerprint that follows it there.
+#
+# The save goes to the game's saves folder as north-pole-slice.plsave (it
+# keeps its last three versions). The screenshots go to its screenshots
+# folder. They come last: opening a screen builds its view, and a view may
+# change what the game keeps, so no fingerprint is taken after them.
+
+# The rules, as their defaults.
+game options set fix_legacy_bugs on
+game options set mafia_shakedowns_target_all_restaurants off
+game options set demand_fulfillment_popularity on
+game options set suppliers_remember_missed_payments off
+game options set win_condition any_city
+game options set pizza_judging relaxed
+game options set cook_book on
+game options set police on
+game options set qol_improvements on
+game options set automatic_report on
+game options set autosave_frequency off
+
+# New Game, Cozy Village, a fixed seed (0x5A7A). The quick start rents and
+# furnishes the first pizzeria; its letters and cards are closed at once.
+game scenario north-pole-cozy-village 23162
+game dismiss
+
+# Rent the cheapest free premise; it becomes the active restaurant ('@').
+city rent cheapest
+
+# Furnish it piece by piece: two round tables with a chair on each side, and
+# a small oven. Sizes from the sprites: table 70 x 68, chair 42 x 46 pixels;
+# the chairs overlap the table edge by 10 pixels, so they face and join it.
+restaurant place ROUND_GRILL 46 4
+restaurant place TRADITIO_ROMANO 14 4
+restaurant place TRADITIO_ROMANO 106 4
+restaurant place ROUND_GRILL 46 84
+restaurant place TRADITIO_ROMANO 14 84
+restaurant place TRADITIO_ROMANO 106 84
+restaurant place OVEN_SMALL 0 0
+
+# Menu, stock and staff: the standard pizzas at $8, 10 kg of every
+# ingredient, a cook (character 20) and a waiter (character 21).
+restaurant menu 8
+restaurant stock fill 10
+staff hire 0 @ @ 20
+staff hire 1 @ @ 21
+
+# Open.
+restaurant open
+
+#@checkpoint first-week/started
+game date
+dump fingerprint
+
+# Seven days, a fingerprint each morning.
+game day
+#@checkpoint first-week/day-1
+game date
+dump fingerprint
+game day
+#@checkpoint first-week/day-2
+game date
+dump fingerprint
+game day
+#@checkpoint first-week/day-3
+game date
+dump fingerprint
+game day
+#@checkpoint first-week/day-4
+game date
+dump fingerprint
+game day
+#@checkpoint first-week/day-5
+game date
+dump fingerprint
+game day
+#@checkpoint first-week/day-6
+game date
+dump fingerprint
+game day
+#@checkpoint first-week/day-7
+game date
+dump fingerprint
+
+# Save, and load it back in the same run: the same fingerprint as day 7.
+game save north-pole-slice
+game load north-pole-slice
+#@checkpoint first-week/reloaded
+game date
+dump fingerprint
+
+# The pictures.
+nav cityview @
+screenshot north-pole-slice-city.png
+nav restaurant @
+screenshot north-pole-slice-restaurant.png
+nav kitchen @
+screenshot north-pole-slice-kitchen.png
+nav northpole
+screenshot north-pole-slice-presets.png
