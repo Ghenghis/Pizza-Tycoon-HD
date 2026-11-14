@@ -10,5 +10,6 @@ param([string]$GamePath = $env:PLEGACY_TEST_GAME_PATH)
 & "$PSScriptRoot\build.ps1"
 & "$PSScriptRoot\test.ps1" -GamePath $GamePath
 & "$PSScriptRoot\lint.ps1"
+& "$PSScriptRoot\hd-gates.ps1" -GamePath $GamePath
 & "$PSScriptRoot\release.ps1"
 Write-Ok 'local CI passed'

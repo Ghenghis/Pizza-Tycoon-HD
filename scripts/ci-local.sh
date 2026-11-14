@@ -27,6 +27,9 @@ for name in ("restaurant", "euromap"):
     assert len(set(im.convert("RGB").resize((64, 40)).getdata())) > 50, name
 print("ok  HD smoke run: screens render at 1920x1200")
 PY
+  echo "== HD gates (GPU = CPU picture, smooth motion leaves the game unchanged)"
+  python3 "$ROOT/tools/ci/hd_gates.py" --game "$BUILD/plegacy" \
+    --game-path "$PLEGACY_TEST_GAME_PATH" --pack "$T/pack" --software --bench-frames 20
   rm -rf "$T"
 fi
 echo "ok  local CI passed"

@@ -13,9 +13,18 @@ original rules. This fork adds:
   be replaced by a PNG of any size; missing ones keep the original art.
 * **Asset export**: `--export-assets` writes every original picture with its
   correct palette, plus a `manifest.json`, in exactly the pack layout.
-* **Pack tools** (`tools/hdpack`): a baseline upscaler, a validator that
-  checks a pack the way the engine will, and a batch driver for a local
-  ComfyUI (RTX GPU) to generate remastered art.
+* **Pack tools** (`tools/hdpack`): a baseline upscaler, an MMPX pixel-art
+  scaler for sprites, a validator that checks a pack the way the engine
+  will, a batch driver for a local ComfyUI (RTX GPU) to generate remastered
+  art, and depth/normal maps for 2.5D lighting.
+* **GPU rendering**: HD art is drawn by the graphics card (Direct3D, Vulkan,
+  Metal or OpenGL). A fully redrawn 3840x2400 frame takes about 3.3 ms
+  (300 fps) on a Ryzen 7 5800X3D + RTX 3090 Ti, and a screen opens within one
+  60 Hz frame: art used last session is decoded and uploaded in the
+  background while the intro plays.
+* **Smooth motion**: walking guests and waiters glide between steps at the
+  screen's frame rate (option `smooth_motion`); the game itself is
+  unchanged, which the local CI proves on every build.
 
 <p align="center">
   <img src="screenshots/cover_box.jpg" width="38%" alt="Pizza Tycoon HD box cover">
@@ -44,6 +53,7 @@ ComfyUI setup, limits).
 | `scripts\make-pack.ps1` | Builds `pack\` (baseline upscale or ComfyUI) and validates it |
 | `scripts\run-dev.ps1` | Plays the game with a pack at a chosen scale |
 | `scripts\release.ps1` | Packages the Windows zip, with checksums |
+| `scripts\hd-gates.ps1` | Runs the real game hidden: GPU = CPU picture, gameplay unchanged by smooth motion, 4K frame time limits |
 | `scripts\ci-local.ps1` | All quality gates, run locally (no hosted CI) |
 
 Linux and macOS: `scripts/fetch-deps.sh`, `scripts/build.sh`,

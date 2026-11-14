@@ -1,5 +1,11 @@
-Unreleased
+Pizza Tycoon HD 1.1.0 (2026-11-14)
 
+* End-to-end gates (`tools/ci/hd_gates.py`, `scripts/hd-gates.ps1`, part of
+  both local CI scripts): the real game, run hidden, must draw the same
+  picture with GPU and CPU compositing, keep the full game state identical
+  with smooth motion on and off, and on a real GPU keep a fully redrawn 4K
+  restaurant frame under 8 ms (99th percentile) and its opening under
+  16 ms. On the reference PC: 1/255, identical, 4.4 ms and 14.4 ms.
 * GPU compositing for HD: surfaces keep their HD art as a draw list
   (`gfx::HdList`) instead of copying hd_scale()^2 texels per pixel on the
   CPU, and `HdCompositor` draws the list with the GPU through any SDL

@@ -29,6 +29,7 @@ foreach ($dll in 'SDL3.dll') {
 $tools = Join-Path $stage 'tools\hdpack'
 New-Item -ItemType Directory -Force -Path $tools | Out-Null
 Copy-Item (Join-Path $script:Root 'tools\hdpack\hdpack.py'), (Join-Path $script:Root 'tools\hdpack\export.py'),
+    (Join-Path $script:Root 'tools\hdpack\pixelart.py'), (Join-Path $script:Root 'tools\hdpack\depthmaps.py'),
     (Join-Path $script:Root 'tools\hdpack\palettes.json'), (Join-Path $script:Root 'tools\hdpack\prompts.json'),
     (Join-Path $script:Root 'tools\hdpack\requirements.txt') $tools
 Copy-Item -Recurse (Join-Path $script:Root 'tools\hdpack\workflows') $tools
