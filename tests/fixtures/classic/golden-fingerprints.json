@@ -1,0 +1,16 @@
+{
+  "format": "pthd.classic-golden",
+  "version": 1,
+  "about": "Expected Classic fingerprints per checkpoint and platform, written by tests/ClassicFingerprintTests.cpp. Record only with PLEGACY_UPDATE_GOLDEN=1 on the reference build; never edit by hand.",
+  "checkpoints": {
+    "quick-start-madrid/started": null,
+    "quick-start-madrid/day-4": null,
+    "free-paris/started": null,
+    "free-paris/day-9": null,
+    "free-paris/april": null,
+    "free-paris/new-year": null,
+    "ten-cities/built": null,
+    "ten-cities-original-bugs/built": null,
+    "legacy-v1/loaded": null
+  }
+}
