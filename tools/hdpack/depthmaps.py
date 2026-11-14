@@ -21,11 +21,18 @@ import argparse
 import fnmatch
 import sys
 import time
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
+
+# The sibling module, found even under `python -I` (which leaves the
+# script's folder off sys.path).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hdpack  # noqa: E402
 
 MODEL = "depth-anything/Depth-Anything-V2-Large-hf"
 F32 = NDArray[np.float32]
@@ -54,6 +61,45 @@ def normalise(raw: F32, mask: NDArray[np.bool_]) -> F32:
     return out
 
 
+@dataclass(frozen=True)
+class Job:
+    rel: str  # the picture's path in the pack, e.g. "gfx/back1.png"
+    source: Path
+    depth: Path
+    normal: Path
+
+
+@dataclass
+class Plan:
+    total: int = 0  # pictures in the pack (after --only)
+    jobs: list[Job] = field(default_factory=list)  # the ones still to do
+    refused: list[str] = field(default_factory=list)  # names left out, with why
+
+
+def plan(pack: Path, out: Path, only: Sequence[str] = (), force: bool = False) -> Plan:
+    """The pictures to do, every path checked to stay inside its folder: a
+    name that is not a plain relative path, or a symlink that leads outside
+    the pack or the output folder, is refused."""
+    files = sorted(f.relative_to(pack).as_posix() for f in pack.rglob("*.png"))
+    if only:
+        files = [f for f in files if any(fnmatch.fnmatch(f, pat) for pat in only)]
+    result = Plan(total=len(files))
+    for rel in files:
+        try:
+            job = Job(
+                rel,
+                hdpack.contained_path(pack, rel),
+                hdpack.contained_path(out / "depth", rel),
+                hdpack.contained_path(out / "normal", rel),
+            )
+        except hdpack.UnsafePathError as exc:
+            result.refused.append(f"{rel}: {exc}")
+            continue
+        if force or not job.depth.exists():
+            result.jobs.append(job)
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("pack")
@@ -64,20 +110,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-side", type=int, default=1024, help="longest side fed to the model")
     args = p.parse_args(argv)
 
+    work = plan(Path(args.pack), Path(args.out), args.only, args.force)
+    for reason in work.refused:
+        print("error:", reason, file=sys.stderr)
+    todo = work.jobs
+    print(f"{work.total} pictures, {len(todo)} to do, model {MODEL} on {args.device}", flush=True)
+    if not todo:
+        return 1 if work.refused else 0
+
     import torch
     from transformers import pipeline
 
-    pack, out = Path(args.pack), Path(args.out)
-    files = sorted(f.relative_to(pack).as_posix() for f in pack.rglob("*.png"))
-    if args.only:
-        files = [f for f in files if any(fnmatch.fnmatch(f, pat) for pat in args.only)]
-    todo = [f for f in files if args.force or not (out / "depth" / f).exists()]
-    print(f"{len(files)} pictures, {len(todo)} to do, model {MODEL} on {args.device}", flush=True)
     estimator = pipeline("depth-estimation", model=MODEL, device=args.device, torch_dtype=torch.float16)
 
     started = time.monotonic()
-    for n, rel in enumerate(todo, 1):
-        with Image.open(pack / rel) as im:
+    for n, job in enumerate(todo, 1):
+        rel = job.rel
+        with Image.open(job.source) as im:
             rgba = im.convert("RGBA")
         w, h = rgba.size
         mask = np.asarray(rgba)[..., 3] > 8
@@ -92,16 +141,16 @@ def main(argv: list[str] | None = None) -> int:
         raw = np.squeeze(raw)
         depth_img = Image.fromarray(raw).resize((w, h), Image.Resampling.BICUBIC)
         depth = normalise(np.asarray(depth_img, dtype=np.float32), mask)
-        (out / "depth" / rel).parent.mkdir(parents=True, exist_ok=True)
-        (out / "normal" / rel).parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray((depth * 65535.0 + 0.5).astype(np.uint16)).save(out / "depth" / rel)
+        job.depth.parent.mkdir(parents=True, exist_ok=True)
+        job.normal.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray((depth * 65535.0 + 0.5).astype(np.uint16)).save(job.depth)
         normal = normals_from_depth(depth)
         normal[~mask] = (128, 128, 255)
-        Image.fromarray(normal, "RGB").save(out / "normal" / rel)
+        Image.fromarray(normal, "RGB").save(job.normal)
         if n % 25 == 0 or n == len(todo):
             rate = n / (time.monotonic() - started)
             print(f"[{n}/{len(todo)}] {rel} ({rate:.1f}/s)", flush=True)
-    return 0
+    return 1 if work.refused else 0
 
 
 if __name__ == "__main__":

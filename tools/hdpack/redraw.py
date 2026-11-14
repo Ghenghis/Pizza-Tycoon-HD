@@ -25,6 +25,7 @@ import json
 import sys
 import tempfile
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -217,6 +218,43 @@ def sheet(rows: list[tuple[str, list[Image.Image]]], labels: list[str], path: Pa
     img.save(path)
 
 
+def _checked_name(name: object, where: str) -> str:
+    """name, if it is a plain relative path to a .png; else HdPackError."""
+    try:
+        checked = hdpack.check_relative(name)
+    except hdpack.UnsafePathError as exc:
+        raise hdpack.UnsafePathError(f"{where}: {exc}") from exc
+    if not checked.endswith(".png"):
+        raise hdpack.HdPackError(f"{where}: {checked!r} is not a .png file")
+    return checked
+
+
+def load_items(cli_items: Sequence[Sequence[str]], items_json: str | None, seed: int) -> list[tuple[str, str, int]]:
+    """The sprites to redraw, from --item and --items-json, each a (file,
+    description, seed). Every file name is checked before anything is read:
+    names are data, and must stay inside the pack and output folders."""
+    items: list[tuple[str, str, int]] = []
+    for n, (name, description) in enumerate(cli_items):
+        items.append((_checked_name(name, f"--item {n + 1}"), description, seed + n))
+    if items_json:
+        try:
+            data = json.loads(Path(items_json).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise hdpack.HdPackError(f"{items_json}: {exc}") from exc
+        if not isinstance(data, list):
+            raise hdpack.HdPackError(f"{items_json}: expected a list of items")
+        for n, e in enumerate(data):
+            if not isinstance(e, dict) or not isinstance(e.get("description"), str):
+                raise hdpack.HdPackError(f"{items_json}: item {n} needs a file and a description")
+            try:
+                item_seed = int(e.get("seed", seed))
+            except (TypeError, ValueError) as exc:
+                raise hdpack.HdPackError(f"{items_json}: item {n}: bad seed ({exc})") from exc
+            name = _checked_name(e.get("file"), f"{items_json}: item {n}")
+            items.append((name, e["description"], item_seed))
+    return items
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("pack")
@@ -256,24 +294,37 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     pack, maps, out = Path(args.pack), Path(args.maps), Path(args.out)
-    items: list[tuple[str, str, int]] = [(f, d, args.seed + n) for n, (f, d) in enumerate(args.item)]
-    if args.items_json:
-        for e in json.loads(Path(args.items_json).read_text(encoding="utf-8")):
-            items.append((e["file"], e["description"], int(e.get("seed", args.seed))))
+    try:
+        items = load_items(args.item, args.items_json, args.seed)
+    except hdpack.HdPackError as exc:
+        print("error:", exc, file=sys.stderr)
+        return 2
     if not items:
         p.error("give --item or --items-json")
     colour_sigma = 1.5 * max(1.0, args.source_scale)
+    # Items refused because a symlink would lead outside a folder.
+    failed: list[str] = []
+
+    def raw_file(denoise: float, rel: str) -> Path:
+        return hdpack.contained_path(out / "raw" / f"{denoise:.2f}", rel)
+
+    def result_file(denoise: float, rel: str) -> Path:
+        return hdpack.contained_path(out / f"{denoise:.2f}", rel)
+
+    def refuse(rel: str, exc: hdpack.UnsafePathError) -> None:
+        failed.append(rel)
+        print(f"error: {rel}: {exc}", file=sys.stderr)
 
     def save(generated: Image.Image, sprite: Image.Image, rel: str, denoise: float) -> Image.Image:
         """Keep the model's picture as it came (cut to the sprite) under raw/,
         so the colour step can be redone without the GPU, then finish it."""
         raw = generated.convert("RGB").resize(sprite.size, Image.Resampling.LANCZOS).convert("RGBA")
         raw.putalpha(sprite.getchannel("A"))
-        raw_path = out / "raw" / f"{denoise:.2f}" / rel
+        raw_path = raw_file(denoise, rel)
         raw_path.parent.mkdir(parents=True, exist_ok=True)
         raw.save(raw_path)
         result = finish(raw, sprite, colour_sigma, args.keep_colours, args.keep_light)
-        target = out / f"{denoise:.2f}" / rel
+        target = result_file(denoise, rel)
         target.parent.mkdir(parents=True, exist_ok=True)
         result.save(target)
         return result
@@ -281,29 +332,43 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[tuple[str, list[Image.Image]]] = []
     if args.from_raw:
         for rel, description, _seed in items:
-            with Image.open(pack / rel) as im:
-                sprite = im.convert("RGBA")
-            pics = [sprite]
-            for denoise in args.denoise:
-                raw_path = out / "raw" / f"{denoise:.2f}" / rel
-                if not raw_path.exists():
-                    continue
-                with Image.open(raw_path) as r:
-                    pics.append(save(r.copy(), sprite, rel, denoise))
+            try:
+                with Image.open(hdpack.contained_path(pack, rel)) as im:
+                    sprite = im.convert("RGBA")
+                pics = [sprite]
+                for denoise in args.denoise:
+                    raw_path = raw_file(denoise, rel)
+                    if not raw_path.exists():
+                        continue
+                    with Image.open(raw_path) as r:
+                        pics.append(save(r.copy(), sprite, rel, denoise))
+            except hdpack.UnsafePathError as exc:
+                refuse(rel, exc)
+                continue
             if len(rows) < args.sheet_limit and len(pics) > 1:
                 rows.append((f"{rel}: {description}", pics))
         sheet(rows, ["current (pixel-art scaler)"] + [f"redraw, denoise {d}" for d in args.denoise], out / "sheet.png")
         print(f"recoloured from raw; sheet: {out / 'sheet.png'}")
-        return 0
+        return 1 if failed else 0
 
     client = hdpack.ComfyClient(args.server, timeout=60)
     with tempfile.TemporaryDirectory() as tmp:
         for n, (rel, description, seed) in enumerate(items):
-            if args.skip_done and all((out / f"{d:.2f}" / rel).exists() for d in args.denoise):
+            try:
+                # Every path the item will touch, checked before the GPU works.
+                for d in args.denoise:
+                    raw_file(d, rel)
+                    result_file(d, rel)
+                if args.skip_done and all(result_file(d, rel).exists() for d in args.denoise):
+                    continue
+                sprite_path = hdpack.contained_path(pack, rel)
+                depth_path = hdpack.contained_path(maps / "depth", rel)
+            except hdpack.UnsafePathError as exc:
+                refuse(rel, exc)
                 continue
-            with Image.open(pack / rel) as im:
+            with Image.open(sprite_path) as im:
                 sprite = im.convert("RGBA")
-            with Image.open(maps / "depth" / rel) as dm:
+            with Image.open(depth_path) as dm:
                 depth = dm.copy()
             size = model_size(*sprite.size)
             block = block_size(sprite.size, size, args.source_scale) if args.source_scale > 0 else 0.0
@@ -329,7 +394,11 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 entry = client.wait(client.queue(workflow(values)), timeout=600)
                 generated = Image.open(io.BytesIO(client.first_image(entry)))
-                pics.append(save(generated, sprite, rel, denoise))
+                try:
+                    pics.append(save(generated, sprite, rel, denoise))
+                except hdpack.UnsafePathError as exc:  # a link changed during the run
+                    refuse(rel, exc)
+                    break
                 print(
                     f"[{n + 1}/{len(items)}] {rel} denoise {denoise} in {time.monotonic() - started:.1f}s",
                     flush=True,
@@ -338,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
                 rows.append((f"{rel}: {description}", pics))
     sheet(rows, ["current (pixel-art scaler)"] + [f"redraw, denoise {d}" for d in args.denoise], out / "sheet.png")
     print(f"sheet: {out / 'sheet.png'}")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
