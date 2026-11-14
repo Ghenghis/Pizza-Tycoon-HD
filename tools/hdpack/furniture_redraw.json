@@ -785,21 +785,6 @@
   "seed": 60409
  },
  {
-  "file": "bob/moebel/0148.png",
-  "description": "small round restaurant table with a green and white checkered gingham tablecloth, bare tabletop",
-  "seed": 80628
- },
- {
-  "file": "bob/moebel/0149.png",
-  "description": "small round restaurant table with a red and white checkered gingham tablecloth, bare tabletop",
-  "seed": 68646
- },
- {
-  "file": "bob/moebel/0150.png",
-  "description": "small round restaurant table with a blue and white checkered gingham tablecloth, bare tabletop",
-  "seed": 40251
- },
- {
   "file": "bob/moebel/0151.png",
   "description": "red restaurant table, 'Garden Table Red' style",
   "seed": 13035
@@ -850,26 +835,6 @@
   "seed": 53135
  },
  {
-  "file": "bob/moebel/0161.png",
-  "description": "large rectangular restaurant table with a red and white checkered gingham tablecloth, bare tabletop",
-  "seed": 15270
- },
- {
-  "file": "bob/moebel/0162.png",
-  "description": "large rectangular restaurant table with a red and white checkered gingham tablecloth, bare tabletop",
-  "seed": 15270
- },
- {
-  "file": "bob/moebel/0163.png",
-  "description": "large rectangular restaurant table with a blue and white checkered gingham tablecloth, bare tabletop",
-  "seed": 69054
- },
- {
-  "file": "bob/moebel/0164.png",
-  "description": "large rectangular restaurant table with a blue and white checkered gingham tablecloth, bare tabletop",
-  "seed": 69054
- },
- {
   "file": "bob/moebel/0165.png",
   "description": "dark wooden restaurant table, 'Oak dark' style",
   "seed": 11459
@@ -903,26 +868,6 @@
   "file": "bob/moebel/0171.png",
   "description": "yellow restaurant table, 'Bistro Yellow' style",
   "seed": 31961
- },
- {
-  "file": "bob/moebel/0172.png",
-  "description": "dining chair, 'Modern Mix' style restaurant seating",
-  "seed": 34779
- },
- {
-  "file": "bob/moebel/0173.png",
-  "description": "dining chair, 'Modern Mix' style restaurant seating",
-  "seed": 34779
- },
- {
-  "file": "bob/moebel/0174.png",
-  "description": "dining chair, 'Modern Mix' style restaurant seating",
-  "seed": 34779
- },
- {
-  "file": "bob/moebel/0175.png",
-  "description": "dining chair, 'Modern Mix' style restaurant seating",
-  "seed": 34779
  },
  {
   "file": "bob/moebel/0176.png",
@@ -1248,16 +1193,6 @@
   "file": "bob/moebel/0240.png",
   "description": "white restaurant table, 'Nostalgica White' style",
   "seed": 47546
- },
- {
-  "file": "bob/moebel/0241.png",
-  "description": "restaurant table, 'Modern Art 3' style",
-  "seed": 65371
- },
- {
-  "file": "bob/moebel/0242.png",
-  "description": "restaurant table, 'Modern Art 3' style",
-  "seed": 65371
  },
  {
   "file": "bob/moebel/0243.png",

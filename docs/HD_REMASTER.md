@@ -235,13 +235,18 @@ python tools/hdpack/redraw.py pack/ maps/ redraw-out/ --server http://127.0.0.1:
     --denoise 0.8 --skip-done --items-json tools/hdpack/furniture_redraw.json
 ```
 
-`furniture_redraw.json` lists 341 restaurant and kitchen furniture frames
-(`bob/moebel`, `bob/kuebobs`) with a description each. Plants are left out
-(at this size the model turns leaves into blocks, and the MMPX versions look
-better), and so are two sprites that are mostly lettering or digits. Running
+`furniture_redraw.json` lists 328 restaurant and kitchen furniture frames
+(`bob/moebel`, `bob/kuebobs`) with a description each. Left out, because the
+MMPX versions look better: plants (at this size the model turns leaves into
+blocks), tablecloths and seats whose pattern is one original pixel wide
+(gingham checks, the 'Modern Mix' chairs, the 'Modern Art 3' table: the
+softened start picture no longer shows the pattern and the model can't
+redraw it faithfully), and two sprites that are mostly lettering or digits. Running
 several `--denoise` values side by side writes `redraw-out/<denoise>/`
 folders and a `sheet.png` to compare them. About ten
 seconds per frame on an RTX 3090 Ti, so the whole list takes about an hour.
+Name a fine pattern in the description ("blue and white striped seat")
+when there is one, or it comes out plain.
 Copy `redraw-out/0.80/bob/` into the pack when you're happy with it (keep the
 old folders: they're the pixel-art versions).
 
