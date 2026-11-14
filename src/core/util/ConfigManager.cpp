@@ -122,6 +122,51 @@ OptionDef enum_option(std::string_view key, std::string_view section = {},
           section, note};
 }
 
+// The picture settings (GameOptions::picture, engine/fx/Look.h).
+template <int fx::Sliders::*Field>
+OptionDef picture_slider_option(std::string_view key,
+                                std::string_view section = {},
+                                std::string_view note = {}) {
+  return {key,
+          [](const GameOptions& o) {
+            return std::to_string(o.picture.sliders.*Field);
+          },
+          [](GameOptions& o, const std::string& s) {
+            int parsed = 0;
+            auto [ptr, ec] =
+                std::from_chars(s.data(), s.data() + s.size(), parsed);
+            if (ec == std::errc{}) {
+              o.picture.sliders.*Field =
+                  std::clamp(parsed, fx::Sliders::MIN, fx::Sliders::MAX);
+            }
+          },
+          section, note};
+}
+
+template <fx::Area Where>
+OptionDef picture_area_option(std::string_view key,
+                              std::string_view section = {},
+                              std::string_view note = {}) {
+  return {key,
+          [](const GameOptions& o) {
+            const auto it = o.picture.per_area.find(Where);
+            return std::string(fx::to_config_value(
+                it == o.picture.per_area.end() ? fx::AreaPreset::Same
+                                               : it->second));
+          },
+          [](GameOptions& o, const std::string& s) {
+            if (auto parsed = fx::area_preset_from_config_value(s)) {
+              if (*parsed == fx::AreaPreset::Same) {
+                o.picture.per_area.erase(Where);
+              }
+              else {
+                o.picture.per_area[Where] = *parsed;
+              }
+            }
+          },
+          section, note};
+}
+
 const auto option_defs = std::to_array({
     bool_option<&GameOptions::crt_aspect_ratio>(
         "crt_aspect_ratio", "Display", "Use the original 4:3 CRT aspect ratio"),
@@ -226,6 +271,51 @@ const auto option_defs = std::to_array({
                GameOptions::TOOLTIP_DELAY_MAX>(
         "tooltip_delay_ms", {},
         "milliseconds the pointer rests on an item before its tooltip shows"),
+
+    OptionDef{"picture_preset",
+              [](const GameOptions& o) {
+                return std::string(fx::to_config_value(o.picture.preset));
+              },
+              [](GameOptions& o, const std::string& s) {
+                if (auto parsed = fx::preset_from_config_value(s)) {
+                  o.picture.preset = *parsed;
+                }
+              },
+              "Picture",
+              "HD: classic, natural, vivid, cinematic or studio; classic is "
+              "the HD look as it always was"},
+    picture_slider_option<&fx::Sliders::intensity>(
+        "picture_intensity", {},
+        "-50 to 50, 0 = as the preset has it: brightness and lights"),
+    picture_slider_option<&fx::Sliders::shadows>(
+        "picture_shadows", {}, "-50 to 50: how deep the shadows go"),
+    picture_slider_option<&fx::Sliders::bloom>(
+        "picture_bloom", {},
+        "-50 to 50: glow around bright things (GPU renderer)"),
+    picture_slider_option<&fx::Sliders::warmth>(
+        "picture_warmth", {}, "-50 to 50: + warmer, - cooler"),
+    picture_slider_option<&fx::Sliders::vignette>(
+        "picture_vignette", {}, "-50 to 50: darker corners (GPU renderer)"),
+    OptionDef{
+        "picture_crt",
+        [](const GameOptions& o) { return from_bool(o.picture.sliders.crt); },
+        [](GameOptions& o, const std::string& s) {
+          o.picture.sliders.crt = to_bool(s);
+        },
+        {},
+        "scanlines and a soft aperture mask (GPU renderer)"},
+    picture_area_option<fx::Area::City>(
+        "picture_city", {}, "same, or a preset of its own for the city map"),
+    picture_area_option<fx::Area::Restaurant>("picture_restaurant"),
+    picture_area_option<fx::Area::Kitchen>("picture_kitchen"),
+    picture_area_option<fx::Area::NorthPole>("picture_north_pole"),
+    enum_option<&GameOptions::renderer, &fx::renderer_from_config_value>(
+        "renderer", {},
+        "auto (SDL's choice) or gpu (SDL's GPU driver, needed for bloom, "
+        "vignette, CRT and the full colour grade). Needs a restart"),
+    bool_option<&GameOptions::hdr_output>(
+        "hdr_output", {},
+        "HDR (scRGB) output when the display has HDR on. Needs a restart"),
 });
 
 // Where the original game lives.

@@ -20,6 +20,7 @@
 #include "engine/DisplayConstants.h"
 #include "engine/Logger.h"
 #include "engine/audio/AudioManager.h"
+#include "engine/fx/Look.h"
 #include "engine/input/Action.h"
 #include "engine/input/InputManager.h"
 #include "engine/input/Key.h"
@@ -268,8 +269,9 @@ void MenuOptions::build_audio(GameState& state) {
                       context_.audio->ducking(state.options().duck_music);
                       mark_dirty();
                     }))
-      .help_text("The music dips a little while the phone rings or the "
-                 "police come, and comes back smoothly.");
+      .help_text("The music, and the enhanced pack's room sounds, dip a little "
+                 "while the phone rings or the police come, and come back "
+                 "smoothly.");
 }
 
 std::string to_string(HdResolution r) {
@@ -384,6 +386,101 @@ void MenuOptions::build_graphics(GameState& state) {
                     [this] { mark_dirty(); }, face))
       .help_text("Round off the blocky edges of letters, or of letters and "
                  "pictures. Takes effect after a restart.");
+
+  // Picture: a preset like a TV's picture modes, then the sliders on top of
+  // it (More). Changes show at once.
+  fx::LookSettings& look = state.options().picture;
+  auto changed = [this, &look] {
+    fx::set_frame_look(look, fx::Area::Other);
+    mark_dirty();
+  };
+  auto changed_int = [changed](int) { changed(); };
+  constexpr const char* gpu_only =
+      " Needs the GPU renderer (Renderer: GPU (SDL GPU)).";
+
+  add_menu_item(std::make_unique<SpacerMenuItem>(context_, row_gap));
+  add_menu_item(
+      std::make_unique<LabelMenuItem>(context_, "Picture", face, label_style));
+  add_menu_item(std::make_unique<SpacerMenuItem>(context_, label_gap));
+  add_menu_item(std::make_unique<EnumMenuItem<fx::Preset>>(
+                    context_, "Preset", look.preset,
+                    std::vector<fx::Preset>(fx::all_presets.begin(),
+                                            fx::all_presets.end()),
+                    changed, face))
+      .help_text("HD only, like a TV's picture modes. Classic: the HD look as "
+                 "it always was. Natural: a touch of contrast, warmth and "
+                 "glow. Vivid: rich colour, bright lights. Cinematic: warm "
+                 "highlights, deep shadows, glow and dark corners. Studio: "
+                 "neutral, with open shadows. Only the picture changes.");
+  add_menu_item(
+      std::make_unique<EnumMenuItem<fx::RendererChoice>>(
+          context_, "Renderer", state.options().renderer,
+          std::vector{fx::RendererChoice::Auto, fx::RendererChoice::Gpu},
+          [this] { mark_dirty(); }, face))
+      .help_text("Auto lets SDL choose (Direct3D 11 on Windows). GPU uses "
+                 "SDL's GPU renderer (Direct3D 12, Vulkan or Metal), which "
+                 "runs the full picture pass: bloom, vignette, CRT and the "
+                 "complete colour grade. If it cannot start, the game uses "
+                 "Auto. Takes effect after a restart.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "HDR output", state.options().hdr_output,
+                    [&state, this] {
+                      state.options().hdr_output = !state.options().hdr_output;
+                      mark_dirty();
+                    }))
+      .help_text("Send the picture to an HDR display in its own colour space "
+                 "(scRGB), so glow can shine above paper white. Only used "
+                 "when Windows HDR is on. Takes effect after a restart.");
+
+  add_menu_item(std::make_unique<SpacerMenuItem>(context_, row_gap));
+  add_menu_item(std::make_unique<LabelMenuItem>(context_, "Picture - More",
+                                                face, label_style));
+  add_menu_item(std::make_unique<SpacerMenuItem>(context_, label_gap));
+  fx::Sliders& sliders = look.sliders;
+  auto slider = [this, &changed_int](const std::string& label, int& value,
+                                     const std::string& help) {
+    add_menu_item(std::make_unique<IntSliderMenuItem>(
+                      context_, label, value, fx::Sliders::MIN,
+                      fx::Sliders::MAX, changed_int, face, 5))
+        .help_text(help);
+  };
+  slider("Light intensity", sliders.intensity,
+         "Brighter or darker picture, and stronger or weaker candles, ovens "
+         "and lamps. 0 is as the preset has it.");
+  slider("Shadow depth", sliders.shadows,
+         "How dark the rooms get away from their lights, and how deep the "
+         "blacks go. 0 is as the preset has it.");
+  slider("Bloom", sliders.bloom,
+         std::string("Glow around bright things: flames, screens, sunlit "
+                     "walls. 0 is as the preset has it.") +
+             gpu_only);
+  slider("Colour warmth", sliders.warmth,
+         "White balance: up for warmer, amber light; down for cooler, bluer "
+         "light. 0 is as the preset has it.");
+  slider("Vignette", sliders.vignette,
+         std::string("Darker corners that draw the eye to the middle. 0 is "
+                     "as the preset has it.") +
+             gpu_only);
+  add_menu_item(std::make_unique<ToggleMenuItem>(context_, "CRT look",
+                                                 sliders.crt,
+                                                 [&sliders, changed] {
+                                                   sliders.crt = !sliders.crt;
+                                                   changed();
+                                                 }))
+      .help_text(std::string("Scanlines between the original rows and a soft "
+                             "aperture mask, like a nineties monitor.") +
+                 gpu_only);
+  for (const fx::Area area : fx::overridable_areas) {
+    add_menu_item(std::make_unique<EnumMenuItem<fx::AreaPreset>>(
+                      context_, fx::to_string(area) + " preset",
+                      look.per_area[area],
+                      std::vector<fx::AreaPreset>(fx::all_area_presets.begin(),
+                                                  fx::all_area_presets.end()),
+                      changed, face))
+        .help_text("A preset of its own for the " + fx::to_string(area) +
+                   ", or the same as Preset above. The sliders apply on top "
+                   "of it.");
+  }
 }
 
 void MenuOptions::build_gameplay(GameState& state) {

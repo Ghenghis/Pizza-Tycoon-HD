@@ -82,14 +82,24 @@ SDL_Texture* LightPass::light_map(int w, int h) {
   return map_;
 }
 
+float LightPass::ambient(const lighting::Scene& scene,
+                         const Strength& strength) {
+  const float a = clamp01(scene.ambient);
+  if (strength.shadows == 1.0f) {
+    return a;
+  }
+  return clamp01(1.0f - (1.0f - a) * std::max(0.0f, strength.shadows));
+}
+
 void LightPass::apply(SDL_Texture* albedo, SDL_Texture* out, int w, int h,
-                      int k, const lighting::Scene& scene, double seconds) {
+                      int k, const lighting::Scene& scene, double seconds,
+                      const Strength& strength) {
   SDL_Texture* grad = gradient();
   SDL_Texture* map = light_map(w, h);
 
   // 1. The light map (engine resolution is plenty: light is smooth).
   SDL_SetRenderTarget(renderer_, map);
-  const float a = clamp01(scene.ambient);
+  const float a = ambient(scene, strength);
   SDL_SetRenderDrawColorFloat(
       renderer_, a * static_cast<float>(scene.ambient_r) / 255.0f,
       a * static_cast<float>(scene.ambient_g) / 255.0f,
@@ -98,7 +108,11 @@ void LightPass::apply(SDL_Texture* albedo, SDL_Texture* out, int w, int h,
   std::vector<lighting::Rgb> colours;
   colours.reserve(scene.lights.size());
   for (const lighting::Light& l : scene.lights) {
-    const lighting::Rgb c = lighting::sample(l, seconds);
+    lighting::Rgb c = lighting::sample(l, seconds);
+    if (strength.lights != 1.0f) {
+      const float s = std::max(0.0f, strength.lights);
+      c = {c.r * s, c.g * s, c.b * s};
+    }
     colours.push_back(c);
     SDL_SetTextureColorModFloat(grad, clamp01(c.r), clamp01(c.g), clamp01(c.b));
     const SDL_FRect dst{l.x - l.radius, l.y - l.radius, l.radius * 2.0f,

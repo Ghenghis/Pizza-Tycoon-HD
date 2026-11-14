@@ -41,6 +41,8 @@
 #include "engine/Screenshot.h"
 #include "engine/Version.h"
 #include "engine/debug/ScreenCommands.h"
+#include "engine/fx/Look.h"
+#include "engine/fx/RendererSelect.h"
 #include "engine/gfx/Surface.h"
 #include "engine/gfx/Upscaler.h"
 #include "engine/input/BindingsFile.h"
@@ -74,6 +76,25 @@
 #include "views/ui/staff/StaffEventPopups.h"
 
 namespace {
+
+// Which area's picture preset applies to the screen on top (fx::LookSettings).
+fx::Area picture_area(const GameState& gs) {
+  const UIStateStack& ui = gs.ui();
+  if (const auto* r = ui.top_as<RestaurantViewState>()) {
+    return r->kitchen_view ? fx::Area::Kitchen : fx::Area::Restaurant;
+  }
+  if (ui.is_top<PizzaDesignState>()) {
+    return fx::Area::Kitchen;
+  }
+  if (ui.is_top<CityViewState>()) {
+    return fx::Area::City;
+  }
+  if (const auto* tag = ui.top_as<ScreenTag>();
+      tag && tag->kind == ScreenTag::Kind::MenuNorthPole) {
+    return fx::Area::NorthPole;
+  }
+  return fx::Area::Other;
+}
 
 // Screens get the StatusDisplay from the context, but for headless runs there
 // is no StatusDisplay yet, so create a temporary one.
@@ -670,6 +691,9 @@ int Game::run() {
     // The 1994 look shows the original letters and no lights; the options
     // themselves stay as they are.
     lighting::set_enabled(state.options().lighting && !classic_look_);
+    // The picture settings of the area on screen (the renderer drops them
+    // in the 1994 look).
+    fx::set_frame_look(state.options().picture, picture_area(state));
     resources::HdTypefaces::set_enabled(state.options().hd_text &&
                                         !classic_look_);
     renderer.classic_look(classic_look_);
@@ -1016,10 +1040,24 @@ bool Game::init(int display_height, const GameOptions& options) {
   // for screenshots and benchmarks.
   const SDL_WindowFlags window_flags =
       SDL_WINDOW_RESIZABLE | (exec_script_ ? SDL_WINDOW_HIDDEN : 0);
-  if (!SDL_CreateWindowAndRenderer("Pizza Legacy", win_w, win_h, window_flags,
-                                   &window, &renderer_handle)) {
+  // Hidden until it has its renderer, as SDL_CreateWindowAndRenderer does.
+  // The renderer is the one the options ask for (fx::create_renderer falls
+  // back to SDL's own choice, and logs it).
+  window = SDL_CreateWindow("Pizza Legacy", win_w, win_h,
+                            window_flags | SDL_WINDOW_HIDDEN);
+  if (window) {
+    renderer_handle = fx::create_renderer(
+        window, {.choice = options.renderer, .hdr = options.hdr_output});
+  }
+  if (!window || !renderer_handle) {
     Logger::warn("Failed to create window/renderer: {}", SDL_GetError());
+    if (window) {
+      SDL_DestroyWindow(window);
+    }
     return false;
+  }
+  if (!exec_script_) {
+    SDL_ShowWindow(window);
   }
   sdl_.window.reset(window);
   sdl_.renderer.reset(renderer_handle);

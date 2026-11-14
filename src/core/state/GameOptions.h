@@ -12,6 +12,7 @@
 
 #include "core/state/GameRules.h"
 #include "engine/DisplayConstants.h"
+#include "engine/fx/Look.h"
 
 // FPS is decoupled from the 30Hz tick, so a higher rate only smooths
 // input/cursor/redraw.
@@ -221,4 +222,15 @@ struct GameOptions {
   // Not saved, so it lasts for this run only.
   // Show the advanced rows on the options screens.
   bool show_advanced_options = false;
+
+  // HD picture settings: a preset like a TV's picture modes, sliders on top
+  // of it and a preset per area (engine/fx/Look.h). Only the picture
+  // changes, never the game. The default, Classic, is the HD look as it
+  // always was.
+  fx::LookSettings picture;
+  // Which SDL render driver to ask for: Auto (SDL's choice) or SDL's GPU
+  // driver, which runs the post-FX shader. Read once at startup.
+  fx::RendererChoice renderer = fx::RendererChoice::Auto;
+  // scRGB (HDR) output when the display has HDR on. Read once at startup.
+  bool hdr_output = false;
 };

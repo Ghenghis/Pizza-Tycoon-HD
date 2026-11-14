@@ -18,6 +18,7 @@
 #include "engine/Renderable.h"
 #include "engine/SDL_include.h"
 #include "engine/adapters/SDLRectAdapter.h"
+#include "engine/fx/Look.h"
 #include "engine/gfx/Surface.h"
 #include "engine/ui/CursorManager.h"
 #include "resources/HdPack.h"
@@ -210,7 +211,42 @@ void Renderer::draw_compare_divider() {
   SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
 
+fx::Grade Renderer::frame_grade() const {
+  // The 1994 look is the 1994 picture: no grade, no light strength.
+  return classic_ ? fx::Grade{} : fx::frame_grade();
+}
+
+LightPass::Strength Renderer::light_strength() const {
+  const fx::Grade g = frame_grade();
+  return {g.light_strength, g.shadow_depth};
+}
+
+bool Renderer::post_fx_shader() {
+  if (!post_) {
+    post_ = std::make_unique<fx::PostFx>(sdl_.renderer.get());
+  }
+  return post_->shader_ready();
+}
+
+void Renderer::present_display_texture() {
+  if (!post_) {
+    post_ = std::make_unique<fx::PostFx>(sdl_.renderer.get());
+  }
+  fx::FrameInfo info;
+  if (compare_x_) {
+    // The 1994 side of the comparison stays ungraded.
+    info.split_u = static_cast<float>(*compare_x_) /
+                   static_cast<float>(DisplayConstants::SCREEN_WIDTH);
+  }
+  info.scan_rows = static_cast<float>(DisplayConstants::SCREEN_HEIGHT);
+  info.mask_cols = static_cast<float>(sdl_.texture->w);
+  post_path_ = post_->draw(sdl_.texture.get(), frame_grade(), info);
+}
+
 void Renderer::on_render_reset(bool device_lost) {
+  if (post_) {
+    post_->on_render_reset(device_lost);
+  }
   if (device_lost) {
     // The old device's textures are gone (SDL keeps the handles, without
     // their contents): every one is destroyed here and made again, and its
@@ -263,7 +299,8 @@ void Renderer::warm_up_gpu() {
       }
       // Makes the light pass's own textures; the first frame draws over it.
       light_->apply(tex, out, layer.area.w, layer.area.h, scale_, scene,
-                    static_cast<double>(SDL_GetTicks()) / 1000.0);
+                    static_cast<double>(SDL_GetTicks()) / 1000.0,
+                    light_strength());
     }
   }
   SDL_SetRenderTarget(r, nullptr);
@@ -316,6 +353,13 @@ void Renderer::render_gpu() {
     gpu_cached_.clear();
     force_recompose_ = true;
   }
+  // New picture settings: the lit layers are lit again and the frame shown
+  // again.
+  if (const fx::Grade grade = frame_grade(); grade != last_grade_) {
+    last_grade_ = grade;
+    force_recompose_ = true;
+  }
+  const LightPass::Strength strength = light_strength();
   for (auto& layer : layers_) {
     force_recompose_ |= layer.view->needs_force_recompose();
   }
@@ -373,7 +417,7 @@ void Renderer::render_gpu() {
           light_ = std::make_unique<LightPass>(r);
         }
         light_->apply(tex, out, area.w, area.h, scale_, scene,
-                      static_cast<double>(SDL_GetTicks()) / 1000.0);
+                      static_cast<double>(SDL_GetTicks()) / 1000.0, strength);
         shown = out;
       }
       SDL_SetRenderTarget(r, back_tex_);
@@ -455,7 +499,7 @@ void Renderer::render_gpu() {
   SDL_SetRenderTarget(r, nullptr);
   SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
   SDL_RenderClear(r);
-  SDL_RenderTexture(r, sdl_.texture.get(), nullptr, nullptr);
+  present_display_texture();
   const uint64_t p0 = SDL_GetPerformanceCounter();
   SDL_RenderPresent(r);
   times_.present_ms += ms_between(p0, SDL_GetPerformanceCounter());
@@ -478,6 +522,11 @@ void Renderer::render() {
   // During fade, clear cache so all layers regenerate with current fade_factor
   if (is_fading()) {
     cache_.clear();
+    force_recompose_ = true;
+  }
+  // New picture settings: the frame is shown again.
+  if (const fx::Grade grade = frame_grade(); grade != last_grade_) {
+    last_grade_ = grade;
     force_recompose_ = true;
   }
 
@@ -601,7 +650,7 @@ void Renderer::render() {
   SDL_UpdateTexture(sdl_.texture.get(), nullptr, final_surface->pixels,
                     final_surface->pitch);
   SDL_RenderClear(sdl_.renderer.get());
-  SDL_RenderTexture(sdl_.renderer.get(), sdl_.texture.get(), nullptr, nullptr);
+  present_display_texture();
   SDL_RenderPresent(sdl_.renderer.get());
 
   if (fade_state_ == FadeState::FADING_OUT && fade_factor_ <= 0.0f) {

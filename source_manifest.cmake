@@ -222,6 +222,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/screens/restaurant/GuestWalkScene.cpp
     src/views/screens/restaurant/RestaurantMenu.cpp
     src/views/screens/restaurant/RestaurantStats.cpp
+    src/views/screens/restaurant/RestaurantSoundCues.cpp
     src/views/screens/restaurant/RestaurantView.cpp
     src/views/screens/restaurant/SeatedCharacterRenderer.cpp
     src/views/screens/restaurant/WalkNavigation.cpp
@@ -333,6 +334,10 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/audio/MixTap.cpp
     src/engine/audio/VocDecoder.cpp
     src/engine/debug/ScreenCommands.cpp
+    src/engine/fx/Grade.cpp
+    src/engine/fx/Look.cpp
+    src/engine/fx/PostFx.cpp
+    src/engine/fx/RendererSelect.cpp
     src/engine/geom/Camera.cpp
     src/engine/gfx/ColorIndex.cpp
     src/engine/gfx/Draw.cpp
@@ -635,6 +640,11 @@ set(PLEGACY_HEADERS
     src/engine/audio/MixTap.h
     src/engine/audio/VocDecoder.h
     src/engine/debug/ScreenCommands.h
+    src/engine/fx/Grade.h
+    src/engine/fx/Look.h
+    src/engine/fx/PostFx.h
+    src/engine/fx/RendererSelect.h
+    src/engine/fx/generated/PostFxShaders.h
     src/engine/geom/Camera.h
     src/engine/geom/GeomFormat.h
     src/engine/geom/PxOffset.h
@@ -827,6 +837,7 @@ set(PLEGACY_HEADERS
     src/views/screens/restaurant/RecipeListRow.h
     src/views/screens/restaurant/RestaurantMenu.h
     src/views/screens/restaurant/RestaurantStats.h
+    src/views/screens/restaurant/RestaurantSoundCues.h
     src/views/screens/restaurant/RestaurantView.h
     src/views/screens/restaurant/SeatedCharacterRenderer.h
     src/views/screens/restaurant/Walk.h

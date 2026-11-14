@@ -17,6 +17,7 @@
 #include "engine/LayerInfo.h"
 #include "engine/LightPass.h"
 #include "engine/SDLContext.h"
+#include "engine/fx/PostFx.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Blit.h"
 #include "engine/gfx/HdImage.h"
@@ -73,6 +74,12 @@ public:
   void start_fade_in(int duration_frames);
   [[nodiscard]] bool is_fading() const;
   [[nodiscard]] bool fade_out_complete() const;
+
+  // How the last frame went to the window (fx::PostFx): plainly, through
+  // the post-FX shader, or with fixed-function colour modulation.
+  [[nodiscard]] fx::PostFx::Path last_post_path() const { return post_path_; }
+  // True when the post-FX shader runs (SDL's GPU render driver).
+  [[nodiscard]] bool post_fx_shader();
 
   // GPU statistics of the last frame (HD only).
   [[nodiscard]] const HdCompositor* compositor() const { return gpu_.get(); }
@@ -139,6 +146,16 @@ private:
   [[nodiscard]] bool software_crt() const;
 
   void draw_compare_divider();
+  // The picture settings for this frame (fx::frame_grade(), or the identity
+  // in the 1994 look).
+  [[nodiscard]] fx::Grade frame_grade() const;
+  [[nodiscard]] LightPass::Strength light_strength() const;
+  // Draws the display texture to the window through the picture pass.
+  void present_display_texture();
+  std::unique_ptr<fx::PostFx> post_;
+  fx::PostFx::Path post_path_ = fx::PostFx::Path::Plain;
+  // The grade of the last frame: a change redraws the frame.
+  fx::Grade last_grade_;
   bool classic_ = false;
   std::optional<int> compare_x_;
   std::unique_ptr<HdCompositor> gpu_;

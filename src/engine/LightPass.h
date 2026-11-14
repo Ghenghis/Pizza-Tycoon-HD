@@ -10,6 +10,15 @@
 
 #include "engine/Lighting.h"
 
+// The picture settings' hold on the lighting (fx::Grade): `lights` scales
+// every light's colour, `shadows` how far the ambient level falls below 1
+// (1.2 = 20% darker shadows, 0.8 = 20% lighter). {1, 1} draws exactly what
+// the scene alone gives.
+struct LightStrength {
+  float lights = 1.0f;
+  float shadows = 1.0f;
+};
+
 // Lights one layer on the GPU, with fixed-function blending only (works on
 // every SDL renderer):
 //   1. a light map at engine resolution: the ambient colour, plus a soft
@@ -24,11 +33,17 @@ public:
   LightPass(const LightPass&) = delete;
   LightPass& operator=(const LightPass&) = delete;
 
+  using Strength = LightStrength;
+  // The scene's ambient level with `strength` applied.
+  [[nodiscard]] static float ambient(const lighting::Scene& scene,
+                                     const Strength& strength);
+
   // out = albedo (premultiplied, w*k x h*k) lit by `scene` at time
   // `seconds`. w and h are the layer's size in engine pixels. Leaves the
   // render target set to `out`.
   void apply(SDL_Texture* albedo, SDL_Texture* out, int w, int h, int k,
-             const lighting::Scene& scene, double seconds);
+             const lighting::Scene& scene, double seconds,
+             const Strength& strength = Strength{});
 
 private:
   SDL_Texture* gradient();
