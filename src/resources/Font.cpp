@@ -8,18 +8,22 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utfcpp/utf8.h>
 #include <vector>
 #include "engine/Fatal.h"
 #include "engine/StringUtil.h"
+#include "engine/gfx/HdImage.h"
 #include "engine/ui/TextAnchor.h"
 #include "resources/FontTypes.h"
+#include "resources/HdTypeface.h"
 
 namespace {
 
@@ -93,6 +97,298 @@ std::string join_pipe_lines(std::span<const std::string_view> lines) {
 
 Font::Font(FontFace face, FontData data)
     : face_(face), data_(std::move(data)) {}
+
+void Font::attach_hd(std::shared_ptr<const resources::HdTypeface> typeface,
+                     HdMetrics metrics) {
+  hd_ = std::move(typeface);
+  hd_metrics_ = metrics;
+  if (hd_ && gfx::hd_scale() > 1) {
+    hd_->prewarm(hd_cap_px());
+  }
+}
+
+float Font::hd_cap_px() const {
+  return static_cast<float>(hd_metrics_.baseline - hd_metrics_.cap_top) *
+         static_cast<float>(hd_metrics_.scale * gfx::hd_scale()) *
+         hd_->settings().size;
+}
+
+namespace {
+
+// HD text is drawn again whenever a view redraws, mostly unchanged, so it is
+// cached in two steps, neither tied to where the line is:
+//  * the letters of a text (font, size, room it has): an 8-bit coverage;
+//  * those letters in given colours at a given texel offset: the picture.
+// A redraw then costs a few lookups, and reusing the very same picture
+// spares the GPU an upload. The letters are blended over whatever is under
+// them, so a cached picture is valid on any background.
+constexpr std::size_t max_letter_lines = 4096;
+constexpr std::size_t picture_budget_bytes = std::size_t{128} << 20;
+
+} // namespace
+
+struct Font::HdLetters {
+  std::shared_ptr<const resources::HdTypeface::Coverage> coverage;
+  float pen = 0; // advance of the whole line after narrowing, texels
+};
+
+namespace {
+
+std::unordered_map<std::string, Font::HdLetters>& letters_cache() {
+  static std::unordered_map<std::string, Font::HdLetters> cache;
+  return cache;
+}
+
+struct PictureKey {
+  const resources::HdTypeface::Coverage* coverage;
+  uint32_t fg;
+  uint32_t shadow;
+  int at_x, at_y;         // letters in the picture, texels
+  int shadow_x, shadow_y; // shadow in the picture, texels
+  int w, h;               // picture, engine pixels
+  bool operator==(const PictureKey&) const = default;
+};
+
+struct PictureKeyHash {
+  std::size_t operator()(const PictureKey& k) const noexcept {
+    std::size_t h = std::hash<const void*>{}(k.coverage);
+    for (int v : {static_cast<int>(k.fg), static_cast<int>(k.shadow), k.at_x,
+                  k.at_y, k.shadow_x, k.shadow_y, k.w, k.h}) {
+      h = h * 1000003u ^ static_cast<std::size_t>(static_cast<unsigned>(v));
+    }
+    return h;
+  }
+};
+
+struct PictureEntry {
+  // Keeps the coverage (whose address is in the key) alive.
+  std::shared_ptr<const resources::HdTypeface::Coverage> coverage;
+  std::shared_ptr<const gfx::HdImage> picture;
+  uint64_t last_use = 0;
+};
+
+struct PictureCache {
+  std::unordered_map<PictureKey, PictureEntry, PictureKeyHash> entries;
+  std::size_t bytes = 0;
+  uint64_t clock = 0;
+
+  void trim() {
+    if (bytes <= picture_budget_bytes) {
+      return;
+    }
+    // Drop the least recently used half in one go.
+    std::vector<uint64_t> uses;
+    uses.reserve(entries.size());
+    for (const auto& [key, e] : entries) {
+      uses.push_back(e.last_use);
+    }
+    std::nth_element(uses.begin(), uses.begin() + uses.size() / 2, uses.end());
+    const uint64_t cut = uses[uses.size() / 2];
+    for (auto it = entries.begin(); it != entries.end();) {
+      if (it->second.last_use < cut) {
+        bytes -= it->second.picture->pixels.size() * sizeof(uint32_t);
+        it = entries.erase(it);
+      }
+      else {
+        ++it;
+      }
+    }
+  }
+};
+
+PictureCache& picture_cache() {
+  static PictureCache cache;
+  return cache;
+}
+
+int floor_div(int v, int k) { return v >= 0 ? v / k : -((-v + k - 1) / k); }
+
+} // namespace
+
+// One line of HD text: the engine-pixel rect its letters cover and the
+// letters there, on a transparent background.
+struct Font::HdLine {
+  ViewRect rect;
+  std::shared_ptr<const gfx::HdImage> picture;
+};
+
+std::optional<Font::HdLine>
+Font::prepare_hd_line(const Surface& target, std::string_view text,
+                      ViewPoint origin, int width, ViewPoint line_top,
+                      const TextStyle& style) const {
+  const int k = gfx::hd_scale();
+  if (!hd_ || k <= 1 || width <= 0 || text.empty() ||
+      !resources::HdTypefaces::enabled()) {
+    return std::nullopt;
+  }
+  const float room = static_cast<float>(width * k);
+
+  // The letters, whatever the position.
+  std::string key;
+  key.reserve(text.size() + 32);
+  {
+    const auto put = [&key](int64_t v) {
+      key.append(reinterpret_cast<const char*>(&v), sizeof v);
+    };
+    put(reinterpret_cast<intptr_t>(hd_.get()));
+    put(reinterpret_cast<intptr_t>(this));
+    put(k);
+    put(width);
+    key.append(text);
+  }
+  auto& letters = letters_cache();
+  auto found = letters.find(key);
+  if (found == letters.end()) {
+    if (letters.size() >= max_letter_lines) {
+      letters.clear();
+    }
+    found = letters.emplace(std::move(key), hd_letters(text, room)).first;
+  }
+  const Font::HdLetters& line = found->second;
+  if (!line.coverage) {
+    return std::nullopt;
+  }
+  const auto& cov = *line.coverage;
+
+  // Where they go: in the space the original letters take, aligned the way
+  // the original line is, on the original's baseline.
+  float pen_x = static_cast<float>(origin.x * k);
+  switch (style.align) {
+  case TextAnchor::Start:
+    break;
+  case TextAnchor::Middle:
+    pen_x += (room - line.pen) / 2;
+    break;
+  case TextAnchor::End:
+    pen_x += room - line.pen;
+    break;
+  }
+  const int x = static_cast<int>(std::lround(pen_x)) + cov.left;
+  const int y = line_top.y * k +
+                static_cast<int>(std::lround(static_cast<float>(
+                    hd_metrics_.baseline * hd_metrics_.scale * k))) -
+                cov.baseline;
+  const int sdx = style.shadow ? style.shadow->offset.dx * k : 0;
+  const int sdy = style.shadow ? style.shadow->offset.dy * k : 0;
+  const int x0 = std::min(x, x + sdx);
+  const int y0 = std::min(y, y + sdy);
+  const int x1 = std::max(x, x + sdx) + cov.width;
+  const int y1 = std::max(y, y + sdy) + cov.height;
+  const int ex0 = std::max(0, floor_div(x0, k));
+  const int ey0 = std::max(0, floor_div(y0, k));
+  const int ex1 = std::min(target.width(), floor_div(x1 + k - 1, k));
+  const int ey1 = std::min(target.height(), floor_div(y1 + k - 1, k));
+  if (ex1 <= ex0 || ey1 <= ey0) {
+    return std::nullopt;
+  }
+  const ViewRect r{ex0, ey0, ex1 - ex0, ey1 - ey0};
+
+  // The letters in their colours.
+  const auto& colors = target.colors();
+  const auto rgba = [&colors](uint8_t idx) -> uint32_t {
+    if (idx == gfx::TRANSPARENT || idx >= colors.size()) {
+      return 0;
+    }
+    return gfx::pack_rgba(colors[idx].r, colors[idx].g, colors[idx].b, 255);
+  };
+  const PictureKey pkey{
+      .coverage = line.coverage.get(),
+      .fg = rgba(style.color.get()),
+      .shadow = style.shadow ? rgba(style.shadow->color.get()) : 0u,
+      .at_x = x - r.x * k,
+      .at_y = y - r.y * k,
+      .shadow_x = x + sdx - r.x * k,
+      .shadow_y = y + sdy - r.y * k,
+      .w = r.w,
+      .h = r.h,
+  };
+  auto& pictures = picture_cache();
+  if (auto it = pictures.entries.find(pkey); it != pictures.entries.end()) {
+    it->second.last_use = ++pictures.clock;
+    return HdLine{r, it->second.picture};
+  }
+
+  auto picture = std::make_shared<gfx::HdImage>(r.w * k, r.h * k, 0u);
+  const auto paint = [&](int ax, int ay, uint32_t colour) {
+    if (gfx::alpha(colour) == 0) {
+      return;
+    }
+    const uint32_t rgb = colour & 0xFFFFFF00u;
+    const int ya = std::max(0, -ay);
+    const int yb = std::min(cov.height, picture->height - ay);
+    const int xa = std::max(0, -ax);
+    const int xb = std::min(cov.width, picture->width - ax);
+    for (int cy = ya; cy < yb; ++cy) {
+      const uint8_t* src =
+          cov.pixels.data() + static_cast<std::size_t>(cy) * cov.width;
+      uint32_t* dst = picture->row(ay + cy) + ax;
+      for (int cx = xa; cx < xb; ++cx) {
+        const uint32_t a = src[cx];
+        if (a == 0) {
+          continue;
+        }
+        uint32_t& d = dst[cx];
+        d = a == 255 || gfx::alpha(d) == 0 ? rgb | a
+                                           : gfx::blend_over(rgb | a, d);
+      }
+    }
+  };
+  if (style.shadow) {
+    paint(pkey.shadow_x, pkey.shadow_y, pkey.shadow);
+  }
+  paint(pkey.at_x, pkey.at_y, pkey.fg);
+
+  std::shared_ptr<const gfx::HdImage> done = std::move(picture);
+  pictures.bytes += done->pixels.size() * sizeof(uint32_t);
+  pictures.entries.emplace(pkey, PictureEntry{.coverage = line.coverage,
+                                              .picture = done,
+                                              .last_use = ++pictures.clock});
+  pictures.trim();
+  return HdLine{r, std::move(done)};
+}
+
+Font::HdLetters Font::hd_letters(std::string_view text, float room) const {
+  const auto& settings = hd_->settings();
+  std::u32string letters;
+  letters.reserve(text.size());
+  std::size_t offset = 0;
+  while (offset < text.size()) {
+    uint32_t c = remap_character(next_codepoint(text, offset));
+    if (settings.uppercase && c >= 'a' && c <= 'z') {
+      c -= 'a' - 'A';
+    }
+    if (c != 0 && !hd_->has_glyph(c) && c != ' ') {
+      // Whatever the original draws instead (its substitute), else a gap.
+      c = substitute_character(c);
+      if (!hd_->has_glyph(c)) {
+        c = ' ';
+      }
+    }
+    letters.push_back(static_cast<char32_t>(c));
+  }
+  const float cap = hd_cap_px();
+  const float tracking =
+      settings.tracking *
+      static_cast<float>(hd_metrics_.scale * gfx::hd_scale());
+  auto coverage = std::make_shared<resources::HdTypeface::Coverage>(
+      hd_->line(letters, cap, tracking, room));
+  if (coverage->empty()) {
+    return {};
+  }
+  return HdLetters{std::move(coverage),
+                   std::min(hd_->measure(letters, cap, tracking), room)};
+}
+
+void Font::finish_hd_line(Surface& target, const HdLine& line) const {
+  // The letters are blended over whatever is there: a block of transparent
+  // pixels carrying them as its HD picture, so the indexed pixels under it
+  // stay as they are and the renderer draws the letters on top.
+  const ViewRect& r = line.rect;
+  Surface block(r.w, r.h, target.palette(), gfx::TRANSPARENT);
+  block.attach_hd(line.picture);
+  target.blit(block, ViewRect{0, 0, r.w, r.h}, ViewPoint{r.x, r.y},
+              gfx::TRANSPARENT);
+}
 
 std::vector<std::string_view> Font::split_by_pipe(std::string_view text) {
   std::vector<std::string_view> lines;
@@ -264,6 +560,11 @@ RenderedTextMetrics Font::render_line_onto(Surface& target,
   }
   out.render_x = origin.x;
 
+  // At HD resolution the letters come from the HD typeface and go into the
+  // HD picture only.
+  std::optional<HdLine> hd = prepare_hd_line(target, text, origin, size.width,
+                                             ViewPoint{pos.x, pos.y}, style);
+
   // We'll render twice if shadow is enabled; first shadow then foreground
   auto render_pass = [&](ViewPoint pos, uint8_t color) {
     ViewPoint cur = pos;
@@ -290,14 +591,19 @@ RenderedTextMetrics Font::render_line_onto(Surface& target,
     }
   };
 
-  // Shadow pass first (if enabled), then the foreground.
-  if (style.shadow) {
-    ViewPoint shadow_origin = origin + style.shadow->offset;
-    render_pass(shadow_origin, style.shadow->color.get());
+  if (hd) {
+    // The HD letters only. The original's would show through around them
+    // (the renderer draws the indexed pixels under the HD picture).
+    finish_hd_line(target, *hd);
   }
-
-  // Foreground pass
-  render_pass(origin, style.color.get());
+  else {
+    // Shadow pass first (if enabled), then the foreground.
+    if (style.shadow) {
+      ViewPoint shadow_origin = origin + style.shadow->offset;
+      render_pass(shadow_origin, style.shadow->color.get());
+    }
+    render_pass(origin, style.color.get());
+  }
 
   out.width = size.width;
   out.height = size.height;

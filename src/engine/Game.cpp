@@ -48,6 +48,7 @@
 #include "engine/ui/TooltipManager.h"
 #include "resources/AssetExporter.h"
 #include "resources/HdPack.h"
+#include "resources/HdTypeface.h"
 #include "resources/PaletteLoader.h"
 #include "resources/Upscaling.h"
 #include "resources/VgaLoader.h"
@@ -612,6 +613,7 @@ int Game::run() {
       tick_accumulator_ms = 0;
     }
     lighting::set_enabled(state.options().lighting);
+    resources::HdTypefaces::set_enabled(state.options().hd_text);
     context.clock.tick_alpha = view_frozen()
                                    ? 0.0f
                                    : static_cast<float>(tick_accumulator_ms) /
@@ -951,6 +953,7 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
     return {};
   }
   lighting::set_enabled(gs.options().lighting);
+  resources::HdTypefaces::set_enabled(gs.options().hd_text);
   Renderer renderer(sdl_, display_height_);
   renderer.add_layers(result.view.get());
   // In a real session the intro gives the background warm-up time to decode
@@ -1028,6 +1031,7 @@ bool Game::capture_screenshot(GameState& gs, const std::string& path) {
   bool saved = false;
   if (result.view) {
     lighting::set_enabled(gs.options().lighting);
+    resources::HdTypefaces::set_enabled(gs.options().hd_text);
     Renderer renderer(sdl_, display_height_);
     renderer.add_layers(result.view.get());
     if (tutorial_layer_ && gs.tutorial().active()) {
@@ -1202,6 +1206,12 @@ void Game::configure_hd(const GameOptions& options) const {
     }
   }
   resources::HdPack::instance().configure(pack);
+  // HD typefaces for the text, from <data>/fonts (shipped with the game).
+  resources::HdTypefaces::instance().configure(
+      gfx::hd_scale() > 1
+          ? std::filesystem::path(platform_paths::data_dir()) / "fonts"
+          : std::filesystem::path{});
+  resources::HdTypefaces::set_enabled(options.hd_text);
   if (gfx::hd_scale() > 1) {
     Logger::info("HD rendering at {}x ({}x{})", gfx::hd_scale(),
                  DisplayConstants::SCREEN_WIDTH * gfx::hd_scale(),

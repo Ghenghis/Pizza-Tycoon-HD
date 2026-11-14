@@ -204,6 +204,35 @@ What to expect, by group:
 | Animated characters, walk cycles | Hardest: frames are generated one at a time and can drift. Use `upscale_only` or denoise 0.2 or lower, or paint one key frame and redo the rest by hand |
 | Logos and anything with text | Keep denoise at 0.1-0.15; models garble letters |
 
+## HD text
+
+The game's seven bitmap fonts are 5 to 19 pixels tall. Scaled to 4K they stay
+blocky, so at hd_scale 2 or more every line of text is drawn again with a
+modern typeface, rasterized with anti-aliasing at the exact size it is shown
+(stb_truetype), straight into the HD picture:
+
+| Original font | Used for | HD typeface |
+|---|---|---|
+| SUPERSMA, CSTANDAR, MINI | status panel, small labels (capitals only) | Chakra Petch SemiBold |
+| ASTANDAR | most body text | Archivo ExtraBold, semi-expanded |
+| MENU | menus | Crimson Pro Medium |
+| PIZ-NUMB | numbers, tables, names | Fira Sans Medium |
+| RUBY | headings | Zilla Slab Bold |
+
+The layout doesn't change: lines break where the original breaks them, and
+each line sits in the box the original letters fill, with the same alignment
+(left, centred or right) and the original's cap height and baseline. A line
+that would be wider than the original is narrowed to fit. The indexed pixels
+still get the original letters, because the game and the non-HD renderer use
+them; only the HD picture shows the new ones. Colours and drop shadows are
+the original's.
+
+`data/fonts/hd_fonts.json` maps each font to its typeface (`file`), cap height
+(`size`, a multiple of the original's), letter spacing (`tracking`, in
+original pixels) and `uppercase` for the capitals-only fonts. All the fonts
+there are under the SIL Open Font License. The `hd_text` option (also in the
+graphics options, "HD text") switches back to the 1994 letters at any time.
+
 ## Redrawing furniture with depth (2.5D-ready art)
 
 MMPX keeps the sprites faithful but they still look like magnified pixel

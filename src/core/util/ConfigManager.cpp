@@ -136,6 +136,9 @@ const auto option_defs = std::to_array({
     bool_option<&GameOptions::lighting>(
         "lighting", {},
         "HD: candles, ovens and screens light the room around them"),
+    bool_option<&GameOptions::hd_text>(
+        "hd_text", {},
+        "HD: sharp modern typefaces instead of the 1994 bitmap fonts"),
     bool_option<&GameOptions::software_cursor>("software_cursor"),
     enum_option<&GameOptions::smoothing, &smoothing_from_config_value>(
         "smoothing", {},

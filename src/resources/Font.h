@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Surface.h"
 #include "engine/ui/TextAnchor.h"
+#include "resources/HdTypeface.h"
 
 using gfx::Surface;
 
@@ -71,6 +73,20 @@ public:
                                                int max_width,
                                                const TextStyle& style = {});
 
+  // Where the original's letters sit, in original font pixels from the top
+  // of a line, and how many engine pixels one original pixel is.
+  struct HdMetrics {
+    int cap_top = 0;  // top row of a capital
+    int baseline = 0; // the row under a capital
+    int scale = 2;
+  };
+  // At hd_scale() 2 or more, lines are drawn with this typeface at full HD
+  // resolution, in the space and alignment the original letters take, so
+  // layout and wrapping stay the same (see render_line_onto).
+  void attach_hd(std::shared_ptr<const resources::HdTypeface> typeface,
+                 HdMetrics metrics);
+  [[nodiscard]] bool has_hd() const noexcept { return hd_ != nullptr; }
+
   // The original's text files mark their line breaks with '|'.
   static std::vector<std::string_view> split_by_pipe(std::string_view text);
 
@@ -96,6 +112,26 @@ private:
                                          int max_width, const TextStyle& style);
   FontFace face_;
   FontData data_;
+  std::shared_ptr<const resources::HdTypeface> hd_;
+  HdMetrics hd_metrics_;
+
+  // The HD side of render_line_onto: draws the line's letters at full
+  // resolution over what is already on the surface there.
+  struct HdLine;
+  [[nodiscard]] std::optional<HdLine>
+  prepare_hd_line(const Surface& target, std::string_view text,
+                  ViewPoint origin, int width, ViewPoint line_top,
+                  const TextStyle& style) const;
+  void finish_hd_line(Surface& target, const HdLine& line) const;
+
+public:
+  // A line of HD letters (internal; public for the cache in Font.cpp).
+  struct HdLetters;
+
+private:
+  [[nodiscard]] HdLetters hd_letters(std::string_view text, float room) const;
+  // Cap height of the HD letters, texels.
+  [[nodiscard]] float hd_cap_px() const;
 
   // Fixed-width wrapping
   std::vector<std::string> word_wrap_line(std::string_view input_line,

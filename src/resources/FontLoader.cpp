@@ -11,10 +11,12 @@
 #include <iostream>
 #include <unordered_map>
 #include "engine/Fatal.h"
+#include "engine/gfx/HdImage.h"
 #include "engine/gfx/Mmpx.h"
 #include "engine/gfx/Upscaler.h"
 #include "resources/FontManager.h"
 #include "resources/FontTypes.h"
+#include "resources/HdTypeface.h"
 #include "resources/Upscaling.h"
 #include "resources/util/FileUtils.h"
 
@@ -194,7 +196,47 @@ std::unique_ptr<Font> FontLoader::load(const std::string& filename) {
       .glyphs = std::move(glyphs),
       .line_height = parsed.header.character_height * scale,
   };
-  return std::make_unique<Font>(face, std::move(fd));
+  auto font = std::make_unique<Font>(face, std::move(fd));
+  if (gfx::hd_scale() > 1) {
+    if (auto typeface = resources::HdTypefaces::instance().get(filename)) {
+      font->attach_hd(std::move(typeface), hd_metrics(parsed, scale));
+    }
+  }
+  return font;
+}
+
+Font::HdMetrics FontLoader::hd_metrics(const ParsedFont& pf, int scale) {
+  // The rows a capital H covers, found in the bitmap itself.
+  const int h = pf.header.character_height;
+  Font::HdMetrics m{.cap_top = 0, .baseline = h, .scale = scale};
+  const int index = 'H' - pf.header.first_character;
+  if (index < 0 || static_cast<std::size_t>(index) >= pf.positions.size()) {
+    return m;
+  }
+  const auto& cp = pf.positions[static_cast<std::size_t>(index)];
+  const int row_bytes = pf.header.number_of_bytes_per_row;
+  auto ink = [&](int row, int col) {
+    const std::size_t byte =
+        static_cast<std::size_t>(row) * row_bytes + col / 8;
+    return byte < pf.bitmap.size() &&
+           (pf.bitmap[byte] >> (7 - col % 8) & 1) != 0;
+  };
+  int top = -1;
+  int bottom = -1;
+  for (int row = 0; row < h; ++row) {
+    for (int col = cp.start_pos; col < cp.start_pos + cp.width; ++col) {
+      if (ink(row, col)) {
+        top = top < 0 ? row : top;
+        bottom = row;
+        break;
+      }
+    }
+  }
+  if (top >= 0) {
+    m.cap_top = top;
+    m.baseline = bottom + 1;
+  }
+  return m;
 }
 
 std::vector<uint8_t> FontLoader::load_file_bytes(std::string_view fname) {

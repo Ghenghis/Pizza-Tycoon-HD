@@ -23,6 +23,7 @@
 #include "engine/input/InputManager.h"
 #include "engine/input/Key.h"
 #include "resources/FontTypes.h"
+#include "resources/HdTypeface.h"
 #include "views/ui/PopupManager.h"
 #include "views/ui/popups/AlertPopup.h"
 #include "views/ui/widgets/CheckboxMenuItem.h"
@@ -232,6 +233,16 @@ void MenuOptions::build_graphics(GameState& state) {
                     }))
       .help_text("HD only: candles, ovens, arcade machines and TVs light the "
                  "room around them. Only the picture changes, not the game.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "HD text", state.options().hd_text,
+                    [&state, this] {
+                      state.options().hd_text = !state.options().hd_text;
+                      resources::HdTypefaces::set_enabled(
+                          state.options().hd_text);
+                      mark_dirty();
+                    }))
+      .help_text("HD only: menus and reports in sharp modern typefaces, "
+                 "drawn at full resolution, instead of the 1994 pixel fonts.");
   add_menu_item(std::make_unique<EnumMenuItem<Smoothing>>(
                     context_, "Smoothing", state.options().smoothing,
                     std::vector{Smoothing::Off, Smoothing::Text,

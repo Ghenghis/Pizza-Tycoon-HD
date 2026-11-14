@@ -281,6 +281,7 @@ set(GAME_PLEGACY_SOURCES
     src/resources/FontLoader.cpp
     src/resources/FontManager.cpp
     src/resources/HdPack.cpp
+    src/resources/HdTypeface.cpp
     src/resources/MFileLoader.cpp
     src/resources/PaletteLoader.cpp
     src/resources/Upscaling.cpp
@@ -633,6 +634,7 @@ set(PLEGACY_HEADERS
     src/resources/FontManager.h
     src/resources/FontTypes.h
     src/resources/HdPack.h
+    src/resources/HdTypeface.h
     src/resources/MFileLoader.h
     src/resources/PaletteLoader.h
     src/resources/ResourceManager.h
@@ -826,6 +828,7 @@ set(PLEGACY_HEADERS
     src/views/viewers/VgaViewer.h
     third_party/magic_enum/magic_enum.hpp
     third_party/nlohmann/json.hpp
+    third_party/stb/stb_truetype.h
     third_party/utfcpp/utf8.h
     third_party/utfcpp/utf8/checked.h
     third_party/utfcpp/utf8/core.h

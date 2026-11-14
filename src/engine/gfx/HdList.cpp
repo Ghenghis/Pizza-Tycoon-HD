@@ -157,6 +157,19 @@ void HdList::ensure_floor() {
   floor_.assign(static_cast<std::size_t>(width_) * height_, base_bit);
   if (leaf_) {
     const int k = hd_scale();
+    const HdCmd& c = cmds_.front();
+    if (!c.half && c.sx == 0 && c.sy == 0 && c.dx == 0 && c.dy == 0 &&
+        c.img->width == width_ * k && c.img->height == height_ * k) {
+      // The usual leaf, one picture lined up with the surface: its block
+      // opacity table is the answer for every pixel at once.
+      const uint8_t* opaque = leaf_opacity();
+      const std::size_t n = floor_.size();
+      for (std::size_t i = 0; i < n; ++i) {
+        floor_[i] = opaque[i] != 0 ? 0u : base_bit;
+      }
+      leaf_ = false;
+      return;
+    }
     for (int y = 0; y < height_; ++y) {
       for (int x = 0; x < width_; ++x) {
         if (cmd_opaque_at(cmds_.front(), x, y, k)) {
@@ -278,14 +291,33 @@ HdImage HdList::materialize(int k, int x, int y, int w, int h) const {
         const int xb = std::min(tx1, (px + 1) * k);
         for (int ty = ya; ty < yb; ++ty) {
           uint32_t* row = out.row(ty - oy);
+          if (!c.half) {
+            // Straight copy of a row of the picture (the common case).
+            const uint32_t* src = c.img->row(c.sy + (ty - c.dy)) + c.sx - c.dx;
+            for (int tx = xa; tx < xb; ++tx) {
+              const uint32_t v = src[tx];
+              const uint32_t a = alpha(v);
+              uint32_t& d = row[tx - ox];
+              if (a == 255 || (i == f && a != 0)) {
+                d = v;
+              }
+              else if (i == f) {
+                d = 0u;
+              }
+              else if (a != 0) {
+                d = blend_over(v, d);
+              }
+            }
+            continue;
+          }
           for (int tx = xa; tx < xb; ++tx) {
             const uint32_t v = sample(c, tx, ty);
-            uint32_t& t = row[tx - ox];
+            uint32_t& d = row[tx - ox];
             if (i == f) {
-              t = alpha(v) != 0 ? v : 0u;
+              d = alpha(v) != 0 ? v : 0u;
             }
             else if (alpha(v) != 0) {
-              t = blend_over(v, t);
+              d = blend_over(v, d);
             }
           }
         }

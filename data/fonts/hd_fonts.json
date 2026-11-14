@@ -1,0 +1,10 @@
+{
+  "_comment": "HD typefaces for the game's 1994 bitmap fonts, used when hd_scale is 2 or more. size: cap height as a multiple of the original font's cap height. tracking: extra space between letters, in original font pixels. uppercase: the original font has capitals only. Every font here is under the SIL Open Font License (OFL-*.txt).",
+  "ASTANDAR": { "file": "Archivo-SemiExpandedExtraBold.ttf", "size": 1.04, "tracking": 0.25 },
+  "CSTANDAR": { "file": "ChakraPetch-SemiBold.ttf", "size": 1.0, "tracking": 0.3, "uppercase": true },
+  "MENU": { "file": "CrimsonPro-Medium.ttf", "size": 1.0, "tracking": 0.2 },
+  "PIZ-NUMB": { "file": "FiraSans-Medium.ttf", "size": 1.04, "tracking": 0.2 },
+  "RUBY": { "file": "ZillaSlab-Bold.ttf", "size": 1.04, "tracking": 0.3 },
+  "SUPERSMA": { "file": "ChakraPetch-SemiBold.ttf", "size": 1.0, "tracking": 0.25, "uppercase": true },
+  "MINI": { "file": "ChakraPetch-SemiBold.ttf", "size": 1.0, "tracking": 0.25, "uppercase": true }
+}

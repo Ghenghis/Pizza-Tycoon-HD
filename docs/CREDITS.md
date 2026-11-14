@@ -73,6 +73,28 @@ Usage: String conversion of enums for debugging
     Copyright: Copyright (c) 2019-2024 Daniil Goncharov
     License:   MIT (see LICENSES/MIT-magic-enum.txt)
 
+#### stb\_truetype
+
+Usage: Drawing the HD typefaces (text at HD resolution)
+
+    Copyright: Copyright (c) 2017 Sean Barrett
+    License:   MIT or public domain (see LICENSES/MIT-stb.txt)
+
+### Bundled fonts
+
+The HD text uses these typefaces from `data/fonts/`, each under the SIL Open
+Font License 1.1 (the license text is next to the fonts and in `LICENSES/`).
+Archivo and Crimson Pro are fixed instances of the variable fonts (Archivo at
+weight 800 and width 112, Crimson Pro at weight 500).
+
+| Typeface | Stands in for | Copyright | License |
+|---|---|---|---|
+| Archivo | ASTANDAR | 2020 The Archivo Project Authors | OFL-1.1 (LICENSES/OFL-1.1-archivo.txt) |
+| Chakra Petch | SUPERSMA, CSTANDAR, MINI | 2018 The Chakra Petch Project Authors | OFL-1.1 (LICENSES/OFL-1.1-chakrapetch.txt) |
+| Crimson Pro | MENU | 2018 The Crimson Pro Project Authors | OFL-1.1 (LICENSES/OFL-1.1-crimsonpro.txt) |
+| Fira Sans | PIZ-NUMB | 2012-2015 The Mozilla Foundation and Telefonica S.A. | OFL-1.1 (LICENSES/OFL-1.1-firasans.txt) |
+| Zilla Slab | RUBY | 2017 The Mozilla Foundation | OFL-1.1 (LICENSES/OFL-1.1-zillaslab.txt) |
+
 ### Adapted code
 
 #### MMPX

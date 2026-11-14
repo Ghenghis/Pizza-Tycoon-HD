@@ -189,6 +189,9 @@ struct GameOptions {
   // HD: candles, ovens, screens and lamps light the restaurant around them.
   // Only the picture changes.
   bool lighting = true;
+  // HD: text in modern typefaces drawn at full resolution, in the space the
+  // 1994 bitmap fonts take. Only the picture changes.
+  bool hd_text = true;
   bool vsync = true;
 
   bool load_list_sort_by_date = true;

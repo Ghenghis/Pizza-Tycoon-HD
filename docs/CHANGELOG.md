@@ -1,5 +1,12 @@
 Unreleased
 
+* HD text (option `hd_text`, on by default; "HD text" in the graphics
+  options): at HD resolution every line of text is drawn with a modern
+  typeface at full resolution (Chakra Petch, Archivo, Crimson Pro, Fira Sans,
+  Zilla Slab; SIL OFL, in data/fonts), in exactly the space, alignment and
+  line breaks of the 1994 font, over the HD picture under it. The game still
+  draws the original letters into its indexed pixels, so nothing it reads
+  back changes. stb_truetype is bundled for this.
 * HD lighting (option `lighting`, on by default; also in the options menu):
   candles, ovens and grills, arcade machines, TVs, the jukebox and vending
   machines light the restaurant around them, with flicker (flames, fire,

@@ -46,4 +46,8 @@ private:
 
   [[nodiscard]] static std::unordered_map<uint32_t, Glyph>
   build_glyph_table(const ParsedFont& pf, int scale);
+
+  // Where a capital sits in the original bitmap, for the HD typeface.
+  [[nodiscard]] static Font::HdMetrics hd_metrics(const ParsedFont& pf,
+                                                  int scale);
 };
