@@ -204,6 +204,39 @@ What to expect, by group:
 | Animated characters, walk cycles | Hardest: frames are generated one at a time and can drift. Use `upscale_only` or denoise 0.2 or lower, or paint one key frame and redo the rest by hand |
 | Logos and anything with text | Keep denoise at 0.1-0.15; models garble letters |
 
+## Redrawing furniture with depth (2.5D-ready art)
+
+MMPX keeps the sprites faithful but they still look like magnified pixel
+art. `tools/hdpack/redraw.py` paints them again as real HD art without
+moving a single pixel of their outline:
+
+1. `depthmaps.py <pack> <maps>` makes a depth map (Depth Anything V2 Large)
+   and a normal map for every picture: about 6 pictures a second, so a few
+   minutes for the whole pack.
+2. `redraw.py` starts from the pack picture, lets SDXL (`juggernautXL_v9`)
+   paint over it at denoise 0.8, and holds the shape and perspective with a
+   depth ControlNet (`diffusers_xl_depth_full`, strength 0.85 until 90% of
+   the steps). Every rotation of one piece of furniture shares a seed, so the
+   four views match.
+3. The result is cut to the original sprite's alpha, so placement, click
+   areas and everything the game checks stay the same. The original's
+   painted floor shadow is kept, because the model tends to repaint it as
+   part of the object.
+
+```
+python tools/hdpack/redraw.py pack/ maps/ redraw-out/ --server http://127.0.0.1:8188 \
+    --denoise 0.8 --skip-done --items-json tools/hdpack/furniture_redraw.json
+```
+
+`furniture_redraw.json` lists all 343 restaurant and kitchen furniture
+frames (`bob/moebel`, `bob/kuebobs`) with a description each. Plants are left
+out: at this size the model turns leaves into blocks, and the MMPX versions
+look better. Running several `--denoise` values side by side writes
+`redraw-out/<denoise>/` folders and a `sheet.png` to compare them. About ten
+seconds per frame on an RTX 3090 Ti, so the whole list takes about an hour.
+Copy `redraw-out/0.80/bob/` into the pack when you're happy with it (keep the
+old folders: they're the pixel-art versions).
+
 ## Legal
 
 The engine is GPL-3.0-or-later. The original game's files are not included
