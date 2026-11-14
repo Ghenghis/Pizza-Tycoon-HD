@@ -6,62 +6,57 @@
  },
  {
   "file": "bob/kuebobs/0001.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "brick oven with a glowing fire",
   "seed": 57307
  },
  {
   "file": "bob/kuebobs/0002.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "brick oven with a glowing fire",
   "seed": 72095
  },
  {
   "file": "bob/kuebobs/0003.png",
-  "description": "stainless steel electric pizza oven",
+  "description": "stainless steel electric baking oven",
   "seed": 21726
  },
  {
   "file": "bob/kuebobs/0004.png",
   "description": "restaurant kitchen grill with glowing coals",
-  "seed": 79018
+  "seed": 79019
  },
  {
   "file": "bob/kuebobs/0005.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "brick oven with a glowing fire",
   "seed": 30006
  },
  {
   "file": "bob/kuebobs/0006.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "brick oven with a glowing fire",
   "seed": 62482
  },
  {
   "file": "bob/kuebobs/0007.png",
-  "description": "stainless steel electric pizza oven",
+  "description": "stainless steel electric baking oven",
   "seed": 70995
  },
  {
   "file": "bob/kuebobs/0008.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "round stone dome oven with a glowing fire",
   "seed": 29984
  },
  {
   "file": "bob/kuebobs/0009.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "round stone dome oven with a glowing fire",
   "seed": 41018
  },
  {
   "file": "bob/kuebobs/0010.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "futuristic copper hyper oven machine with pipes and a funnel",
   "seed": 1441
  },
  {
-  "file": "bob/kuebobs/0011.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
-  "seed": 38836
- },
- {
   "file": "bob/kuebobs/0012.png",
-  "description": "stone pizza oven with brick walls and a glowing fire",
+  "description": "small red high-tech toaster oven with coloured buttons",
   "seed": 42724
  },
  {
@@ -353,11 +348,6 @@
   "file": "bob/moebel/0057.png",
   "description": "green dining chair, 'Belgrade Green' style restaurant seating",
   "seed": 97131
- },
- {
-  "file": "bob/moebel/0058.png",
-  "description": "chewing gum mach. vending machine",
-  "seed": 79245
  },
  {
   "file": "bob/moebel/0061.png",
@@ -1631,22 +1621,22 @@
  },
  {
   "file": "bob/moebel/0320.png",
-  "description": "retro television set on a stand",
+  "description": "wooden television cabinet",
   "seed": 79095
  },
  {
   "file": "bob/moebel/0321.png",
-  "description": "retro television set on a stand",
+  "description": "wooden television cabinet",
   "seed": 79095
  },
  {
   "file": "bob/moebel/0322.png",
-  "description": "retro television set on a stand",
+  "description": "wooden television cabinet",
   "seed": 79095
  },
  {
   "file": "bob/moebel/0323.png",
-  "description": "retro television set on a stand",
+  "description": "wooden television cabinet",
   "seed": 79095
  },
  {

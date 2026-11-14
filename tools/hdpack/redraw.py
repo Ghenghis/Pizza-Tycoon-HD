@@ -33,14 +33,16 @@ from PIL import Image, ImageDraw, ImageFilter
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hdpack  # noqa: E402
 
+# No "pizza" here: with it the model paints pizzas onto round tables.
 STYLE = (
-    "seen from above at a slight angle, 1990s pizza restaurant game asset, "
+    "seen from above at a slight angle, 1990s restaurant tycoon game asset, "
     "hand-painted cartoon art, rich warm colours, soft studio lighting, "
-    "clean shapes, crisp details, isolated object on a plain grey background"
+    "smooth clean shapes, crisp details, isolated object on a plain grey background"
 )
 NEGATIVE = (
     "photo, photorealistic, text, letters, watermark, signature, frame, border, "
-    "blurry, noisy, jpeg artifacts, deformed, extra objects, people, cropped"
+    "blurry, noisy, jpeg artifacts, deformed, extra objects, people, cropped, "
+    "pixel art, pixelated, blocky, mosaic, grid, food, pizza, plates, face, eyes"
 )
 
 
@@ -92,13 +94,29 @@ def model_size(w: int, h: int, long_side: int = 1024) -> tuple[int, int]:
     return max(64, round(w * s / 8) * 8), max(64, round(h * s / 8) * 8)
 
 
-def prepare(sprite: Image.Image, depth: Image.Image, size: tuple[int, int]) -> tuple[Image.Image, Image.Image]:
+def block_size(sprite_size: tuple[int, int], size: tuple[int, int], source_scale: float) -> float:
+    """How many model pixels one pixel of the original 1994 art covers."""
+    return max(size) / max(1.0, max(sprite_size) / source_scale)
+
+
+def prepare(
+    sprite: Image.Image, depth: Image.Image, size: tuple[int, int], block: float = 0.0
+) -> tuple[Image.Image, Image.Image]:
+    """The model's start picture and depth map. Both are softened over about
+    half an original pixel (`block` model pixels): left sharp, the pixel grid
+    survives a 0.8 denoise and, worse, the depth ControlNet reads every pixel
+    edge as a step in the surface and paints blocks."""
     flat = Image.new("RGB", sprite.size, (128, 128, 128))
     flat.paste(sprite, mask=sprite.getchannel("A"))
     d = np.asarray(depth, dtype=np.float32)
     d8 = (d / max(float(d.max()), 1.0) * 255.0).astype(np.uint8)
     depth_rgb = Image.fromarray(d8).convert("RGB")
-    return flat.resize(size, Image.Resampling.LANCZOS), depth_rgb.resize(size, Image.Resampling.BICUBIC)
+    start = flat.resize(size, Image.Resampling.LANCZOS)
+    depth_rgb = depth_rgb.resize(size, Image.Resampling.BICUBIC)
+    if block >= 2:
+        start = start.filter(ImageFilter.GaussianBlur(block * 0.45))
+        depth_rgb = depth_rgb.filter(ImageFilter.GaussianBlur(block * 0.6))
+    return start, depth_rgb
 
 
 def shadow_mask(sprite: Image.Image) -> NDArray[np.float32]:
@@ -164,6 +182,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--checkpoint", default="juggernautXL_v9.safetensors")
     p.add_argument("--controlnet", default="diffusers_xl_depth_full.safetensors")
     p.add_argument("--seed", type=int, default=1994)
+    p.add_argument(
+        "--source-scale",
+        type=float,
+        default=12,
+        help="pack pictures are this many times the original art (0: no softening)",
+    )
     args = p.parse_args(argv)
 
     pack, maps, out = Path(args.pack), Path(args.maps), Path(args.out)
@@ -184,7 +208,8 @@ def main(argv: list[str] | None = None) -> int:
             with Image.open(maps / "depth" / rel) as dm:
                 depth = dm.copy()
             size = model_size(*sprite.size)
-            flat, depth_rgb = prepare(sprite, depth, size)
+            block = block_size(sprite.size, size, args.source_scale) if args.source_scale > 0 else 0.0
+            flat, depth_rgb = prepare(sprite, depth, size, block)
             stem = rel.replace("/", "_")[:-4]
             flat.save(Path(tmp) / f"{stem}_in.png")
             depth_rgb.save(Path(tmp) / f"{stem}_depth.png")

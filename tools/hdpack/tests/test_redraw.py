@@ -57,3 +57,37 @@ def test_baked_in_shadow_is_kept() -> None:
     out = redraw.finish(Image.new("RGB", (512, 512), (0, 255, 0)), sprite)
     assert out.getpixel((20, 35))[:3] == (48, 48, 48)
     assert out.getpixel((20, 5))[:3] == (0, 255, 0)
+
+
+def _grid(size: int, block: int) -> Image.Image:
+    """Pixel art at its worst: a checkerboard of `block`-sized squares."""
+    a = np.zeros((size, size, 4), np.uint8)
+    a[..., 3] = 255
+    yy, xx = np.mgrid[0:size, 0:size]
+    on = ((yy // block + xx // block) % 2).astype(bool)
+    a[on, :3] = 220
+    a[~on, :3] = 40
+    return Image.fromarray(a, "RGBA")
+
+
+def test_block_size_is_one_original_pixel_in_model_pixels() -> None:
+    # A 21x23 sprite at 12x is 252x276; at 1024 long side one pixel is ~44.5.
+    assert abs(redraw.block_size((252, 276), (936, 1024), 12) - 1024 / 23) < 1e-6
+
+
+def test_prepare_softens_the_pixel_grid_but_keeps_the_colours() -> None:
+    sprite = _grid(240, 12)  # 20x20 original pixels at 12x
+    depth = Image.fromarray(np.asarray(sprite)[..., 0].astype(np.uint16) * 200)
+    size = (1024, 1024)
+    block = redraw.block_size(sprite.size, size, 12)
+    sharp, sharp_depth = redraw.prepare(sprite, depth, size)
+    soft, soft_depth = redraw.prepare(sprite, depth, size, block)
+
+    def edges(im: Image.Image) -> float:
+        g = np.asarray(im.convert("L"), np.float32)
+        return float(np.abs(np.diff(g, axis=1)).max())
+
+    assert edges(soft) < 0.35 * edges(sharp)
+    assert edges(soft_depth) < 0.35 * edges(sharp_depth)
+    mean_sharp = np.asarray(sharp, np.float32).mean()
+    assert abs(np.asarray(soft, np.float32).mean() - mean_sharp) < 3
