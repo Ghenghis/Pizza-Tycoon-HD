@@ -23,7 +23,8 @@ A finished document, build or agent run never counts as verified. Nothing in thi
 |---|---|---|
 | PC checkout `<work>\repo` (`<work>` is the Pizza-Tycoon-HD-Work folder on the owner's PC) | `94d616e` | HD text v1; what the Codex review read |
 | GitHub `main` | `94d616e` | Moves forward only after the PC gates pass |
-| GitHub `integration/2026-11-14` | `39c56ee` | Every integrated commit below. Use it as an immutable baseline for the AMD worker. |
+| GitHub `integration/2026-11-14` | `39c56ee` | Immutable baseline for the AMD worker (tree `ea5e4723`) |
+| GitHub `integration/2026-11-14-r6` | `de7ed28` | Every integrated commit through round 6 (tree `641c90a7`) |
 | Bundle for the AMD worker | `<work>\bundles\pizza-tycoon-hd-94d616e..39c56ee.bundle` | `94d616e..39c56ee`, sha256 `b0513dc31cb0fb49d429dc2e5b99edb849c01fc070783ed3debb56a2192a61c7`; tree `ea5e47230b4bd9d424f123c12e38dda2a9a5f2a8` |
 
 ### Integrated commits (oldest first)
@@ -50,6 +51,10 @@ A finished document, build or agent run never counts as verified. Nothing in thi
 | `30ac96a` | Saves round 2: checked enums, stale temp cleanup, bounded readers | persistence agent |
 | `f134e72` | Audio round 2: device loss and change, master volume, mute in background | platform agent; wiring by integrator |
 | `720020b` | hdpack tools: file names are data, nothing leaves its folder | platform agent |
+| `f16a728` | Saves: every player slot required; no crash on a short list (completes `30ac96a`) | persistence agent |
+| `94fec32` | HD far city map (H4), district hatching (M2), newspaper paper restore (N1) | visual agent |
+| `2d059ba` | Legacy v1 fixture from a real quick start (17,725 bytes); its golden value recorded | persistence agent; recorded by integrator |
+| `de7ed28` | Far-map cache test uses a palette that changes a colour in use | integrator |
 
 ### Test and gate results
 
@@ -62,21 +67,23 @@ Clean worktree `integ`; cloud build lane with 2 cores.
 | Round 3: `39c56ee` | 86 cases: 79 passed, 1 failed (a sampling mistake in the new F7 test; fixed in `dda5539`, where it passes), 6 skipped; [audio], [budget] and [save]: 37 passed, 4 skipped; 0 warnings. Windows exe sha256 `0f2a8022...a757a` staged as `<work>\play-39c56ee` |
 | Round 4: `589a436` | 86 cases: 80 passed, 0 failed, 6 skipped (they need the original game). The Windows build was stopped: round 5 replaces it. |
 | Golden recording at `b42fedb`, with the original game | 3 of 4 golden tests recorded 8 checkpoints (`9b1a1fe`). **Failed: the v1 save fixture crashes on load** (SIGSEGV in `GameState::human_player_count`, an empty player slot, called from `TurnOrchestrator::run_city_start_of_day` inside `SaveGameManager::json_to_state`). The [save] test that loads the same fixture crashes the same way; 23 of 24 [save] cases pass, the round trip included. A hostile save can reach this, so it is a robustness bug, not only a fixture problem. Sent to the persistence lane. |
-| Round 5: `720020b` | Running: all tests; all tests with the original game, except the two v1-fixture cases, which run on their own so their crash is recorded; Windows exe |
+| Round 5: `720020b` | No crash any more: the v1 fixture is now refused cleanly. 117 cases: 103 passed, **3 failed**, 11 skipped; with the game, 115: 111 passed, **3 failed**, 1 skipped. All failures are save tests built on the old 2-player game: `30ac96a` had picked up the stricter validator from the working tree without its tests (`f16a728` completes it). Windows exe built; 0 warnings. |
+| Round 6: `94fec32` | With the game, after the recorder wrote the new fixture: 126 cases, 123 passed, 1 skipped, **2 failed**. The failures were the v1 golden checkpoint, not yet recorded (recorded in the same run as `84c8e5a930faab92`), and a far-map cache test bug (fixed in `de7ed28`). **The 8 Classic golden values from `b42fedb` are unchanged** with the roster, saves, audio and HD changes in. Windows exe built; 0 warnings. |
 | PC: `PizzaTycoonHD-text-9.exe` (glyph sheets, before the ARGB, base-texture and batching changes) | Steady avg 3.3–4.3 ms, p99 5.0–5.7 ms. First frame **16.8–17.4 ms: FAILS** the 16 ms gate. HD text off: 10.7–11.8 ms. |
-| PC gates for round 3 | **Waiting for a grant.** The broker denied it at rev 16/17 while the freezes were diagnosed. Readiness was sent to codex-einhander-crash-check as `msg_a8c4f3539628225c`, with the one command, all identities and the cleanup bounds (`<work>\logs\readiness-39c56ee.txt`). `bench-gate.ps1` sha256 is `ee527b47...dc97a`, parse-checked on the PC. |
+| PC bench gate r2 | Ready, not run: `<work>\bench-gate-r2.ps1` sha256 `d0d1ba09...0a0ad`. It answers the coordinator's review of v1 (`msg_0b98b89aa85d2bfc`). Content pins: exe `0f2a8022`, data `a5fe3281`, pack `a9d3a378`, game `a4d02cd1`. Broker check before each launch. Handle-only cleanup, one trial deadline, receipt written in finally. Parser and PSScriptAnalyzer clean; negative path checked on the PC (FAIL in 4.6 s; nothing started). Sent as `msg_f6d09620548a30c2`. |
+| PC gates for round 3 (v1, superseded by r2) | **Waiting for a grant.** The broker denied it at rev 16/17 while the freezes were diagnosed. Readiness was sent to codex-einhander-crash-check as `msg_a8c4f3539628225c`, with the one command, all identities and the cleanup bounds (`<work>\logs\readiness-39c56ee.txt`). `bench-gate.ps1` sha256 is `ee527b47...dc97a`, parse-checked on the PC. |
 
 ### Lanes and their current tasks
 
 | Lane | Status | Current task |
 |---|---|---|
-| Integrator (build lane) | active | Round 5 (`720020b`); PC bench gate when granted; then the play folder (with rollback), `main`, coverage budgets and the Windows golden values |
-| Core/catalog | active | Contract steps 3–6: definition-backed city source, goal observer, Santa's Pizza Village definition and the Cozy Village scenario, a headless journey test (day, week, save, restart) |
-| Persistence | active | The v1-fixture load crash: validator requires the full player list; the scratch state is prepared as the real game prepares one; a realistic v1 fixture made by the downgrade transform |
-| Visual | active | H4 HD city far map, M2 hatching, N1 newspaper |
-| Platform/audio | round 2 done (`f134e72`, `720020b`) | Next: R34 game-only recording design and setup (official FFmpeg) |
+| Integrator (build lane) | active | PC bench gate r2 when granted; then the play folder (with rollback), `main`, coverage budgets and the Windows golden values; integrate each lane's report |
+| Core/catalog | active | Contract steps 3–6 and the scenario block: definition-backed city source, goal observer, Santa's Pizza Village and the Cozy Village scenario, a headless journey test (day, week, save, restart); null checks in `human_player_count` and the competition loop |
+| Persistence | active | Three verified working versions per save slot, pre-change checkpoints, fault injection (COMMANDS-AND-RECOVERY step 2); duplicate command names rejected |
+| Visual | active | Far map built off the frame; M6 medium map; M4 water cycling at close zoom |
+| Platform/audio (the one R35 owner) | active | One music-mode owner (Original, Christmas Background, Jukebox, Off) with a playback generation; dr_mp3 and dr_wav; Xmas and chosen folders, collections, playlists, settings with three last-good revisions; libVLC 3 adapter loaded at runtime into the game mixer. The mini-player, the menus and the JUKEBOX 138 hook come next. |
 | Quality/release | done (`17ef82a`) | Next: record the coverage budgets on the PC run; release check on the next exe |
-| AMD worker | offline (CRD) | Not counted as live. When back: `integration/2026-11-14` or the bundle; don't repeat the newer fixes |
+| AMD worker | handoff received by its coordinator | Proposed independent tasks: native Windows build and Windows golden values; RX 7800 XT renderer qualification; AMF probe for R34 |
 
 ## Owner decisions (fixed inputs)
 
@@ -216,14 +223,21 @@ Read from `<work>\world-region-art\ASSET-INDEX.json`. Its own status line reads:
 
 ### Machines and GPU
 
-- **3090 Ti:** under the shared-GPU broker. Codex holds grant rev13 until 18:50 UTC and will stop, unload and release the card explicitly. Until it does: **no GPU work, no game runs and no ComfyUI batch from this lane.** This includes the PC gate runs, because the game itself uses the GPU. After that, check the broker and request a fresh grant before each batch.
-- **AMD PC:** offline over Chrome Remote Desktop since 11:03 Phoenix. It is not counted as a live worker.
+- **3090 Ti:** under the shared-GPU broker. Rev 17 at 20:2x UTC: no grant, and this project is on the denied list while the Tapper preservation copies hold the main host's I/O. **No GPU work, no game runs and no ComfyUI batch from this lane until a fresh grant.** Before each batch: `check` with the token, then `start` with the exact PID and creation time, then an explicit `release` after verified cleanup.
+- **AMD PC:** its coordinator has the handoff (`39c56ee` verified on GitHub). It uses its own resource envelope, not the broker.
 
 ### Recording and private music (R34, R35)
 
 Source: `RECORDING-AND-MUSIC.md`. These come after the reliability work and the playable slice.
 
-- **R35 private music library.** Original, My music and Off; named playlists; imports chosen from local files or Drive, kept with their source IDs and hashes; decoding on a bounded worker; optional playlists for events. Barros Pizza and PC3 are unrelated projects, and nothing from them is reused.
+- **R35 private music library** (refined by `NORTH-POLE-MUSIC-LIBRARY.md`, 13:18 Phoenix):
+  - Modes: Original, Christmas Background, Jukebox and Off. Choosing one turns the other Christmas mode off. One owner, one final game mix for volume and recording.
+  - An `Xmas` folder beside the exe, or a chosen folder. Each subfolder is a named collection. Playlists can be edited inside North Pole.
+  - A compact Winamp-style player: title, transport, seek and volume, with More for the advanced settings. The setup is saved.
+  - Engines: the owner's proven player (Ghenghis/Fling-Studio at `fa1e6212`: LibVLCSharp 3.10.2 over native VideoLAN 3.0.24) is reused as native libVLC 3, through its decoded-audio callbacks, behind one adapter. dr_mp3 is the portable direct path; Android does not use MediaPlayer, which bypasses the mixer.
+  - The North Pole jukebox is the existing furniture `JUKEBOX` (138) and `JukeboxPopup`. Its 0–6 `jukebox_music` stays gameplay data (saved; +12/−4 appeal). Private music state stays separate.
+  - The owner's library: 7 collections, 402 MP3 files (about 2.98 GB). Play them directly; convert only what fails.
+- **Asset reuse** (`ASSET-REUSE-POLICY.md`, latest): compatible owned art and audio from Tapper, PC3, Barro's Pizza, Kenney, CraftPix and other backups may be reused for either game after review. This supersedes the earlier art exclusion. Code and schemas still need their own compatibility review, and project identities stay distinct.
 - **R34 game-only recording.**
   - Explicit start and stop with an indicator; 60 minutes by default.
   - A codec is offered only after it has actually been opened on that machine. NVENC H.264/HEVC on Ampere; no AV1 there. AMF on the RX 7800 XT once probed.
