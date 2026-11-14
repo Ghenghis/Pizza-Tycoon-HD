@@ -46,6 +46,12 @@ bool is_hex64(std::string_view s) {
          });
 }
 
+constexpr std::array<std::string_view,
+                     static_cast<std::size_t>(PackEvent::COUNT)>
+    pack_event_ids = {"guest-enter",  "guest-leave",  "payment",
+                      "plate-served", "kitchen-busy", "kitchen-idle"};
+static_assert(pack_event_ids.size() == Mixer::PACK_EVENTS);
+
 constexpr std::array<std::string_view, 3> priority_names = {
     "ambience", "feedback", "alert"};
 
@@ -89,6 +95,56 @@ std::optional<fs::path> contained(const fs::path& folder,
     return std::nullopt;
   }
   return full;
+}
+
+// The slot an event plays in: an original's, or (version 2) a pack event's.
+std::optional<std::size_t> slot_of(std::string_view event, bool v2) {
+  if (const auto id = effect_from_event(event)) {
+    return static_cast<std::size_t>(*id);
+  }
+  if (const auto e = pack_event_from_name(event); e && v2) {
+    return pack_event_slot(*e);
+  }
+  return std::nullopt;
+}
+
+// A number field within [lo, hi], absent meaning fallback; nullopt when it
+// is there but not such a number.
+std::optional<double> bounded(const json& j, const char* key, double lo,
+                              double hi, double fallback) {
+  const auto it = j.find(key);
+  if (it == j.end()) {
+    return fallback;
+  }
+  if (!it->is_number() || !std::isfinite(it->get<double>()) ||
+      it->get<double>() < lo || it->get<double>() > hi) {
+    return std::nullopt;
+  }
+  return it->get<double>();
+}
+
+// The pool rules of an entry or a layer (version 2), or why they are wrong.
+std::optional<Mixer::EffectBank::Rules> rules_of(const json& j,
+                                                 std::string& why) {
+  const auto jitter = bounded(j, "gain_jitter_db", 0.0, 6.0, 0.0);
+  const auto spacing = bounded(j, "min_spacing_ms", 0.0, 60000.0, 0.0);
+  const auto duck = bounded(j, "duck_db", 0.0, 24.0, 0.0);
+  if (!jitter) {
+    why = "its gain_jitter_db must be 0 to 6";
+    return std::nullopt;
+  }
+  if (!spacing) {
+    why = "its min_spacing_ms must be 0 to 60000";
+    return std::nullopt;
+  }
+  if (!duck) {
+    why = "its duck_db must be 0 to 24";
+    return std::nullopt;
+  }
+  return Mixer::EffectBank::Rules{
+      .jitter_db = static_cast<float>(*jitter),
+      .spacing_ms = static_cast<std::uint32_t>(*spacing),
+      .duck_gain = static_cast<float>(std::pow(10.0, -*duck / 20.0))};
 }
 
 // A sound's own field, else the entry's (the defaults of its variants).
@@ -292,6 +348,37 @@ Priority default_priority(SoundId id) {
   }
 }
 
+Priority default_priority(PackEvent event) {
+  return event == PackEvent::KITCHEN_BUSY || event == PackEvent::KITCHEN_IDLE
+             ? Priority::AMBIENCE
+             : Priority::FEEDBACK;
+}
+
+std::string_view pack_event_id(PackEvent event) {
+  const auto i = static_cast<std::size_t>(event);
+  return i < pack_event_ids.size() ? pack_event_ids[i] : std::string_view{};
+}
+
+std::optional<PackEvent> pack_event_from_name(std::string_view event) {
+  for (std::size_t i = 0; i < pack_event_ids.size(); ++i) {
+    if (pack_event_ids[i] == event) {
+      return static_cast<PackEvent>(i);
+    }
+  }
+  return std::nullopt;
+}
+
+std::size_t pack_event_slot(PackEvent event) {
+  return Mixer::EVENT_BASE + static_cast<std::size_t>(event);
+}
+
+std::string_view slot_event_id(std::size_t slot) {
+  if (slot >= Mixer::EVENT_BASE && slot < Mixer::MAX_EFFECTS) {
+    return pack_event_id(static_cast<PackEvent>(slot - Mixer::EVENT_BASE));
+  }
+  return effect_event_id(static_cast<SoundId>(slot));
+}
+
 std::string_view priority_name(Priority priority) {
   const auto i = static_cast<std::size_t>(priority);
   return i < priority_names.size() ? priority_names[i] : std::string_view{};
@@ -399,7 +486,7 @@ load_effect_pack(const fs::path& folder,
         std::clamp(number(*info, "revision", 0), 0.0, 4.0e9));
   }
   pack.bank = std::make_unique<Mixer::EffectBank>();
-  std::set<SoundId> seen;
+  std::set<std::size_t> seen;
   std::uint64_t pack_bytes = 0;
   for (const json& entry : *effects) {
     EffectOutcome outcome;
@@ -409,15 +496,20 @@ load_effect_pack(const fs::path& folder,
       continue;
     }
     outcome.event = music::clean_text(text(entry, "event"), 64);
-    const auto id = effect_from_event(outcome.event);
+    const auto id = slot_of(outcome.event, v2);
+    // A pack event has no original, so nothing to have been made for.
+    const bool pack_only = id && *id >= Mixer::EVENT_BASE;
     std::string reason;
+    std::string rules_why;
+    const auto rules = v2 ? rules_of(entry, rules_why)
+                          : std::optional{Mixer::EffectBank::Rules{}};
     if (!id) {
       reason = "no such event";
     }
     else {
       outcome.slot = static_cast<int>(*id);
       const auto slot = entry.find("slot");
-      const std::size_t i = static_cast<std::size_t>(*id);
+      const std::size_t i = *id;
       if (slot != entry.end() &&
           (!slot->is_number_integer() || *slot != outcome.slot)) {
         reason = "its slot is not the event's (" +
@@ -441,13 +533,18 @@ load_effect_pack(const fs::path& folder,
                v2 && entry.contains("priority") && !priority_from_name(p)) {
         reason = "its priority must be alert, feedback or ambience";
       }
-      else if (!is_hex64(text(entry, "source_sha256"))) {
+      else if (!rules) {
+        reason = rules_why;
+      }
+      else if (!pack_only && !is_hex64(text(entry, "source_sha256"))) {
         reason = "it has no source_sha256";
       }
-      else if (i >= original_sha256.size() || original_sha256[i].empty()) {
+      else if (!pack_only &&
+               (i >= original_sha256.size() || original_sha256[i].empty())) {
         reason = "the original it replaces is not loaded";
       }
-      else if (original_sha256[i] != text(entry, "source_sha256")) {
+      else if (!pack_only &&
+               original_sha256[i] != text(entry, "source_sha256")) {
         reason = "it was made for a different original";
       }
       else {
@@ -461,6 +558,7 @@ load_effect_pack(const fs::path& folder,
           auto pool = std::make_unique<Mixer::EffectBank::Pool>();
           pool->variants = std::move(sounds);
           pack.bank->slots[i] = std::move(pool);
+          pack.bank->rules[i] = *rules;
           if (v2) {
             pack.bank->priorities[i] =
                 priority_from_name(text(entry, "priority"));
@@ -476,14 +574,22 @@ load_effect_pack(const fs::path& folder,
   // Ambience: one-shots over a bed, which is one of the events.
   for (const json& scene : *scenes) {
     const std::string bed = music::clean_text(text(scene, "with"), 64);
-    const auto bed_id = effect_from_event(bed);
+    const auto bed_id = slot_of(bed, true); // ambience is version 2
     Mixer::EffectBank::Scene made;
-    made.bed = bed_id ? static_cast<std::size_t>(*bed_id) : 0;
+    made.bed = bed_id ? *bed_id : 0;
     for (const json& layer : scene["layers"]) {
       EffectOutcome outcome;
       outcome.event = bed;
       outcome.slot = bed_id ? static_cast<int>(*bed_id) : -1;
       std::string reason;
+      std::string rules_why;
+      const auto rules = layer.is_object()
+                             ? rules_of(layer, rules_why)
+                             : std::optional{Mixer::EffectBank::Rules{}};
+      const auto voices =
+          layer.is_object()
+              ? bounded(layer, "max_voices", 0.0, Mixer::MAX_EXTRA_VOICES, 0.0)
+              : std::optional{0.0};
       const auto interval = layer.is_object()
                                 ? range(layer, "interval_ms")
                                 : std::optional<std::pair<double, double>>{};
@@ -513,6 +619,13 @@ load_effect_pack(const fs::path& folder,
       else if (!pan || pan->first < -1.0 || pan->second > 1.0) {
         reason = "its pan must be [left, right], from -1 to 1";
       }
+      else if (!rules) {
+        reason = rules_why;
+      }
+      else if (!voices || *voices != std::floor(*voices)) {
+        reason = "its max_voices must be a whole number, 0 to " +
+                 std::to_string(Mixer::MAX_EXTRA_VOICES);
+      }
       else {
         std::string refused;
         auto sounds = load_variants(layer, true, folder, limits, pack_bytes,
@@ -526,7 +639,9 @@ load_effect_pack(const fs::path& folder,
               .min_interval_ms = static_cast<std::uint32_t>(interval->first),
               .max_interval_ms = static_cast<std::uint32_t>(interval->second),
               .min_pan = static_cast<float>(pan->first),
-              .max_pan = static_cast<float>(pan->second)});
+              .max_pan = static_cast<float>(pan->second),
+              .rules = *rules,
+              .max_voices = static_cast<std::size_t>(*voices)});
           reason = refused;
         }
       }

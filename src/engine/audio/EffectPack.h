@@ -28,6 +28,15 @@ namespace audio {
 // phone ringing and the police are alerts; the restaurant and the traffic
 // are ambience; the rest answer the player.
 [[nodiscard]] Priority default_priority(SoundId id);
+// The kitchen beds are ambience; the other pack events feedback.
+[[nodiscard]] Priority default_priority(PackEvent event);
+// A pack event's id ("guest-enter"), and back; the Mixer slot it plays in.
+[[nodiscard]] std::string_view pack_event_id(PackEvent event);
+[[nodiscard]] std::optional<PackEvent>
+pack_event_from_name(std::string_view event);
+[[nodiscard]] std::size_t pack_event_slot(PackEvent event);
+// The event id of any slot, original or pack event.
+[[nodiscard]] std::string_view slot_event_id(std::size_t slot);
 [[nodiscard]] std::string_view priority_name(Priority priority);
 [[nodiscard]] std::optional<Priority> priority_from_name(std::string_view name);
 
@@ -36,9 +45,10 @@ struct EffectLimits {
   std::size_t max_entries = 256;
   std::uint64_t max_file_bytes = std::uint64_t{16} << 20; // one file
   std::uint32_t max_seconds = 120;                        // one sound
-  std::uint64_t max_pack_bytes = std::uint64_t{64} << 20; // decoded, all
-  std::size_t max_scenes = 8;                             // ambience scenes
-  std::size_t max_layers = 8;                             // per scene
+  // Decoded, all; pools that two scenes share count twice.
+  std::uint64_t max_pack_bytes = std::uint64_t{96} << 20;
+  std::size_t max_scenes = 8;          // ambience scenes
+  std::size_t max_layers = 8;          // per scene
   std::uint32_t min_interval_ms = 250; // between one layer's one-shots
   std::uint32_t max_interval_ms = 600000;
 };

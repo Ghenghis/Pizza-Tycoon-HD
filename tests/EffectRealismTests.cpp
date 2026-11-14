@@ -492,6 +492,239 @@ TEST_CASE("music dips under an alert, smoothly, and comes back; ducking off "
   }
 }
 
+TEST_CASE("pack events are silent without a pack, and the original output "
+          "stays bit-identical",
+          "[audio][sfx][realism]") {
+  // Two mixers with the same originals; one is also asked for every pack
+  // event slot, which holds no original.
+  audio::Mixer plain;
+  audio::Mixer asked;
+  for (audio::Mixer* m : {&plain, &asked}) {
+    REQUIRE(m->add_effect(std::vector<std::int16_t>(3000, 1234)));
+    REQUIRE(m->add_effect(std::vector<std::int16_t>(5000, -777), 1000));
+    m->play(0, true);
+    m->play(1, false);
+  }
+  for (std::size_t k = 0; k < audio::Mixer::PACK_EVENTS; ++k) {
+    CHECK(asked.valid(audio::Mixer::EVENT_BASE + k));
+    asked.play(audio::Mixer::EVENT_BASE + k, k % 2 == 0);
+  }
+  CHECK_FALSE(asked.valid(2)); // no third original
+  const std::vector<std::int16_t> music(audio::MIX_BLOCK_SAMPLES, 3000);
+  std::vector<std::int16_t> a(audio::MIX_BLOCK_SAMPLES);
+  std::vector<std::int16_t> b(audio::MIX_BLOCK_SAMPLES);
+  for (int i = 0; i < 12; ++i) {
+    plain.render(a, music);
+    asked.render(b, music);
+    REQUIRE(a == b);
+  }
+
+  Game g;
+  if (!g.ok) {
+    SKIP("SDL has no dummy audio driver");
+  }
+  AudioManager& am = g.a.am;
+  am.play_sound(SoundId::RESTAURANT_NOISE_1, audio::LoopMode::Loop);
+  const std::int16_t bed = level_now(am);
+  for (const char* id : {"guest-enter", "guest-leave", "payment",
+                         "plate-served", "kitchen-busy", "kitchen-idle"}) {
+    CHECK_FALSE(am.has_event(id));
+    CHECK_FALSE(am.play_event(id));
+    CHECK_FALSE(am.start_event(id));
+    am.stop_event(id);
+  }
+  CHECK_FALSE(am.play_event("door-bell")); // no such event
+  CHECK_FALSE(am.event_playing(audio::PackEvent::KITCHEN_BUSY));
+  CHECK(level_now(am) == bed);
+  CHECK(audio::pack_event_id(audio::PackEvent::PLATE_SERVED) == "plate-served");
+  CHECK(audio::pack_event_slot(audio::PackEvent::GUEST_ENTER) ==
+        audio::Mixer::EVENT_BASE);
+  CHECK(audio::slot_event_id(audio::Mixer::EVENT_BASE + 5) == "kitchen-idle");
+}
+
+TEST_CASE("a pack sounds its events: one-shots once, the kitchen beds loop "
+          "until stopped, with ambience on them",
+          "[audio][sfx][realism]") {
+  Game g;
+  if (!g.ok) {
+    SKIP("SDL has no dummy audio driver");
+  }
+  AudioManager& am = g.a.am;
+  const fs::path door = level_wav(g.pack / "door.wav", 0.1, 0.3);
+  const fs::path kitchen = level_wav(g.pack / "kitchen.wav", 0.2, 0.1);
+  const fs::path pot = level_wav(g.pack / "pot.wav", 0.1, 0.2);
+  const json effects = json::array({{{"event", "guest-enter"},
+                                     {"file", "door.wav"},
+                                     {"sha256", sha_of(door)}},
+                                    {{"event", "kitchen-busy"},
+                                     {"file", "kitchen.wav"},
+                                     {"sha256", sha_of(kitchen)}}});
+  const json ambience = json::array(
+      {{{"with", "kitchen-busy"},
+        {"layers",
+         json::array({{{"name", "pots"},
+                       {"variants", json::array({sound(g.pack, pot)})},
+                       {"interval_ms", json::array({500, 500})}}})}}});
+
+  SECTION("version 1 has no pack events") {
+    write_manifest(g.pack, 1, effects);
+    const auto done = am.select_effects(EffectsSet::ENHANCED);
+    REQUIRE(done);
+    const auto* o = outcome_of(done, "guest-enter");
+    REQUIRE(o);
+    CHECK_FALSE(o->replaced);
+    CHECK(o->reason == "no such event");
+    CHECK_FALSE(am.has_event("guest-enter"));
+  }
+  SECTION("version 2") {
+    write_manifest(g.pack, 2, effects, ambience);
+    const auto done = am.select_effects(EffectsSet::ENHANCED);
+    REQUIRE(done);
+    for (const char* id : {"guest-enter", "kitchen-busy"}) {
+      const auto* o = outcome_of(done, id);
+      REQUIRE(o);
+      CHECK(o->replaced); // no source_sha256: nothing it replaces
+      CHECK(o->slot >= static_cast<int>(audio::Mixer::EVENT_BASE));
+    }
+    const auto* layer = outcome_of(done, "kitchen-busy", "pots");
+    REQUIRE(layer);
+    CHECK(layer->replaced);
+    CHECK(am.has_event("guest-enter"));
+    CHECK_FALSE(am.has_event("payment")); // not in this pack: silent
+    CHECK_FALSE(am.play_event("payment"));
+
+    // A one-shot: heard once, then gone (0.1 s is under five blocks).
+    REQUIRE(am.play_event("guest-enter", {.pan = 0.0f, .gain = 1.0f}));
+    CHECK(level_now(am) == music_test::effect_level(stored(0.3)));
+    for (int i = 0; i < 5; ++i) {
+      music_test::fill(am);
+    }
+    CHECK(level_now(am) == 0);
+
+    // The bed loops past its 0.2 s until it is stopped, and its scene runs.
+    REQUIRE(am.start_event(audio::PackEvent::KITCHEN_BUSY));
+    am.tick(0);
+    for (int i = 0; i < 30; ++i) {
+      music_test::fill(am);
+    }
+    CHECK(am.event_playing(audio::PackEvent::KITCHEN_BUSY));
+    CHECK(level_now(am) == music_test::effect_level(stored(0.1)));
+    am.tick(500);
+    CHECK(near(level_now(am),
+               music_test::effect_level(
+                   static_cast<std::int16_t>(stored(0.1) + stored(0.2)))));
+    am.stop_event("kitchen-busy");
+    for (int i = 0; i < 6; ++i) {
+      music_test::fill(am); // the pot ends too
+    }
+    CHECK_FALSE(am.event_playing(audio::PackEvent::KITCHEN_BUSY));
+    CHECK(level_now(am) == 0);
+  }
+}
+
+TEST_CASE("pool rules: a random gain in its range, a spacing, a voice limit "
+          "per pool, and a dip under alerts",
+          "[audio][sfx][realism]") {
+  Game g;
+  if (!g.ok) {
+    SKIP("SDL has no dummy audio driver");
+  }
+  AudioManager& am = g.a.am;
+  const fs::path plate = level_wav(g.pack / "plate.wav", 0.5, 0.25);
+  const fs::path door = level_wav(g.pack / "door.wav", 0.5, 0.2);
+  const fs::path murmur = level_wav(g.pack / "murmur.wav", 4.0, 0.2);
+  const json effects = json::array({{{"event", "plate-served"},
+                                     {"file", "plate.wav"},
+                                     {"sha256", sha_of(plate)},
+                                     {"gain_jitter_db", 1.5}},
+                                    {{"event", "guest-leave"},
+                                     {"file", "door.wav"},
+                                     {"sha256", sha_of(door)},
+                                     {"min_spacing_ms", 1500},
+                                     {"duck_db", 6}}});
+  const json ambience = json::array(
+      {{{"with", "restaurant-noise-1"},
+        {"layers",
+         json::array({{{"name", "murmur"},
+                       {"variants", json::array({sound(g.pack, murmur)})},
+                       {"interval_ms", json::array({250, 250})},
+                       {"max_voices", 1},
+                       {"duck_db", 6}},
+                      {{"name", "bad"},
+                       {"variants", json::array({sound(g.pack, murmur)})},
+                       {"interval_ms", json::array({250, 250})},
+                       {"gain_jitter_db", 9}}})}}});
+  write_manifest(g.pack, 2, effects, ambience);
+  const auto done = am.select_effects(EffectsSet::ENHANCED);
+  REQUIRE(done);
+  const auto* bad = outcome_of(done, "restaurant-noise-1", "bad");
+  REQUIRE(bad);
+  CHECK_FALSE(bad->replaced);
+  CHECK(bad->reason.find("gain_jitter_db") != std::string::npos);
+
+  SECTION("random gain") {
+    const double nominal = stored(0.25);
+    std::set<std::int16_t> levels;
+    for (int k = 0; k < 30; ++k) {
+      REQUIRE(am.play_event("plate-served"));
+      const std::int16_t heard = level_now(am);
+      levels.insert(heard);
+      const double db =
+          20.0 *
+          std::log10(heard / static_cast<double>(music_test::effect_level(
+                                 static_cast<std::int16_t>(nominal))));
+      CHECK(std::abs(db) <= 1.5 + 0.01);
+      for (int i = 0; i < 25; ++i) {
+        music_test::fill(am); // 0.5 s, so it ends before the next
+      }
+    }
+    CHECK(levels.size() > 10); // it does vary
+  }
+  SECTION("spacing") {
+    REQUIRE(am.play_event("guest-leave"));
+    const std::uint64_t skipped = am.mixer().spaced_out();
+    music_test::fill(am);
+    am.tick(1000);
+    CHECK(am.play_event("guest-leave")); // taken, and skipped: too soon
+    CHECK(am.mixer().spaced_out() == skipped + 1);
+    am.tick(500);
+    CHECK(am.play_event("guest-leave"));
+    CHECK(am.mixer().spaced_out() == skipped + 1);
+  }
+  SECTION("a voice limit per pool, and the dip under an alert") {
+    am.play_sound(SoundId::RESTAURANT_NOISE_1, audio::LoopMode::Loop);
+    am.tick(0);
+    am.tick(250);
+    const std::int16_t with_murmur = level_now(am);
+    REQUIRE(am.mixer().extra_voices() == 1);
+    const std::uint64_t dropped = am.mixer().dropped_voices();
+    am.tick(250); // the murmur's second has no voice of its pool
+    music_test::fill(am);
+    CHECK(am.mixer().extra_voices() == 1);
+    CHECK(am.mixer().dropped_voices() == dropped + 1);
+    CHECK(near(with_murmur, music_test::effect_level(static_cast<std::int16_t>(
+                                g.original(0) + stored(0.2)))));
+
+    // The phone: the murmur dips 6 dB with the music's timing; the bed and
+    // the phone itself do not.
+    am.play_sound(SoundId::PHONE_RINGING, audio::LoopMode::Loop);
+    for (int i = 0; i < 5; ++i) {
+      music_test::fill(am);
+    }
+    CHECK(am.mixer().pool_duck() == 1.0f);
+    const double dip = std::pow(10.0, -6.0 / 20.0);
+    CHECK(near(level_now(am),
+               music_test::effect_level(static_cast<std::int16_t>(std::lround(
+                   g.original(0) + g.original(15) + stored(0.2) * dip)))));
+    am.stop_sound(SoundId::PHONE_RINGING);
+    for (int i = 0; i < 30; ++i) {
+      music_test::fill(am);
+    }
+    CHECK(am.mixer().pool_duck() == 0.0f);
+    CHECK(near(level_now(am), with_murmur));
+  }
+}
+
 // Not run by default: it needs the original game and a private pack, neither
 // of which is in the repo.
 //
@@ -545,9 +778,17 @@ TEST_CASE("a private pack with ambience, through the real engine",
     beds.push_back(scene.bed);
   }
   constexpr int frames_per_block = static_cast<int>(audio::MIX_BLOCK_FRAMES);
+  // A bed is an original event or a pack event (the kitchen's).
+  const auto pack_event = [](std::size_t slot) {
+    return static_cast<audio::PackEvent>(slot - audio::Mixer::EVENT_BASE);
+  };
   for (const std::size_t bed : beds) {
-    const auto id = static_cast<SoundId>(bed);
-    am.play_sound(id, audio::LoopMode::Loop);
+    if (bed >= audio::Mixer::EVENT_BASE) {
+      REQUIRE(am.start_event(pack_event(bed)));
+    }
+    else {
+      am.play_sound(static_cast<SoundId>(bed), audio::LoopMode::Loop);
+    }
     am.tick(0);
     int arrivals = 0;
     int peak = 0;
@@ -567,14 +808,40 @@ TEST_CASE("a private pack with ambience, through the real engine",
       arrivals += voices > before ? static_cast<int>(voices - before) : 0;
       before = voices;
     }
-    am.stop_sound(id);
+    if (bed >= audio::Mixer::EVENT_BASE) {
+      am.stop_event(pack_event(bed));
+    }
+    else {
+      am.stop_sound(static_cast<SoundId>(bed));
+    }
     for (int i = 0; i < 200 && am.mixer().extra_voices() > 0; ++i) {
       music_test::fill(am);
     }
     std::printf("[sfx-pack-v1] scene %-20s %d one-shots in 30 s, peak %d\n",
-                std::string(audio::effect_event_id(id)).c_str(), arrivals,
-                peak);
+                std::string(audio::slot_event_id(bed)).c_str(), arrivals, peak);
     CHECK(arrivals > 0);
     CHECK(peak < 32767); // the mix never reaches full scale
+  }
+
+  // The pack's one-shot events, each heard on its own.
+  for (const audio::PackEvent e :
+       {audio::PackEvent::GUEST_ENTER, audio::PackEvent::GUEST_LEAVE,
+        audio::PackEvent::PAYMENT, audio::PackEvent::PLATE_SERVED}) {
+    const std::string id(audio::pack_event_id(e));
+    if (!am.has_event(id)) {
+      std::printf("[sfx-pack-v1] event %-20s not in this pack\n", id.c_str());
+      continue;
+    }
+    am.tick(5000); // past any spacing
+    REQUIRE(am.play_event(e));
+    int peak = 0;
+    for (int i = 0; i < 40; ++i) {
+      for (const std::int16_t s : music_test::fill(am)) {
+        peak = std::max(peak, std::abs(static_cast<int>(s)));
+      }
+    }
+    std::printf("[sfx-pack-v1] event %-20s peak %d\n", id.c_str(), peak);
+    CHECK(peak > 0);
+    CHECK(peak < 32767);
   }
 }

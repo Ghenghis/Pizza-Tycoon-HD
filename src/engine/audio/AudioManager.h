@@ -15,6 +15,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "engine/audio/MixTap.h"
@@ -121,6 +122,19 @@ enum class MusicId {
   // M11
   BREAK_IN_MUSIC_3, // m11[0]
 
+  COUNT
+};
+
+// Events only an enhanced pack sounds: the 1994 game had no sound for them,
+// so without a pack that has them they are silent (the original output is
+// unchanged). Their ids are in docs/studio/notes/sfx-overrides.md.
+enum class PackEvent : uint8_t {
+  GUEST_ENTER,  // "guest-enter": a guest comes in through the door
+  GUEST_LEAVE,  // "guest-leave": a guest goes out
+  PAYMENT,      // "payment": a guest pays
+  PLATE_SERVED, // "plate-served": a waiter puts a pizza down
+  KITCHEN_BUSY, // "kitchen-busy": the kitchen's bed, busy (loops)
+  KITCHEN_IDLE, // "kitchen-idle": the kitchen's bed, quiet (loops)
   COUNT
 };
 
@@ -231,6 +245,10 @@ void mix_to_s16(std::span<const float> acc, std::span<int16_t> out,
 class Mixer {
 public:
   static constexpr std::size_t MAX_EFFECTS = 64;
+  // The last slots are for events only a pack has (audio::PackEvent): they
+  // hold no original and are silent without a pack that fills them.
+  static constexpr std::size_t PACK_EVENTS = 6;
+  static constexpr std::size_t EVENT_BASE = MAX_EFFECTS - PACK_EVENTS;
   // Variants an effect of a pack may have, voices for ambience one-shots,
   // and the ambience one-shots waiting to start.
   static constexpr std::size_t MAX_VARIANTS = 8;
@@ -245,6 +263,9 @@ public:
   static constexpr float DUCK_GAIN = 0.56234133f;
   static constexpr float DUCK_ATTACK_S = 0.08f;
   static constexpr float DUCK_RELEASE_S = 0.6f;
+  // A placed sound's gain is at most this (a pool's random gain may lift
+  // it above 1).
+  static constexpr float MAX_PLAY_GAIN = 2.0f;
   // Headroom so music and several effects together rarely clip.
   static constexpr float MASTER_VOLUME = 0.8f;
 
@@ -253,16 +274,24 @@ public:
   Mixer& operator=(const Mixer&) = delete;
 
   // Game thread. Stores a sound effect and returns its slot, or nullopt when
-  // every slot is taken. Playback starts at start_offset samples and loops
-  // back there. Odd trailing samples are dropped, to keep whole frames.
+  // every slot below EVENT_BASE is taken. Playback starts at start_offset
+  // samples and loops back there. Odd trailing samples are dropped, to keep
+  // whole frames.
   std::optional<std::size_t> add_effect(std::vector<int16_t> samples,
                                         std::size_t start_offset = 0);
   [[nodiscard]] std::size_t effect_count() const noexcept;
 
   // Game thread. Takes effect at the start of the next block. False when
   // the slot holds no effect. A slot with several variants in the bank
-  // plays one of them, never the one it played last time.
+  // plays one of them, never the one it played last time. The bank's rules
+  // for the slot apply: a random gain, and a play within its spacing of the
+  // last one is skipped (still true; counted in spaced_out()).
   bool play(std::size_t slot, bool loop, Placement place = {});
+  // Whether slot can play: an original, or one of the pack event slots.
+  [[nodiscard]] bool valid(std::size_t slot) const noexcept;
+  // Game thread: the clock of the spacing rules (AudioManager::tick()).
+  void advance(uint32_t dt_ms);
+  [[nodiscard]] uint64_t spaced_out() const;
   bool stop(std::size_t slot);
   // Playing, or asked to play and not yet started.
   [[nodiscard]] bool any_effect_playing() const noexcept;
@@ -281,8 +310,10 @@ public:
   // Any thread. Whether music dips under alerts.
   void ducking(bool enabled) noexcept;
   [[nodiscard]] bool ducking() const noexcept;
-  // The music's duck gain at the end of the last block (1: none).
+  // The music's duck gain at the end of the last block (1: none), and how
+  // far down the pools that duck are (0: not at all, 1: their full depth).
   [[nodiscard]] float duck_gain() const noexcept;
+  [[nodiscard]] float pool_duck() const noexcept;
 
   // Any thread. Volumes are clamped to 0..1 (NaN counts as 0). Turning the
   // music off mutes it; the song keeps its place.
@@ -317,8 +348,17 @@ public:
     struct Pool {
       std::vector<Sound> variants;
     };
+    // How a pool plays: a random gain of up to +/- jitter_db each time; at
+    // least spacing_ms between two starts; duck_gain under alerts (1: no
+    // dip), with the music's envelope.
+    struct Rules {
+      float jitter_db = 0.0f;
+      uint32_t spacing_ms = 0;
+      float duck_gain = 1.0f;
+    };
     // One-shots that come now and then while their scene's bed plays, at a
-    // random interval and pan within their ranges.
+    // random interval and pan within their ranges; at most max_voices at
+    // once (0: only the voice limit).
     struct Layer {
       std::string name;
       std::vector<Sound> variants;
@@ -326,6 +366,8 @@ public:
       uint32_t max_interval_ms = 0;
       float min_pan = 0.0f;
       float max_pan = 0.0f;
+      Rules rules;
+      std::size_t max_voices = 0;
     };
     struct Scene {
       std::size_t bed = 0; // the slot whose sound is the bed
@@ -333,6 +375,7 @@ public:
     };
     std::array<std::unique_ptr<const Pool>, MAX_EFFECTS> slots{};
     std::array<std::optional<Priority>, MAX_EFFECTS> priorities{};
+    std::array<Rules, MAX_EFFECTS> rules{};
     std::vector<Scene> scenes;
     uint64_t number = 0; // set by effect_bank()
   };
@@ -345,11 +388,17 @@ public:
   // Game thread: the bank in use, null for the originals. Valid until the
   // next effect_bank(); the caller keeps that from running meanwhile.
   [[nodiscard]] const EffectBank* effect_bank() const;
+  // Game thread: whether the bank in use has a sound for slot.
+  [[nodiscard]] bool bank_has(std::size_t slot) const;
   // Game thread. Starts sound, a sound of the bank in use, on a free
   // ambience voice at the next block. It is left out when the bank has
   // changed by then or no voice is free under the voice limit. False when
   // the queue is full.
-  bool play_extra(const EffectBank::Sound* sound, Placement place);
+  // pool names the pool (any number but 0) for its max_voices; duck_gain
+  // as in Rules. Placement gain may reach MAX_PLAY_GAIN.
+  bool play_extra(const EffectBank::Sound* sound, Placement place,
+                  uint32_t pool = 0, std::size_t max_voices = 0,
+                  float duck_gain = 1.0f);
   // Ambience one-shots playing, as of the last block, and those left out
   // so far for want of a voice (or cut for a sound that matters more).
   [[nodiscard]] std::size_t extra_voices() const noexcept;
@@ -388,12 +437,17 @@ private:
     float left = 1.0f;
     float right = 1.0f;
     uint64_t started = 0; // block count, to cut the oldest first
+    uint32_t pool = 0;
+    float duck_gain = 1.0f;
   };
   struct ExtraRequest {
     const EffectBank::Sound* sound = nullptr;
     uint64_t bank = 0;
     float left = 1.0f;
     float right = 1.0f;
+    uint32_t pool = 0;
+    std::size_t max_voices = 0;
+    float duck_gain = 1.0f;
   };
 
   // What a slot plays this block: its original or its replacement.
@@ -415,7 +469,8 @@ private:
   // within the limit.
   void cut_extras();
   void start_extras(const EffectBank* bank);
-  void mix_extras(std::span<float> acc, float gain_from, float gain_to);
+  void mix_extras(std::span<float> acc, float gain_from, float gain_to,
+                  float env_from, float env_to);
   void mix_block(std::span<int16_t> out, std::span<const int16_t> music);
 
   std::array<Effect, MAX_EFFECTS> effects_;
@@ -427,6 +482,10 @@ private:
   mutable std::mutex bank_mutex_;
   CosmeticRandom random_{0x5EED5EEDull};
   std::array<std::size_t, MAX_EFFECTS> last_variant_{};
+  std::array<uint64_t, MAX_EFFECTS> last_start_ms_{};
+  std::array<bool, MAX_EFFECTS> started_{};
+  uint64_t now_ms_ = 0;
+  uint64_t spaced_out_ = 0;
 
   // The ambience one-shots waiting: a single-producer (game thread),
   // single-consumer (audio thread) ring.
@@ -441,6 +500,8 @@ private:
   std::atomic<bool> ducking_{true};
   std::atomic<float> duck_seen_{1.0f};
   float duck_ = 1.0f; // audio thread
+  std::atomic<float> pool_env_seen_{0.0f};
+  float pool_env_ = 0.0f; // audio thread: 0 none .. 1 full depth
 
   std::atomic<float> music_volume_{1.0f};
   std::atomic<float> sound_volume_{0.9f};
@@ -495,6 +556,20 @@ public:
   // off the screen, quieter.
   void play_sound_at(SoundId id, Placement place,
                      LoopMode loop = LoopMode::Once);
+
+  // Game thread. Events only a pack has (PackEvent), by id ("guest-enter")
+  // or by value. play_event() plays one once; start_event() loops one (the
+  // kitchen beds) until stop_event(). False, and nothing at all happens,
+  // when the effects in use have no sound for it: Original effects, or a
+  // pack without it. An id that is no pack event is false too.
+  bool play_event(std::string_view event, Placement place = {});
+  bool play_event(PackEvent event, Placement place = {});
+  bool start_event(std::string_view event, Placement place = {});
+  bool start_event(PackEvent event, Placement place = {});
+  void stop_event(std::string_view event);
+  void stop_event(PackEvent event);
+  [[nodiscard]] bool has_event(std::string_view event) const;
+  [[nodiscard]] bool event_playing(PackEvent event) const;
   void play_sound_if_changed(SoundId id, LoopMode loop = LoopMode::Once);
   void stop_current_indexed_sound();
   void play_music(MusicId id, LoopMode loop = LoopMode::Loop);
@@ -671,6 +746,8 @@ private:
     bool armed = false;
     uint64_t due_ms = 0;
     std::size_t last_variant = 0;
+    bool started = false;
+    uint64_t last_start_ms = 0;
   };
   std::vector<std::vector<LayerClock>> ambience_;
   uint64_t ambience_bank_ = 0;

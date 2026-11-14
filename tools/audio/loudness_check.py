@@ -19,7 +19,7 @@ game plays it: after its trims and gain_db, mono played on both channels.
 Targets: an ambience bed (an event of ambience priority, the loop the game
 plays under a scene) must be at the bed target (-23 LUFS integrated) within
 the tolerance (2 LU); every sound must stay at or under the true-peak limit
-(-1 dBTP). One-shots and ambience layers report their loudness without a
+(-1 dBTP), at the top of its gain_jitter_db. One-shots and ambience layers report their loudness without a
 target. A sound shorter than one 400 ms block has no integrated loudness.
 
 Exit status: 0 when every sound passes, 1 when one fails, 2 when the pack
@@ -53,7 +53,15 @@ except ImportError:  # the pure-Python path is used instead
 FORMAT = "pthd-sfx-overrides"
 VERSIONS = (1, 2)
 # As audio::default_priority() (src/engine/audio/EffectPack.cpp).
-AMBIENCE_EVENTS = {"restaurant-noise-1", "restaurant-noise-2", "restaurant-noise-3", "traffic-1", "traffic-2"}
+AMBIENCE_EVENTS = {
+    "restaurant-noise-1",
+    "restaurant-noise-2",
+    "restaurant-noise-3",
+    "traffic-1",
+    "traffic-2",
+    "kitchen-busy",
+    "kitchen-idle",
+}
 OVERSAMPLE = 4
 TAPS_PER_PHASE = 12
 
@@ -279,6 +287,8 @@ class Row:
     file: str
     lufs: float | None = None
     true_peak_dbtp: float | None = None
+    # At the top of the sound's gain_jitter_db: what the limit is checked on.
+    true_peak_max_dbtp: float | None = None
     sample_peak_dbfs: float | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -317,9 +327,17 @@ def measure(
         return
     row.lufs = integrated_loudness(rate, played)
     row.true_peak_dbtp = db(true_peak(played))
+    jitter = 0.0
+    for source in (spec, entry):
+        v = source.get("gain_jitter_db")
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v):
+            jitter = min(max(float(v), 0.0), 6.0)
+            break
+    row.true_peak_max_dbtp = row.true_peak_dbtp + jitter
     row.sample_peak_dbfs = db(max((abs(v) for c in played for v in c), default=0.0))
-    if row.true_peak_dbtp > tp_limit + 1e-9:
-        row.problems.append(f"true peak {row.true_peak_dbtp:.1f} dBTP is over {tp_limit:.1f}")
+    if row.true_peak_max_dbtp > tp_limit + 1e-9:
+        at_top = " at the top of its gain_jitter_db" if jitter else ""
+        row.problems.append(f"true peak {row.true_peak_max_dbtp:.1f} dBTP{at_top} is over {tp_limit:.1f}")
     if row.kind == "bed":
         if row.lufs is None:
             row.problems.append("too short or too quiet to measure as a bed")

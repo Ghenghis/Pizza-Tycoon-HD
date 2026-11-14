@@ -56,7 +56,7 @@ change only with `version`.
 | `origin`, `provenance`, `license` | no | Kept for the asset matrix; not read by the engine. |
 
 Files: WAV (PCM 8/16/24/32-bit, float) or MP3, decoded to 44100 Hz stereo with the same checks as
-music (header first, then the decoder). Limits per file: 16 MiB, 120 s; per pack: 64 MiB decoded,
+music (header first, then the decoder). Limits per file: 16 MiB, 120 s; per pack: 96 MiB decoded (a sound two scenes share counts twice),
 256 entries, a 1 MiB manifest.
 
 ## Version 2: variants, priorities, ambience
@@ -106,6 +106,65 @@ when `version` is `2`.
 | `priority` | `alert`, `feedback` or `ambience`, for an entry that is replaced. Without it: `phone-ringing` and `police-siren` are alerts; `restaurant-noise-1..3`, `traffic-1..2` ambience; the rest feedback. Anything else refuses the entry. |
 | `ambience` | Up to 8 scenes. A scene's `with` names its bed: an event (original or replaced) that the game loops. While the bed plays, each of its up to 8 layers plays one of its variants (rules as above) every `interval_ms` [least, most] (250 to 600000 ms, random in between), panned at random within `pan` [left, right] (-1 to 1, default [0, 0]). A layer starts its first interval when the bed starts, and stops when it stops. A layer that is refused (no name, unknown bed, bad interval or pan, no variant that loads) is reported in the outcomes with `layer` set, and the others play. |
 
+### Pack events (version 2)
+
+Six events had no sound in 1994. Only a pack sounds them; without one (Original effects, or a
+pack that does not list them) they are silent and nothing at all changes in the output.
+
+| Event | Slot | Plays | Default priority | Call it when |
+| --- | --- | --- | --- | --- |
+| `guest-enter` | 58 | once | feedback | a guest comes in through the door |
+| `guest-leave` | 59 | once | feedback | a guest goes out through the door |
+| `payment` | 60 | once | feedback | a guest pays |
+| `plate-served` | 61 | once | feedback | a waiter puts a pizza on a table |
+| `kitchen-busy` | 62 | loops | ambience | the kitchen view is open and the kitchen is busy |
+| `kitchen-idle` | 63 | loops | ambience | the kitchen view is open and the kitchen is quiet |
+
+A pack-event entry is a normal version 2 entry (a `file` or `variants`, and the fields below),
+but without `source_sha256`: it replaces no original. In version 1, these ids are "no such event".
+They can also be a scene's bed (`"with": "kitchen-busy"`).
+
+**The game's API** (`engine/audio/AudioManager.h`, game thread; `context.audio`):
+
+```cpp
+// One-shots. Returns false, doing nothing, when the effects in use have no
+// sound for it.
+bool play_event(std::string_view event, audio::Placement place = {});
+bool play_event(audio::PackEvent event, audio::Placement place = {});
+// Beds: loop from start_event() until stop_event().
+bool start_event(std::string_view event, audio::Placement place = {});
+bool start_event(audio::PackEvent event, audio::Placement place = {});
+void stop_event(std::string_view event);
+void stop_event(audio::PackEvent event);
+bool has_event(std::string_view event) const;  // the pack in use has it
+bool event_playing(audio::PackEvent event) const;
+```
+
+- Call these from the views at the moments in the table. Pass
+  `audio::screen_placement(x, y, 640, 400)` for a door or a table that has a place on the screen.
+- The calls are cheap and safe to make every time, with or without a pack. No `has_event()` check
+  is needed first.
+- For the kitchen, keep exactly one bed running while the kitchen view is open:
+  - start `kitchen-busy` when it opens with the restaurant open and utilization over 21 %, and
+    `kitchen-idle` otherwise;
+  - switch beds (stop one, start the other) when that changes;
+  - stop the bed when the view closes.
+  - The restaurant crowd (`restaurant-noise-*`) is off in the kitchen view, as now.
+
+### Pool rules (version 2)
+
+Allowed on any version 2 entry and on any ambience layer:
+
+| Field | Meaning |
+| --- | --- |
+| `gain_jitter_db` | 0 to 6. Each play gets a random gain within +/- this (the engine's own generator). Default 0. |
+| `min_spacing_ms` | 0 to 60000. A play sooner than this after the last start is skipped (a layer waits instead). Default 0. |
+| `duck_db` | 0 to 24. While an alert plays, the sound dips this much, with the same timing as the music (0.08 s down, 0.6 s back), and only if ducking is on. Default 0. |
+| `max_voices` | Layers only: 0 to 16 of its one-shots at once; one beyond that is left out. 0: only the voice limit. Default 0. |
+
+An event plays one sound at a time: playing it again starts it over, unless its spacing skips the
+play.
+
 How it plays:
 
 - **Voices.** At most 16 sounds at once by default. The game's own events always play; ambience
@@ -117,8 +176,9 @@ How it plays:
   screen width away. Panning only lowers the far channel, so a placed sound is never louder than in
   the middle. Ambience layers are panned the same way.
 - **Ducking.** While an alert plays, the music goes down 5 dB in 0.08 s and comes back over 0.6 s,
-  in straight lines with no step. On by default; **Music Ducking** in the audio options (config
-  `duck_music`) turns it off.
+  in straight lines with no step. Sounds with a `duck_db` dip by that amount, with the same timing.
+  On by default; **Music Ducking** in the audio options (config `duck_music`) turns all ducking
+  off.
 - Switching packs ends the old pack's ambience one-shots at once; the next scene starts from a
   full interval.
 
@@ -126,8 +186,9 @@ How it plays:
 
 `python tools/audio/loudness_check.py <pack folder>` measures what the game plays (after `gain_db`
 and trims) per sound: integrated loudness (ITU-R BS.1770-4, gated), true peak (4x oversampled), and
-sample peak. Ambience beds (ambience-priority events) must be -23 LUFS integrated, within 2 LU;
-every sound must stay at or under -1 dBTP. `--json` writes the report as JSON; it exits 1 when a
+sample peak. Ambience beds (ambience-priority events, the kitchen beds included) must be -23 LUFS
+integrated, within 2 LU. Every sound must stay at or under -1 dBTP, measured at the top of its
+`gain_jitter_db`. `--json` writes the report as JSON; it exits 1 when a
 sound fails. WAV is read directly; MP3 needs `ffmpeg` on the PATH.
 
 ## Event ids (slot numbers never change)

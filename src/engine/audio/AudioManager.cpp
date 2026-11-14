@@ -181,11 +181,30 @@ void mix_to_s16(std::span<const float> acc, std::span<int16_t> out,
 
 /* Mixer */
 
+namespace {
+
+// Every slot that can play: the originals, then the pack event slots.
+template <class F> void for_slots(std::size_t count, F&& f) {
+  for (std::size_t i = 0; i < count; ++i) {
+    f(i);
+  }
+  for (std::size_t i = Mixer::EVENT_BASE; i < Mixer::MAX_EFFECTS; ++i) {
+    f(i);
+  }
+}
+
+// The gain of a voice that dips to duck_gain at full depth env (0..1).
+float ducked(float duck_gain, float env) {
+  return 1.0f - env * (1.0f - duck_gain);
+}
+
+} // namespace
+
 std::optional<std::size_t> Mixer::add_effect(std::vector<int16_t> samples,
                                              std::size_t start_offset) {
   const std::lock_guard lock(add_mutex_);
   const std::size_t slot = effect_count_.load(std::memory_order_relaxed);
-  if (slot >= MAX_EFFECTS) {
+  if (slot >= EVENT_BASE) {
     return std::nullopt;
   }
   samples.resize(samples.size() - samples.size() % MIX_CHANNELS);
@@ -203,8 +222,22 @@ std::size_t Mixer::effect_count() const noexcept {
   return effect_count_.load(std::memory_order_acquire);
 }
 
+bool Mixer::valid(std::size_t slot) const noexcept {
+  return slot < effect_count() || (slot >= EVENT_BASE && slot < MAX_EFFECTS);
+}
+
+void Mixer::advance(uint32_t dt_ms) {
+  const std::lock_guard lock(bank_mutex_);
+  now_ms_ += dt_ms;
+}
+
+uint64_t Mixer::spaced_out() const {
+  const std::lock_guard lock(bank_mutex_);
+  return spaced_out_;
+}
+
 bool Mixer::post(std::size_t slot, uint32_t flags) {
-  if (slot >= effect_count()) {
+  if (!valid(slot)) {
     return false;
   }
   // Each request gets its own nonzero tag, so the audio thread clears only
@@ -217,13 +250,28 @@ bool Mixer::post(std::size_t slot, uint32_t flags) {
 }
 
 bool Mixer::play(std::size_t slot, bool loop, Placement place) {
-  if (slot >= effect_count()) {
+  if (!valid(slot)) {
     return false;
   }
   const std::lock_guard lock(bank_mutex_);
+  const EffectBank* bank = current_bank_.get();
+  float jitter = 1.0f;
+  if (bank && bank->slots[slot]) {
+    const EffectBank::Rules& rules = bank->rules[slot];
+    if (rules.spacing_ms > 0 && started_[slot] &&
+        now_ms_ - last_start_ms_[slot] < rules.spacing_ms) {
+      ++spaced_out_;
+      return true; // too soon after the last one: skipped
+    }
+    if (rules.jitter_db > 0.0f) {
+      jitter = std::pow(
+          10.0f, random_.uniform(-rules.jitter_db, rules.jitter_db) / 20.0f);
+    }
+  }
+  started_[slot] = true;
+  last_start_ms_[slot] = now_ms_;
   // Another variant than last time, all others equally likely.
   std::size_t variant = 0;
-  const EffectBank* bank = current_bank_.get();
   if (bank && bank->slots[slot]) {
     const std::size_t n =
         std::min(bank->slots[slot]->variants.size(), MAX_VARIANTS);
@@ -236,8 +284,9 @@ bool Mixer::play(std::size_t slot, bool loop, Placement place) {
     }
   }
   last_variant_[slot] = variant;
-  const float gain =
-      std::isfinite(place.gain) ? std::clamp(place.gain, 0.0f, 1.0f) : 1.0f;
+  const float gain = std::isfinite(place.gain)
+                         ? std::clamp(place.gain * jitter, 0.0f, MAX_PLAY_GAIN)
+                         : 1.0f;
   const float pan =
       std::isfinite(place.pan) ? std::clamp(place.pan, -1.0f, 1.0f) : 0.0f;
   Effect& e = effects_[slot];
@@ -261,6 +310,12 @@ void Mixer::seed(uint64_t seed) {
 const Mixer::EffectBank* Mixer::effect_bank() const {
   const std::lock_guard lock(bank_mutex_);
   return current_bank_.get();
+}
+
+bool Mixer::bank_has(std::size_t slot) const {
+  const std::lock_guard lock(bank_mutex_);
+  return slot < MAX_EFFECTS && current_bank_ && current_bank_->slots[slot] &&
+         !current_bank_->slots[slot]->variants.empty();
 }
 
 void Mixer::priority(std::size_t slot, Priority priority) noexcept {
@@ -306,7 +361,12 @@ float Mixer::duck_gain() const noexcept {
   return duck_seen_.load(std::memory_order_relaxed);
 }
 
-bool Mixer::play_extra(const EffectBank::Sound* sound, Placement place) {
+float Mixer::pool_duck() const noexcept {
+  return pool_env_seen_.load(std::memory_order_relaxed);
+}
+
+bool Mixer::play_extra(const EffectBank::Sound* sound, Placement place,
+                       uint32_t pool, std::size_t max_voices, float duck_gain) {
   const std::lock_guard lock(bank_mutex_);
   if (!sound || !current_bank_) {
     return false;
@@ -316,13 +376,16 @@ bool Mixer::play_extra(const EffectBank::Sound* sound, Placement place) {
     dropped_voices_.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
-  const float gain = std::clamp(place.gain, 0.0f, 1.0f);
+  const float gain = std::clamp(place.gain, 0.0f, MAX_PLAY_GAIN);
   const float pan = std::clamp(place.pan, -1.0f, 1.0f);
   extra_queue_[head % EXTRA_QUEUE] =
       ExtraRequest{.sound = sound,
                    .bank = current_bank_->number,
                    .left = gain * (pan > 0.0f ? 1.0f - pan : 1.0f),
-                   .right = gain * (pan < 0.0f ? 1.0f + pan : 1.0f)};
+                   .right = gain * (pan < 0.0f ? 1.0f + pan : 1.0f),
+                   .pool = pool,
+                   .max_voices = max_voices,
+                   .duck_gain = std::clamp(duck_gain, 0.0f, 1.0f)};
   extra_head_.store(head + 1, std::memory_order_release);
   return true;
 }
@@ -338,7 +401,7 @@ uint64_t Mixer::dropped_voices() const noexcept {
 bool Mixer::stop(std::size_t slot) { return post(slot, 0); }
 
 bool Mixer::playing(std::size_t slot) const noexcept {
-  if (slot >= effect_count()) {
+  if (!valid(slot)) {
     return false;
   }
   const Effect& e = effects_[slot];
@@ -348,20 +411,11 @@ bool Mixer::playing(std::size_t slot) const noexcept {
 }
 
 bool Mixer::any_effect_playing() const noexcept {
-  const std::size_t count = effect_count();
-  for (std::size_t i = 0; i < count; ++i) {
-    const Effect& e = effects_[i];
-    // A pending request says what the effect is about to do. Once the audio
-    // thread clears it, active already holds the result.
-    const uint32_t request = e.request.load(std::memory_order_acquire);
-    const bool playing = request != 0
-                             ? (request & PLAY_BIT) != 0
-                             : e.active.load(std::memory_order_acquire);
-    if (playing) {
-      return true;
-    }
-  }
-  return false;
+  // A pending request says what the effect is about to do. Once the audio
+  // thread clears it, active already holds the result (see playing()).
+  bool any = false;
+  for_slots(effect_count(), [&](std::size_t i) { any = any || playing(i); });
+  return any;
 }
 
 void Mixer::music_volume(float volume) noexcept {
@@ -431,10 +485,8 @@ bool Mixer::take_request(std::size_t slot, const EffectBank* bank) {
 
 std::size_t Mixer::voices_now() const noexcept {
   std::size_t n = 0;
-  const std::size_t count = effect_count();
-  for (std::size_t i = 0; i < count; ++i) {
-    n += effects_[i].playing ? 1 : 0;
-  }
+  for_slots(effect_count(),
+            [&](std::size_t i) { n += effects_[i].playing ? 1 : 0; });
   for (const Extra& x : extras_) {
     n += x.sound ? 1 : 0;
   }
@@ -469,7 +521,14 @@ void Mixer::start_extras(const EffectBank* bank) {
     const ExtraRequest& r = extra_queue_[tail % EXTRA_QUEUE];
     // Only sounds of the bank in use; an older bank may be freed.
     Extra* free_voice = nullptr;
-    if (bank && r.bank == bank->number && voices < limit) {
+    std::size_t same_pool = 0;
+    if (r.pool != 0 && r.max_voices > 0) {
+      for (const Extra& x : extras_) {
+        same_pool += x.sound && x.pool == r.pool ? 1 : 0;
+      }
+    }
+    if (bank && r.bank == bank->number && voices < limit &&
+        (r.max_voices == 0 || same_pool < r.max_voices)) {
       for (Extra& x : extras_) {
         if (!x.sound) {
           free_voice = &x;
@@ -485,13 +544,16 @@ void Mixer::start_extras(const EffectBank* bank) {
                         .position = 0,
                         .left = r.left,
                         .right = r.right,
-                        .started = blocks_};
+                        .started = blocks_,
+                        .pool = r.pool,
+                        .duck_gain = r.duck_gain};
     ++voices;
   }
   extra_tail_.store(tail, std::memory_order_release);
 }
 
-void Mixer::mix_extras(std::span<float> acc, float gain_from, float gain_to) {
+void Mixer::mix_extras(std::span<float> acc, float gain_from, float gain_to,
+                       float env_from, float env_to) {
   const std::size_t total = acc.size();
   std::size_t count = 0;
   for (Extra& x : extras_) {
@@ -500,13 +562,15 @@ void Mixer::mix_extras(std::span<float> acc, float gain_from, float gain_to) {
     }
     const std::span<const int16_t> samples = x.sound->samples;
     const std::size_t n = std::min(total, samples.size() - x.position);
-    const float to =
-        gain_from == gain_to
-            ? gain_to
-            : gain_from + (gain_to - gain_from) * (static_cast<float>(n) /
+    // The volume ramp and the pool's dip under alerts, over the n frames.
+    const float from = gain_from * ducked(x.duck_gain, env_from);
+    const float last = gain_to * ducked(x.duck_gain, env_to);
+    const float to = from == last
+                         ? last
+                         : from + (last - from) * (static_cast<float>(n) /
                                                    static_cast<float>(total));
-    mix_add_panned(acc.subspan(0, n), samples.subspan(x.position, n), gain_from,
-                   to, x.left, x.right);
+    mix_add_panned(acc.subspan(0, n), samples.subspan(x.position, n), from, to,
+                   x.left, x.right);
     x.position += n;
     if (x.position >= samples.size()) {
       x.sound = nullptr;
@@ -568,6 +632,7 @@ Mixer::Sound Mixer::sound_of(std::size_t slot, const EffectBank* bank) const {
 void Mixer::effect_bank(std::unique_ptr<EffectBank> bank) {
   const std::lock_guard lock(bank_mutex_);
   last_variant_.fill(0);
+  started_.fill(false);
   // Every bank handed over gets a higher number, the originals (null)
   // included, so the audio thread can say which ones it has moved past.
   ++banks_made_;
@@ -613,8 +678,7 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
     for (Extra& x : extras_) {
       x.sound = nullptr;
     }
-    const std::size_t n = effect_count();
-    for (std::size_t i = 0; i < n; ++i) {
+    for_slots(effect_count(), [&](std::size_t i) {
       Effect& e = effects_[i];
       const Sound sound = sound_of(i, bank);
       e.position -= e.position % MIX_CHANNELS;
@@ -623,19 +687,19 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
         e.playing = e.loop && sound.start_offset < sound.samples.size();
         e.active.store(e.playing, std::memory_order_release);
       }
-    }
+    });
   }
 
   // Requests first: what starts this block decides the voices and the duck.
   const std::size_t count = effect_count();
   bool cut = false;
   bool alert = false;
-  for (std::size_t i = 0; i < count; ++i) {
+  for_slots(count, [&](std::size_t i) {
     const bool started = take_request(i, bank);
     const Priority p = priority_of(i, bank);
     cut = cut || (started && p != Priority::AMBIENCE);
     alert = alert || (effects_[i].playing && p == Priority::ALERT);
-  }
+  });
   if (cut) {
     cut_extras();
   }
@@ -657,6 +721,18 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
                                  (DUCK_RELEASE_S * static_cast<float>(RATE)));
   }
   duck_seen_.store(duck_, std::memory_order_relaxed);
+  // The pools' dip has the same timing, as a depth from 0 to 1; each pool
+  // goes down to its own duck gain.
+  const float env_from = pool_env_;
+  if (alert && ducking()) {
+    pool_env_ = std::min(
+        1.0f, pool_env_ + frames / (DUCK_ATTACK_S * static_cast<float>(RATE)));
+  }
+  else {
+    pool_env_ = std::max(
+        0.0f, pool_env_ - frames / (DUCK_RELEASE_S * static_cast<float>(RATE)));
+  }
+  pool_env_seen_.store(pool_env_, std::memory_order_relaxed);
 
   // The master volume and the mute fold into both gains, so they ramp too.
   const float master = output_muted() ? 0.0f : master_volume();
@@ -669,16 +745,25 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
 
   const float sound_target =
       sound_volume_.load(std::memory_order_relaxed) * master;
-  for (std::size_t i = 0; i < count; ++i) {
+  for_slots(count, [&](std::size_t i) {
     Effect& e = effects_[i];
     if (e.playing) {
-      mix_effect(e, sound_of(i, bank), acc, sound_gain_, sound_target);
+      // A pool with a dip set by its pack goes down under alerts.
+      const float dip = bank ? bank->rules[i].duck_gain : 1.0f;
+      if (dip < 1.0f) {
+        mix_effect(e, sound_of(i, bank), acc,
+                   sound_gain_ * ducked(dip, env_from),
+                   sound_target * ducked(dip, pool_env_));
+      }
+      else {
+        mix_effect(e, sound_of(i, bank), acc, sound_gain_, sound_target);
+      }
       if (!e.playing) {
         e.active.store(false, std::memory_order_release);
       }
     }
-  }
-  mix_extras(acc, sound_gain_, sound_target);
+  });
+  mix_extras(acc, sound_gain_, sound_target, env_from, pool_env_);
   sound_gain_ = sound_target;
 
   mix_to_s16(acc, out, MASTER_VOLUME);
@@ -741,6 +826,10 @@ AudioManager::AudioManager()
     : music_data_(static_cast<size_t>(MusicId::COUNT)) {
   for (std::size_t i = 0; i < static_cast<std::size_t>(SoundId::COUNT); ++i) {
     mixer_.priority(i, default_priority(static_cast<SoundId>(i)));
+  }
+  for (std::size_t i = 0; i < static_cast<std::size_t>(PackEvent::COUNT); ++i) {
+    const auto event = static_cast<PackEvent>(i);
+    mixer_.priority(pack_event_slot(event), default_priority(event));
   }
   // Variants and ambience differ from one run to the next.
   const uint64_t seed =
@@ -1047,6 +1136,53 @@ void AudioManager::play_sound_at(SoundId id, Placement place, LoopMode loop) {
   }
 }
 
+bool AudioManager::play_event(PackEvent event, Placement place) {
+  const std::size_t slot = pack_event_slot(event);
+  if (!audio_enabled_ || event >= PackEvent::COUNT || !mixer_.bank_has(slot)) {
+    return false; // silent without a pack that has it
+  }
+  return mixer_.play(slot, false, place);
+}
+
+bool AudioManager::play_event(std::string_view event, Placement place) {
+  const auto e = pack_event_from_name(event);
+  return e && play_event(*e, place);
+}
+
+bool AudioManager::start_event(PackEvent event, Placement place) {
+  const std::size_t slot = pack_event_slot(event);
+  if (!audio_enabled_ || event >= PackEvent::COUNT || !mixer_.bank_has(slot)) {
+    return false;
+  }
+  return mixer_.play(slot, true, place);
+}
+
+bool AudioManager::start_event(std::string_view event, Placement place) {
+  const auto e = pack_event_from_name(event);
+  return e && start_event(*e, place);
+}
+
+void AudioManager::stop_event(PackEvent event) {
+  if (audio_enabled_ && event < PackEvent::COUNT) {
+    mixer_.stop(pack_event_slot(event));
+  }
+}
+
+void AudioManager::stop_event(std::string_view event) {
+  if (const auto e = pack_event_from_name(event)) {
+    stop_event(*e);
+  }
+}
+
+bool AudioManager::has_event(std::string_view event) const {
+  const auto e = pack_event_from_name(event);
+  return e && mixer_.bank_has(pack_event_slot(*e));
+}
+
+bool AudioManager::event_playing(PackEvent event) const {
+  return event < PackEvent::COUNT && mixer_.playing(pack_event_slot(event));
+}
+
 void AudioManager::ducking(bool enabled) { mixer_.ducking(enabled); }
 
 void AudioManager::voice_limit(std::size_t limit) { mixer_.voice_limit(limit); }
@@ -1058,6 +1194,7 @@ void AudioManager::effects_seed(uint64_t seed) {
 }
 
 void AudioManager::tick(uint32_t dt_ms) {
+  mixer_.advance(dt_ms);
   const std::lock_guard lock(effects_mutex_);
   now_ms_ += dt_ms;
   const Mixer::EffectBank* bank = mixer_.effect_bank();
@@ -1095,6 +1232,12 @@ void AudioManager::tick(uint32_t dt_ms) {
       if (now_ms_ < clock.due_ms) {
         continue;
       }
+      // Never closer than the pool's spacing to its last one.
+      const uint32_t spacing = layer.rules.spacing_ms;
+      if (clock.started && now_ms_ - clock.last_start_ms < spacing) {
+        clock.due_ms = clock.last_start_ms + spacing;
+        continue;
+      }
       // One at a time: a long frame never brings a burst.
       std::size_t v = 0;
       const std::size_t n = layer.variants.size();
@@ -1105,9 +1248,21 @@ void AudioManager::tick(uint32_t dt_ms) {
         }
       }
       clock.last_variant = v;
+      const float pan = ambience_random_.uniform(layer.min_pan, layer.max_pan);
+      float gain = 1.0f;
+      if (layer.rules.jitter_db > 0.0f) {
+        gain = std::pow(10.0f, ambience_random_.uniform(-layer.rules.jitter_db,
+                                                        layer.rules.jitter_db) /
+                                   20.0f);
+      }
+      // Each layer is its own pool for its voice limit.
+      const auto pool =
+          static_cast<uint32_t>(s * 16 + l + 1); // 8 layers at most
       static_cast<void>(mixer_.play_extra(
-          &layer.variants[v], Placement{.pan = ambience_random_.uniform(
-                                            layer.min_pan, layer.max_pan)}));
+          &layer.variants[v], Placement{.pan = pan, .gain = gain}, pool,
+          layer.max_voices, layer.rules.duck_gain));
+      clock.started = true;
+      clock.last_start_ms = now_ms_;
       clock.due_ms = now_ms_ + interval();
     }
   }

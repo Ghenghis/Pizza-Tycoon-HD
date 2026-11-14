@@ -186,3 +186,22 @@ def test_without_numpy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(lc, "np", None)
     tone = sine(-6.0206, 0.1, hz=RATE / 4, phase=math.pi / 4)
     assert lc.db(lc.true_peak([tone])) == pytest.approx(-6.02, abs=0.3)
+
+
+def test_true_peak_is_checked_at_the_top_of_the_random_gain(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    plate = wav(pack / "plate.wav", sine(-2.0, 0.5, hz=100))  # -2 dBTP, fine as it is
+    manifest(
+        pack,
+        [
+            {"event": "plate-served", "file": "plate.wav", "sha256": sha(plate)},
+            {"event": "payment", "file": "plate.wav", "sha256": sha(plate), "gain_jitter_db": 1.5},
+            {"event": "kitchen-idle", "file": "plate.wav", "sha256": sha(plate)},
+        ],
+    )
+    by = {r.event: r for r in lc.check_pack(pack)}
+    assert by["plate-served"].ok
+    payment = by["payment"]
+    assert not payment.ok and "top of its gain_jitter_db" in payment.problems[0]
+    assert payment.true_peak_max_dbtp == pytest.approx(payment.true_peak_dbtp + 1.5)
+    assert by["kitchen-idle"].kind == "bed"
