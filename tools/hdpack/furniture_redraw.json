@@ -370,6 +370,21 @@
   "seed": 62911
  },
  {
+  "file": "bob/moebel/0071.png",
+  "description": "square restaurant table with a gold frame and a pale marble top, 'Royal' style, bare tabletop",
+  "seed": 9398
+ },
+ {
+  "file": "bob/moebel/0072.png",
+  "description": "oval wooden restaurant table, 'Oval setting' style, bare tabletop",
+  "seed": 32576
+ },
+ {
+  "file": "bob/moebel/0073.png",
+  "description": "oval wooden restaurant table, 'Oval setting' style, bare tabletop",
+  "seed": 32576
+ },
+ {
   "file": "bob/moebel/0074.png",
   "description": "round restaurant table, 'Mc Donut small' style",
   "seed": 75479
@@ -543,6 +558,26 @@
   "file": "bob/moebel/0108.png",
   "description": "green dining chair, 'Saloon Green' style restaurant seating",
   "seed": 67809
+ },
+ {
+  "file": "bob/moebel/0109.png",
+  "description": "wooden saloon chair with a round white leather seat cushion, 'Saloon White' style",
+  "seed": 73553
+ },
+ {
+  "file": "bob/moebel/0110.png",
+  "description": "wooden saloon chair with a round white leather seat cushion, 'Saloon White' style",
+  "seed": 73553
+ },
+ {
+  "file": "bob/moebel/0111.png",
+  "description": "wooden saloon chair with a round white leather seat cushion, 'Saloon White' style",
+  "seed": 73553
+ },
+ {
+  "file": "bob/moebel/0112.png",
+  "description": "wooden saloon chair with a round white leather seat cushion, 'Saloon White' style",
+  "seed": 73553
  },
  {
   "file": "bob/moebel/0113.png",
@@ -1040,6 +1075,26 @@
   "seed": 47075
  },
  {
+  "file": "bob/moebel/0233.png",
+  "description": "white round pop art chair with a soft cushion, 'Pop White' style",
+  "seed": 67240
+ },
+ {
+  "file": "bob/moebel/0234.png",
+  "description": "white round pop art chair with a soft cushion, 'Pop White' style",
+  "seed": 67240
+ },
+ {
+  "file": "bob/moebel/0235.png",
+  "description": "white round pop art chair with a soft cushion, 'Pop White' style",
+  "seed": 67240
+ },
+ {
+  "file": "bob/moebel/0236.png",
+  "description": "white round pop art chair with a soft cushion, 'Pop White' style",
+  "seed": 67240
+ },
+ {
   "file": "bob/moebel/0237.png",
   "description": "restaurant table, 'Modern Art 1' style",
   "seed": 59671
@@ -1113,6 +1168,26 @@
   "file": "bob/moebel/0265.png",
   "description": "red armchair, 'Leather Red' style restaurant seating",
   "seed": 96282
+ },
+ {
+  "file": "bob/moebel/0266.png",
+  "description": "blue leather armchair with a wooden frame, 'Leather Blue' style",
+  "seed": 58354
+ },
+ {
+  "file": "bob/moebel/0267.png",
+  "description": "blue leather armchair with a wooden frame, 'Leather Blue' style",
+  "seed": 58354
+ },
+ {
+  "file": "bob/moebel/0268.png",
+  "description": "blue leather armchair with a wooden frame, 'Leather Blue' style",
+  "seed": 58354
+ },
+ {
+  "file": "bob/moebel/0269.png",
+  "description": "blue leather armchair with a wooden frame, 'Leather Blue' style",
+  "seed": 58354
  },
  {
   "file": "bob/moebel/0270.png",

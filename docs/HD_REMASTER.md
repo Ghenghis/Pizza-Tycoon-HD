@@ -235,7 +235,7 @@ python tools/hdpack/redraw.py pack/ maps/ redraw-out/ --server http://127.0.0.1:
     --denoise 0.8 --skip-done --items-json tools/hdpack/furniture_redraw.json
 ```
 
-`furniture_redraw.json` lists the 271 restaurant and kitchen furniture
+`furniture_redraw.json` lists the 286 restaurant and kitchen furniture
 frames (`bob/moebel`, `bob/kuebobs`) that came out right, each with a
 description. The rest keep their MMPX versions, which look better:
 
