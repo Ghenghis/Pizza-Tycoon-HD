@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from PIL import Image
 
@@ -91,3 +93,68 @@ def test_prepare_softens_the_pixel_grid_but_keeps_the_colours() -> None:
     assert edges(soft_depth) < 0.35 * edges(sharp_depth)
     mean_sharp = np.asarray(sharp, np.float32).mean()
     assert abs(np.asarray(soft, np.float32).mean() - mean_sharp) < 3
+
+
+def test_keep_colours_puts_back_the_original_colour_and_keeps_detail() -> None:
+    # Original: a flat cream seat. Redraw: brown, with fine stripes as detail.
+    sprite = Image.new("RGBA", (96, 96), (0, 0, 0, 0))
+    for x in range(8, 88):
+        for y in range(8, 88):
+            sprite.putpixel((x, y), (230, 215, 180, 255))
+    g = np.zeros((96, 96, 3), np.float32)
+    g[...] = (120, 70, 30)
+    g[:, ::4] += 20  # detail the model added
+    out = redraw.keep_colours(g, sprite, sigma=8.4, chroma=1.0, light=1.0)
+    centre = out[32:64, 32:64]  # starts on a stripe column
+    assert np.abs(centre.mean(axis=(0, 1)) - (235, 215, 180)).max() < 8
+    stripes = centre[:, 0::4].mean() - centre[:, 2::4].mean()
+    assert stripes > 15  # the detail is still there
+    # The transparent outside doesn't drag the edge colour towards black.
+    edge = out[10:86, 9]
+    assert edge.mean() > 150
+
+
+def test_finish_with_colour_sigma_keeps_outline() -> None:
+    sprite = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+    for x in range(5, 35):
+        for y in range(5, 35):
+            sprite.putpixel((x, y), (200, 40, 40, 255))
+    out = redraw.finish(Image.new("RGB", (512, 512), (40, 40, 200)), sprite, colour_sigma=6.0)
+    assert np.array_equal(np.asarray(out)[..., 3], np.asarray(sprite)[..., 3])
+    r, g, b, _ = out.getpixel((20, 20))
+    assert r > 150 and b < 90
+
+
+def test_keep_colours_can_move_colour_without_lightness() -> None:
+    sprite = Image.new("RGBA", (64, 64), (60, 120, 220, 255))  # blue
+    g = np.zeros((64, 64, 3), np.float32)
+    g[...] = (200, 60, 60)  # red, a different lightness
+    out = redraw.keep_colours(g, sprite, sigma=6.0, chroma=1.0, light=0.0)
+    ycc = out[32, 32] @ redraw._YCC.T
+    assert abs(ycc[0] - np.float32((200, 60, 60) @ redraw._YCC[0])) < 1.5  # lightness kept
+    want = np.asarray((60, 120, 220), np.float32) @ redraw._YCC.T
+    assert np.abs(ycc[1:] - want[1:]).max() < 1.5  # colour taken
+
+
+def test_from_raw_redoes_the_colour_step_without_comfyui(tmp_path: Path) -> None:
+    pack, maps, out = tmp_path / "pack", tmp_path / "maps", tmp_path / "out"
+    rel = "bob/moebel/0001.png"
+    sprite = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+    for x in range(4, 44):
+        for y in range(4, 44):
+            sprite.putpixel((x, y), (230, 215, 180, 255))
+    (pack / "bob/moebel").mkdir(parents=True)
+    sprite.save(pack / rel)
+    raw = Image.new("RGBA", (48, 48), (120, 70, 30, 255))
+    raw.putalpha(sprite.getchannel("A"))
+    (out / "raw/0.80/bob/moebel").mkdir(parents=True)
+    raw.save(out / "raw/0.80" / rel)
+    args = [str(pack), str(maps), str(out), "--from-raw", "--denoise", "0.8", "--item", rel, "seat"]
+    assert redraw.main(args + ["--keep-colours", "0", "--keep-light", "0"]) == 0
+    with Image.open(out / "0.80" / rel) as im:
+        assert im.getpixel((24, 24))[:3] == (120, 70, 30)
+    assert redraw.main(args + ["--keep-colours", "1", "--keep-light", "1"]) == 0
+    with Image.open(out / "0.80" / rel) as im:
+        r, g, b, a = im.getpixel((24, 24))
+    assert abs(r - 230) < 12 and abs(b - 180) < 12 and a == 255
+    assert (out / "sheet.png").exists()

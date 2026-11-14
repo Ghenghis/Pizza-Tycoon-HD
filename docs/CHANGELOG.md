@@ -11,8 +11,9 @@ Unreleased
 * HD art tools: `depthmaps.py` makes depth and normal maps for every pack
   picture (Depth Anything V2), and `redraw.py` repaints sprites with SDXL and
   a depth ControlNet inside the original outline, so the game sees exactly
-  the same shapes. `furniture_redraw.json` covers all restaurant and kitchen
-  furniture except plants. The art itself stays out of this repository.
+  the same shapes, and puts the original's colours back (`--keep-colours`).
+  `furniture_redraw.json` covers all restaurant and kitchen furniture except
+  plants. The art itself stays out of this repository.
 * `--exec` prints what each command reports, so scripts can read results.
 
 Pizza Tycoon HD 1.1.0 (2026-11-14)

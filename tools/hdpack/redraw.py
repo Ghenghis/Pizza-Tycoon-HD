@@ -12,7 +12,9 @@ and gameplay are unchanged; only the paint inside is new.
       --item bob/moebel/0004.png "ornate red velvet dining chair" ...
 
 Writes <out>/<denoise>/<file> for every --denoise value, ready to copy into a
-pack, and <out>/sheet.png comparing them with the original.
+pack, <out>/raw/<denoise>/<file> (the model's picture before the colour step;
+--from-raw redoes that step without ComfyUI), and <out>/sheet.png comparing
+them with the original.
 """
 
 from __future__ import annotations
@@ -132,12 +134,63 @@ def shadow_mask(sprite: Image.Image) -> NDArray[np.float32]:
     return np.asarray(m, dtype=np.float32) / 255.0
 
 
-def finish(generated: Image.Image, sprite: Image.Image) -> Image.Image:
+def _blur(a: NDArray[np.float32], sigma: float) -> NDArray[np.float32]:
+    """Separable Gaussian blur over the first two axes, edges clamped."""
+    if sigma <= 0:
+        return a
+    r = max(1, int(sigma * 3))
+    k = np.exp(-0.5 * (np.arange(-r, r + 1) / sigma) ** 2).astype(np.float32)
+    k /= k.sum()
+    for axis in (0, 1):
+        pad = [(0, 0)] * a.ndim
+        pad[axis] = (r, r)
+        win = np.lib.stride_tricks.sliding_window_view(np.pad(a, pad, mode="edge"), 2 * r + 1, axis=axis)
+        a = np.asarray(win @ k, dtype=np.float32)
+    return a
+
+
+# RGB -> Y'CbCr (BT.601), to move colour and lightness separately.
+_YCC = np.array(
+    [[0.299, 0.587, 0.114], [-0.168736, -0.331264, 0.5], [0.5, -0.418688, -0.081312]],
+    dtype=np.float32,
+)
+_YCC_INV = np.linalg.inv(_YCC).astype(np.float32)
+
+
+def keep_colours(
+    out: NDArray[np.float32], sprite: Image.Image, sigma: float, chroma: float = 1.0, light: float = 1.0
+) -> NDArray[np.float32]:
+    """Give the redraw the original's colours over areas about `sigma` pixels
+    across and keep the model's finer detail and shading: the difference
+    between blur(original) and blur(out), split into colour (`chroma`) and
+    lightness (`light`), is added to out. SDXL tends to turn every chair into
+    brown leather; this keeps a cream seat cream and a gold one gold. The
+    blur is weighted by the sprite's alpha so the background doesn't bleed
+    in at the edges."""
+    s = np.asarray(sprite.convert("RGBA"), dtype=np.float32)
+    a = s[..., 3:4] / 255.0
+    wa = _blur(a, sigma) + 1e-4
+    low_orig = _blur(s[..., :3] * a, sigma) / wa
+    low_out = _blur(out * a, sigma) / wa
+    d = (low_orig - low_out) @ _YCC.T
+    d *= np.array([light, chroma, chroma], dtype=np.float32)
+    return np.asarray(out + d @ _YCC_INV.T, dtype=np.float32)
+
+
+def finish(
+    generated: Image.Image,
+    sprite: Image.Image,
+    colour_sigma: float = 0.0,
+    chroma: float = 1.0,
+    light: float = 1.0,
+) -> Image.Image:
     """Back to the sprite's size, inside the sprite's own outline, with the
-    sprite's own drop shadow kept."""
-    out = generated.convert("RGB").resize(sprite.size, Image.Resampling.LANCZOS)
+    sprite's own drop shadow kept and, with colour_sigma, its colours."""
+    out = np.asarray(generated.convert("RGB").resize(sprite.size, Image.Resampling.LANCZOS), dtype=np.float32)
+    if colour_sigma > 0 and (chroma > 0 or light > 0):
+        out = keep_colours(out, sprite, colour_sigma, chroma, light)
     m = shadow_mask(sprite)[..., None]
-    mixed = np.asarray(out, dtype=np.float32) * (1 - m) + np.asarray(sprite.convert("RGB"), dtype=np.float32) * m
+    mixed = out * (1 - m) + np.asarray(sprite.convert("RGB"), dtype=np.float32) * m
     result = Image.fromarray(np.clip(mixed + 0.5, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
     result.putalpha(sprite.getchannel("A"))
     return result
@@ -188,6 +241,18 @@ def main(argv: list[str] | None = None) -> int:
         default=12,
         help="pack pictures are this many times the original art (0: no softening)",
     )
+    p.add_argument(
+        "--keep-colours",
+        type=float,
+        default=1.0,
+        help="0-1: how much of the original's colour to put back, over areas of about 1.5 original pixels",
+    )
+    p.add_argument("--keep-light", type=float, default=0.5, help="0-1: the same for lightness")
+    p.add_argument(
+        "--from-raw",
+        action="store_true",
+        help="no ComfyUI: redo the colour step from <out>/raw/, e.g. after changing --keep-colours",
+    )
     args = p.parse_args(argv)
 
     pack, maps, out = Path(args.pack), Path(args.maps), Path(args.out)
@@ -197,8 +262,41 @@ def main(argv: list[str] | None = None) -> int:
             items.append((e["file"], e["description"], int(e.get("seed", args.seed))))
     if not items:
         p.error("give --item or --items-json")
-    client = hdpack.ComfyClient(args.server, timeout=60)
+    colour_sigma = 1.5 * max(1.0, args.source_scale)
+
+    def save(generated: Image.Image, sprite: Image.Image, rel: str, denoise: float) -> Image.Image:
+        """Keep the model's picture as it came (cut to the sprite) under raw/,
+        so the colour step can be redone without the GPU, then finish it."""
+        raw = generated.convert("RGB").resize(sprite.size, Image.Resampling.LANCZOS).convert("RGBA")
+        raw.putalpha(sprite.getchannel("A"))
+        raw_path = out / "raw" / f"{denoise:.2f}" / rel
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw.save(raw_path)
+        result = finish(raw, sprite, colour_sigma, args.keep_colours, args.keep_light)
+        target = out / f"{denoise:.2f}" / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        result.save(target)
+        return result
+
     rows: list[tuple[str, list[Image.Image]]] = []
+    if args.from_raw:
+        for rel, description, _seed in items:
+            with Image.open(pack / rel) as im:
+                sprite = im.convert("RGBA")
+            pics = [sprite]
+            for denoise in args.denoise:
+                raw_path = out / "raw" / f"{denoise:.2f}" / rel
+                if not raw_path.exists():
+                    continue
+                with Image.open(raw_path) as r:
+                    pics.append(save(r.copy(), sprite, rel, denoise))
+            if len(rows) < args.sheet_limit and len(pics) > 1:
+                rows.append((f"{rel}: {description}", pics))
+        sheet(rows, ["current (pixel-art scaler)"] + [f"redraw, denoise {d}" for d in args.denoise], out / "sheet.png")
+        print(f"recoloured from raw; sheet: {out / 'sheet.png'}")
+        return 0
+
+    client = hdpack.ComfyClient(args.server, timeout=60)
     with tempfile.TemporaryDirectory() as tmp:
         for n, (rel, description, seed) in enumerate(items):
             if args.skip_done and all((out / f"{d:.2f}" / rel).exists() for d in args.denoise):
@@ -231,11 +329,7 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 entry = client.wait(client.queue(workflow(values)), timeout=600)
                 generated = Image.open(io.BytesIO(client.first_image(entry)))
-                result = finish(generated, sprite)
-                target = out / f"{denoise:.2f}" / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                result.save(target)
-                pics.append(result)
+                pics.append(save(generated, sprite, rel, denoise))
                 print(
                     f"[{n + 1}/{len(items)}] {rel} denoise {denoise} in {time.monotonic() - started:.1f}s",
                     flush=True,

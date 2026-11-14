@@ -217,22 +217,30 @@ moving a single pixel of their outline:
    paint over it at denoise 0.8, and holds the shape and perspective with a
    depth ControlNet (`diffusers_xl_depth_full`, strength 0.85 until 90% of
    the steps). Every rotation of one piece of furniture shares a seed, so the
-   four views match.
+   four views match. The start picture and the depth map are blurred over
+   about half an original pixel first: left sharp, the 1994 pixel grid
+   survives the redraw and the ControlNet reads every pixel edge as a step.
 3. The result is cut to the original sprite's alpha, so placement, click
    areas and everything the game checks stay the same. The original's
    painted floor shadow is kept, because the model tends to repaint it as
    part of the object.
+4. The original's colours are put back over areas of about 1.5 original
+   pixels (`--keep-colours`, `--keep-light`): SDXL likes to turn every chair
+   into brown leather, and a cream seat should stay cream. The model's own
+   picture is kept under `raw/`, so `--from-raw` redoes this step with other
+   values in seconds, without ComfyUI.
 
 ```
 python tools/hdpack/redraw.py pack/ maps/ redraw-out/ --server http://127.0.0.1:8188 \
     --denoise 0.8 --skip-done --items-json tools/hdpack/furniture_redraw.json
 ```
 
-`furniture_redraw.json` lists all 343 restaurant and kitchen furniture
-frames (`bob/moebel`, `bob/kuebobs`) with a description each. Plants are left
-out: at this size the model turns leaves into blocks, and the MMPX versions
-look better. Running several `--denoise` values side by side writes
-`redraw-out/<denoise>/` folders and a `sheet.png` to compare them. About ten
+`furniture_redraw.json` lists 341 restaurant and kitchen furniture frames
+(`bob/moebel`, `bob/kuebobs`) with a description each. Plants are left out
+(at this size the model turns leaves into blocks, and the MMPX versions look
+better), and so are two sprites that are mostly lettering or digits. Running
+several `--denoise` values side by side writes `redraw-out/<denoise>/`
+folders and a `sheet.png` to compare them. About ten
 seconds per frame on an RTX 3090 Ti, so the whole list takes about an hour.
 Copy `redraw-out/0.80/bob/` into the pack when you're happy with it (keep the
 old folders: they're the pixel-art versions).
