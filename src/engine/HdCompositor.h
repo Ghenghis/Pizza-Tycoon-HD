@@ -180,6 +180,7 @@ private:
   int base_h_ = 0;
   std::vector<uint32_t> scratch_;
   std::vector<Run> runs_;
+  bool batch_geometry_ = true;
   SDL_Texture* batch_tex_ = nullptr;
   std::vector<SDL_Vertex> batch_vertices_;
   std::vector<int> batch_indices_;

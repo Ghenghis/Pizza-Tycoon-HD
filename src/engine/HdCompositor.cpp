@@ -7,6 +7,7 @@
 #include "engine/HdCompositor.h"
 
 #include <algorithm>
+#include <string_view>
 #include <thread>
 #include "engine/DisplayConstants.h"
 #include "engine/Fatal.h"
@@ -62,6 +63,11 @@ bool hd_gpu_compositing() {
 }
 
 HdCompositor::HdCompositor(SDL_Renderer* renderer) : renderer_(renderer) {
+  // SDL's software renderer rasterizes triangle lists itself and doesn't
+  // blend premultiplied alpha there; it gets one copy per quad instead (it
+  // has no draw-call cost to save anyway).
+  const char* name = SDL_GetRendererName(renderer_);
+  batch_geometry_ = !(name && std::string_view(name) == SDL_SOFTWARE_RENDERER);
   const SDL_PropertiesID props = SDL_GetRendererProperties(renderer_);
   const auto max = SDL_GetNumberProperty(
       props, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0);
@@ -658,7 +664,7 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
     if (!tex) {
       continue;
     }
-    if (!c.half) {
+    if (!c.half && batch_geometry_) {
       // 1:1 copies (sprites, text, letters) go into one triangle list per
       // texture: a screen of text is hundreds of letters, and a draw call
       // each was the biggest cost on Direct3D.
