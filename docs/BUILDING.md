@@ -5,10 +5,13 @@ pinned dependency versions (`scripts/deps.env`):
 
 | | Windows (PowerShell) | Linux / WSL2 |
 |---|---|---|
-| Check tools | `scripts\doctor.ps1` | |
+| Check tools (REQUIRED vs optional) | `scripts\doctor.ps1` | `scripts/doctor.sh` |
 | Dependencies | `scripts\fetch-deps.ps1` | `scripts/fetch-deps.sh` |
 | Build (+tests, zero warnings) | `scripts\build.ps1` | `scripts/build.sh` |
-| All quality gates | `scripts\test.ps1` | `scripts/test.sh` |
+| Lint (scripts, Python tools) | `scripts\lint.ps1` | `scripts/lint.sh` |
+| Scans (markers, secrets, deps, bandit) | `scripts\scan.ps1` | `scripts/scan.sh` |
+| Tests and smoke run | `scripts\test.ps1` | `scripts/test.sh` |
+| HD gates (needs the original game) | `scripts\hd-gates.ps1` | `scripts/hd-gates.sh` |
 | Everything, as local CI | `scripts\ci-local.ps1` | `scripts/ci-local.sh` |
 | Windows release from Linux/WSL2 | | `scripts/build-windows-cross.sh` |
 
@@ -40,7 +43,8 @@ Platform-specific setup:
 
 - **Linux (Debian/Ubuntu):** `sudo apt-get install ninja-build libsdl3-dev pkg-config`
 - **macOS:** `brew install sdl3 pkg-config cmake ninja`
-- **Windows:** Install SDL3 via `vcpkg`
+- **Windows:** `scripts\fetch-deps.ps1` builds the pinned SDL3, zlib and
+  Catch2 (`scripts\build.ps1` runs it when needed)
 
 ## Compile
 

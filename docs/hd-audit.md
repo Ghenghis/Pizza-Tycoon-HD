@@ -6,8 +6,8 @@ on 2026-11-14. The question for every code path: in HD mode (`hd_scale` > 1),
 does detailed content reach the screen without an HD picture? Such content is
 drawn with the indexed pixels scaled up by nearest neighbour.
 
-Where it helped, the exported originals (`/home/claude/w/export`) and two
-local packs (`/home/claude/w/pack6`, 6x; `/tmp/pack12`, 12x) were measured
+Where it helped, an export of the original art (`plegacy --export-assets`) and
+two local packs (pack6, a 6x AI pack; pack12, a 12x MMPX pack) were measured
 with small read-only Python checks. The game's own `GFX/PALETTE.E` was used
 for the palette numbers. Nothing was rendered.
 
@@ -45,7 +45,7 @@ HD survives only when a picture is loaded through `VgaLoader::load`
 | Symptom | Cause | Finding |
 |---|---|---|
 | 1. City view map is blocky | The default FAR zoom map is built with one `fill_rect` per tile and has no HD source. The DISTRICTS and CONTROL tabs are per-pixel hatching. | H4, M2 (also M4, M6) |
-| 2. Paper pins on `nav stats @ 0` are blocky | The code path is HD-aware: `render_push_pin` blits stanbobs frames 26-33 with `blit_masked`. The blockiness comes from the pack. In the 12x pack (`/tmp/pack12`) the pin is an MMPX 11x14 sprite, which is hard-edged 12x12 blocks. In the AI-made pack6, 91 of the pin's 93 opaque pixels have HD blocks that are not fully opaque (alpha p10 = 205; corner pieces 35-38 p10 = 169), so the nearest-neighbour base shows through. | H2 |
+| 2. Paper pins on `nav stats @ 0` are blocky | The code path is HD-aware: `render_push_pin` blits stanbobs frames 26-33 with `blit_masked`. The blockiness comes from the pack. In the 12x pack (pack12) the pin is an MMPX 11x14 sprite, which is hard-edged 12x12 blocks. In the AI-made pack6, 91 of the pin's 93 opaque pixels have HD blocks that are not fully opaque (alpha p10 = 205; corner pieces 35-38 p10 = 169), so the nearest-neighbour base shows through. | H2 |
 | 3. Pixel text | **Baked into pictures:** the Advertising items (Flyers, Posters, Newspaper Ads, TV-Ads, plus the "Advertising" title) are in `gfx/back27`. The city view dropdown labels PLAYER, RANGE, LOCATIONS and PROPERTIES are in `gfx/back21`. **Drawn by code:** the MAP, DISTRICTS and CONTROL tabs (`CityView::render_tabs` L1126-1129, CSTANDAR) and the terminal header "INTERNATIONAL TELENET TERMINAL" / "LOADING MULTIMEDIA LIBRARY . . ." (`Terminal::draw_main_menu` L88-93, CSTANDAR). Since 94d616e these go through `prepare_hd_line` and are HD text. If they still look pixelated, the screenshot predates that commit, or `hd_text` is off, or no typeface loaded (`HdTypefaces::configure` needs `data/fonts/hd_fonts.json`). The terminal background (`gfx/back28`) and its green boxes (`gfx/blitmap5`) also carry baked decorative pseudo-text. | H5 |
 
 ## Summary table
@@ -117,7 +117,7 @@ HD survives only when a picture is loaded through `VgaLoader::load`
   * **Validation does not catch it.** `hdpack.py validate` only flags texels
     with alpha < 64 (`hole_fraction` L267-274).
   * **MMPX packs.** Sprites are deliberately kept as magnified pixel art
-    (`--method mmpx`; the 12x pin in `/tmp/pack12` is 12x12 flat blocks), so
+    (`--method mmpx`; the 12x pin in pack12 is 12x12 flat blocks), so
     a sprite only 11-21 px across reads as blocky at 4K.
 * **Fix:**
   1. *Engine, S:* in `Bob::frame` (and in `VgaLoader::load` for pictures with
@@ -452,7 +452,7 @@ frames by design; they are not part of the game.)
 
 * Which pack produced the user's 4K screenshots is unknown. The pin analysis
   (H2) uses the local packs: the pack6 AI art has feathered alpha, and the
-  `/tmp/pack12` MMPX art is hard-edged. Either way the code path is HD-aware;
+  pack12 MMPX art is hard-edged. Either way the code path is HD-aware;
   the fixes are the alpha normalization in the engine or tool, and redrawn
   art for small UI sprites.
 * The code-drawn labels in symptom 3 (MAP/DISTRICTS/CONTROL, terminal header)

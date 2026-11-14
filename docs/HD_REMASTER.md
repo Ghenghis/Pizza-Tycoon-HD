@@ -26,8 +26,8 @@ palettes:
 
 Many BOB frames are animation poses of the same subject (25 character types x
 6 frames, 13 walk cycles x 12 frames, 341 furniture pieces, 322 ingredients).
-Fonts (`fonts/*.fnt`) are not part of a pack yet: text is drawn from the
-original font, scaled up.
+Fonts (`fonts/*.fnt`) are not pack files: at `hd_scale` 2 or more every line
+of text is drawn again with a modern typeface (see [HD text](#hd-text)).
 
 ## Quick start
 
@@ -68,10 +68,14 @@ plegacy --hd-scale 3 --hd-pack pack
 |---|---|---|
 | `hd_scale = 1..8` | `--hd-scale N` | Texels per pixel of the 640x400 game screen. 1 = original. 3 = 1920x1200, 4 = 2560x1600, 6 = 3840x2400. Read at startup. |
 | `hd_pack = <folder>` | `--hd-pack <folder>` | The pack. Empty means a folder called `hd` next to the program, if there is one. |
+| `hd_text = true` | | HD text: modern typefaces instead of the 1994 letters (see [HD text](#hd-text)). Options menu: "HD text". |
+| `lighting = true` | | HD lighting in the restaurant (see [HD lighting](#hd-lighting)). Options menu: "Lighting". |
+| `smooth_motion = true` | | Walking guests and waiters glide between steps at the screen's frame rate. Only the drawing changes: the game state is the same with it on and off (an HD gate checks this). Options menu: "Smooth motion". |
 
-A pack is used only when `hd_scale` is 2 or more. With `hd_scale` above 1 and no
-pack, the game is drawn at the higher resolution with the original pixels
-(sharp, no blur from the GPU stretching a small frame).
+A pack, HD text and lighting are used only when `hd_scale` is 2 or more. With
+`hd_scale` above 1 and no pack, the game is drawn at the higher resolution
+with the original pixels (sharp, no blur from the GPU stretching a small
+frame).
 
 ## Pack layout and rules
 
@@ -104,38 +108,45 @@ pack/bob/moebel/0012.png     replaces frame 12 of BOB/MOEBEL.BOB
 
 The game logic never sees HD art. Everything is still drawn into 8-bit indexed
 640x400 surfaces, so hit-testing, layout and every screen work exactly as
-before. Each `gfx::Surface` can carry an extra **HD overlay**: a true-colour
-image `hd_scale` times larger, shared copy-on-write.
+before. Next to its indexed pixels, each `gfx::Surface` keeps a **draw list**
+(`gfx::HdList`, `src/engine/gfx/HdList.h`): the HD pictures drawn on it, each
+with where it goes, which part of the picture, and an optional tint. No HD
+texels are copied on the CPU.
 
-* Loading a VGA picture or a BOB frame attaches the pack's image, if any.
-* Every drawing operation keeps the overlay in step with the indexed pixels:
-  * blitting a surface that has HD copies its texels (opaque source pixels
-    replace, transparent ones blend soft edges over);
-  * drawing *plain* pixels (text, lines, fills, sprites with no HD art) over
-    HD art clears those texels, so the original pixels show through. This is
-    why every screen keeps working with a partial pack.
-* The renderer expands each layer at `hd_scale`: indexed pixels become blocks
-  of their palette colour and the HD texels are laid over them. Rows are split
-  across CPU threads. The result is uploaded as one texture and the GPU
-  scales it to the window (letterboxed, CRT aspect if enabled).
+* Loading a VGA picture or a BOB frame attaches the pack's picture, if any:
+  a list of one entry covering the whole surface.
+* Every drawing operation keeps the list in step with the indexed pixels:
+  * blitting a surface appends the source's pictures, clipped and moved to
+    where the blit lands;
+  * drawing *plain* pixels (lines, fills, sprites with no HD art) ends the
+    HD pictures under those pixels, so the original pixels show through
+    there. This is why every screen keeps working with a partial pack.
+* Per layer, `HdCompositor` expands the 640x400 indexed pixels (cheap) and
+  draws the list over them as textured quads, on the GPU, into a render
+  target `hd_scale` times the layer's size. Pictures are uploaded once and
+  kept in GPU memory (1.5 GiB budget, least recently used dropped first);
+  small ones share atlas pages. Layer render targets are pooled and reused
+  from one screen to the next. The layers are then combined and scaled to
+  the window (letterboxed, CRT aspect if enabled). Every SDL renderer works
+  (Direct3D 11/12, Vulkan, Metal, OpenGL); only textured quads and
+  premultiplied-alpha blending are used, no custom shaders.
+* `PLEGACY_CPU_COMPOSE=1` selects the CPU fallback (for broken GPU drivers,
+  and for the tests): each layer is expanded at `hd_scale` on the CPU, rows
+  split across threads, and uploaded as one texture. It draws the same
+  picture (the tests and an HD gate compare the two), about 25 times slower.
 
-The HD art is drawn by the GPU. Each surface keeps the HD pictures drawn on
-it as a list (`src/engine/gfx/HdList.h`) rather than copying texels, and
-`HdCompositor` draws that list as textured quads into one texture per layer.
-The CPU only expands the 640x400 indexed pixels. Every SDL renderer works
-(Direct3D 11/12, Vulkan, Metal, OpenGL); there are no custom shaders.
+Frame time, measured on 2026-11-14 with `bench` in a restaurant, every layer
+redrawn every frame, at 3840x2400 on Direct3D 11 with an RTX-class GPU and a
+Ryzen 7 5800X3D:
 
-Measured with `bench 600` in a restaurant, every layer redrawn every frame
-(Ryzen 7 5800X3D, RTX 3090 Ti, Direct3D 11, 3840x2400):
+| Compositing | avg | p99 |
+|---|---|---|
+| GPU (default) | about 3 ms | 4.4 ms |
+| CPU (`PLEGACY_CPU_COMPOSE=1`) | 80 ms | 143 ms |
 
-| Compositing | avg | p99 | fps |
-|---|---|---|---|
-| GPU (default) | 3.5 ms | 5.3 ms | 285 |
-| CPU (`PLEGACY_CPU_COMPOSE=1`) | 80 ms | 143 ms | 12 |
-
-Both give the same picture (largest difference 2/255 per channel); the tests
-check the draw list against the old texel-copy rules and the GPU result
-against the CPU result on random drawing.
+How fast a screen opens (its first frame) and the 8 ms p99 limit are checked
+by the HD gates (`scripts/hd-gates.ps1`, `tools/ci/hd_gates.py`), which print
+both numbers on every run with the original game.
 
 **DLSS and similar** do not apply: they need a 3D renderer with motion vectors
 and depth. This is a 2D game drawn at native resolution, so there is nothing
@@ -207,9 +218,9 @@ What to expect, by group:
 ## HD text
 
 The game's seven bitmap fonts are 5 to 19 pixels tall. Scaled to 4K they stay
-blocky, so at hd_scale 2 or more every line of text is drawn again with a
-modern typeface, rasterized with anti-aliasing at the exact size it is shown
-(stb_truetype), straight into the HD picture:
+blocky, so at hd_scale 2 or more every line of text is drawn with a modern
+TrueType typeface from `data/fonts`, rasterized with anti-aliasing by
+stb_truetype at the exact texel size it is shown at:
 
 | Original font | Used for | HD typeface |
 |---|---|---|
@@ -220,18 +231,48 @@ modern typeface, rasterized with anti-aliasing at the exact size it is shown
 | RUBY | headings | Zilla Slab Bold |
 
 The layout doesn't change: lines break where the original breaks them, and
-each line sits in the box the original letters fill, with the same alignment
-(left, centred or right) and the original's cap height and baseline. A line
-that would be wider than the original is narrowed to fit. The indexed pixels
-still get the original letters, because the game and the non-HD renderer use
-them; only the HD picture shows the new ones. Colours and drop shadows are
-the original's.
+each line is laid out with the original font's line box, alignment (left,
+centred or right) and baseline, at the original's cap height. A line that
+would be wider than the original is narrowed to fit. Colours and drop
+shadows are the original's.
 
-`data/fonts/hd_fonts.json` maps each font to its typeface (`file`), cap height
+The letters live only in the HD layer: in HD-text mode the indexed pixels
+get no original letters, and keep whatever was under the text. Game state
+never depends on the letters, so nothing the game does changes.
+
+How the letters reach the screen:
+
+* For each font size in use there is a **glyph sheet**: every printable
+  ASCII letter in one picture, white, with the letter's coverage as alpha.
+  The sheets are made on background threads while the intro plays.
+* A line is then one GPU quad per letter from that sheet, tinted by the GPU
+  to the text colour; the shadow is drawn first, the same way. A new line of
+  text needs no new picture and no upload.
+* A line with letters outside printable ASCII, or one narrowed to fit, is
+  drawn instead as one picture per line, packed with others in shared atlas
+  pages on the GPU.
+
+`data/fonts/hd_fonts.json` maps each font to its typeface (`file`, a plain file
+name in `data/fonts`: a name with a folder in it is refused), cap height
 (`size`, a multiple of the original's), letter spacing (`tracking`, in
 original pixels) and `uppercase` for the capitals-only fonts. All the fonts
 there are under the SIL Open Font License. The `hd_text` option (also in the
 graphics options, "HD text") switches back to the 1994 letters at any time.
+
+## HD lighting
+
+With `lighting` on (the default) and `hd_scale` 2 or more, the restaurant is
+lit: candles, ovens and grills, arcade machines, TVs, the jukebox and the
+vending machines light the room around them, with flicker, and the room
+follows the game clock (bright by day, warm in the evening, dim and blue at
+night). A screen reports its lights and ambient level (`lighting::Scene`,
+`src/engine/Lighting.h`), and `LightPass` (`src/engine/LightPass.h`) lights
+that layer on the GPU after `HdCompositor` has drawn it: a light map at
+engine resolution (ambient plus a soft falloff per light), multiplied into
+the layer, and an additive halo on the lights themselves. It uses only
+fixed-function blending, so every SDL renderer can do it. Only the picture
+changes; the CPU fallback has no lighting, so the HD gate that compares GPU
+and CPU pictures turns it off.
 
 ## Redrawing furniture with depth (2.5D-ready art)
 

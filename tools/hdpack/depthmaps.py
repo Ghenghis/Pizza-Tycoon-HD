@@ -49,7 +49,7 @@ def normalise(raw: F32, mask: NDArray[np.bool_]) -> F32:
     """Scales model output to 0..1 over the visible pixels only."""
     vis = raw[mask] if mask.any() else raw.ravel()
     lo, hi = float(np.percentile(vis, 1)), float(np.percentile(vis, 99))
-    out = np.clip((raw - lo) / max(hi - lo, 1e-6), 0.0, 1.0).astype(np.float32)
+    out: F32 = np.clip((raw - lo) / max(hi - lo, 1e-6), 0.0, 1.0).astype(np.float32)
     out[~mask] = 0.0
     return out
 

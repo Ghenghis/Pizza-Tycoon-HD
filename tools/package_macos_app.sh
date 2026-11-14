@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # package_macos_app.sh - Bundle and zip the macOS .app for distribution
 #
 # Usage: ./tools/package_macos_app.sh <build_dir> <version>

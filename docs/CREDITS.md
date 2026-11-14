@@ -2,7 +2,8 @@
 
 Pizza Legacy is a reimplementation of the 1994 game Pizza Tycoon.
 
-Copyright (C) 2026 Cowomaly <https://pizzalegacy.nl/>
+Copyright (C) 2010-2026 Cowomaly <https://pizzalegacy.nl/> (the years in the
+source files' SPDX headers)
 
 Pizza Tycoon HD additions (HD rendering, packs, export, pack tools):
 Copyright (C) 2026 ShadowByte, under the same GPL-3.0-or-later licence.
@@ -30,7 +31,7 @@ Usage: Platform abstraction (Graphics, Input, Audio, Window management,
 native dialogs)
 
     Copyright: Copyright (c) 1997-2026 Sam Lantinga
-    License:   zlib License (see LICENSES/zlib.txt)
+    License:   zlib License (see LICENSES/Zlib.txt)
 
 #### libADLMIDI
 
@@ -100,7 +101,35 @@ weight 800 and width 112, Crimson Pro at weight 500).
 #### MMPX
 
 Usage: Smoothing of the original art and fonts, ported to work on palette
-colors (`src/engine/gfx/Mmpx.cpp`)
+colors (`src/engine/gfx/Mmpx.cpp`), and its numpy port for RGBA pictures in
+the pack tool's `--method mmpx` (`tools/hdpack/pixelart.py`)
 
     Copyright: Copyright 2020 Morgan McGuire & Mara Gagiu
     License:   MIT (see LICENSES/MIT-mmpx.txt)
+
+## Pizza Tycoon HD art
+
+New art made for Pizza Tycoon HD (commit 3b7f0b6, 2026-11-13): the title
+screen `assets/hd/gfx/titel1.png` (3840x2400, replaces GFX/TITEL1.VGA when
+HD rendering is on), the box cover `assets/art/PizzaTycoonHD_BoxCover_2880x3840.png`
+and their web-size copies `screenshots/cover_*.jpg`. Made on a local GPU
+with ComfyUI:
+
+| Model | Used for | Licence |
+|---|---|---|
+| FLUX.1 [dev] (Black Forest Labs) | generating the pictures | FLUX.1 [dev] Non-Commercial License |
+| 4x-UltraSharp | upscaling | CC BY-NC-SA 4.0 |
+
+Both models are under non-commercial licences. Read what each one says
+about generated output before any commercial use of this art. The prompts,
+seeds and whether the original game's art was an input were not recorded.
+
+The HD art packs (`hdpack.py`, `redraw.py`) are made from the original
+game's art and are not part of this repository or its releases.
+
+## Screenshots
+
+`screenshots/citymap.png`, `screenshots/pizzadesign.png` and
+`screenshots/hd_compare.png` show the original game's art (c) 1994
+Cybernetic Corporation / Software 2000 / MicroProse, for documentation only.
+They are not shipped in releases.

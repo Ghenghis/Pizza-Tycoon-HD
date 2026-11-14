@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "TypewriterTextRenderer.h"
 
 #include <utility>

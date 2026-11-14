@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # package_linux_appimage.sh - Build AppImage for Linux
 #
 # Usage: ./tools/package_linux_appimage.sh <build_dir> <version>

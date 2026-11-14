@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# gitleaks configuration for `tools/ci/scan.py secrets`: gitleaks' own rules,
+# minus generated and fetched files. Allow a false positive here only with a
+# comment that says why.
+
+title = "Pizza Tycoon HD"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Build output, fetched dependencies and binary art"
+paths = [
+  '''(^|/)build/''',
+  '''(^|/)deps/''',
+  '''(^|/)release/''',
+  '''(^|/)third_party/libadlmidi/''',
+  '''\.(png|jpg|jpeg|icns|ico|vga|ttf)$''',
+]

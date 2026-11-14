@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # gen_icons.sh - Generate platform icon assets from the master .icns file.
 #
 # Produces:

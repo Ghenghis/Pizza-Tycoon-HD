@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 # Generate source_manifest.cmake with curated source/header file lists.
 

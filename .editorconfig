@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Editor settings matching the formatters: clang-format (.clang-format: LLVM
+# style, 2-space indent, 80 columns) for C++, black and ruff (120 columns,
+# tools/*/pyproject.toml) for Python. Every text file is UTF-8 with LF line
+# endings, the scripts too (PowerShell reads LF files fine).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{c,cc,cpp,h,hpp,inl,in}]
+indent_style = space
+indent_size = 2
+max_line_length = 80
+
+[{*.py,tools/gen_game_location_screen}]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+[*.{ps1,psm1,psd1}]
+indent_style = space
+indent_size = 4
+
+[*.sh]
+indent_style = space
+indent_size = 2
+
+[{CMakeLists.txt,*.cmake}]
+indent_style = space
+indent_size = 4
+
+[*.{json,toml,yml,yaml}]
+indent_style = space
+
+[*.md]
+# Two trailing spaces are a line break in Markdown.
+trim_trailing_whitespace = false
+
+[*.{png,jpg,jpeg,ico,icns,ttf,vga,zip}]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

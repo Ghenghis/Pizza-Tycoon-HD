@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Reviewed bandit findings (`tools/ci/scan.py bandit`, medium and high only).
+# Same format as forbidden-allowlist.txt, with the bandit test id as the rule:
+#
+#   test id | path | text | expires | reason
+
+B310 | tools/hdpack/hdpack.py | urllib.request.urlopen(req, timeout=self.timeout) | 2027-05-14 | ComfyClient.__init__ refuses any server URL that is not http or https, so no file: or custom scheme reaches urlopen; better: '# nosec B310' next to the existing noqa

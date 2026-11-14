@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # package_windows_zip.ps1 - Package the Windows build into a distributable ZIP
 #
 # Usage: .\tools\package_windows_zip.ps1 -BuildDir <build_dir> -Version <version>

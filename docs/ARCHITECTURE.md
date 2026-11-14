@@ -45,24 +45,60 @@ Popups, tooltips, and a debug layer are all independent
 overlays that can block or pass through input to the view beneath them.
 Screen transitions use palette-based fade-out/fade-in.
 
-## HD overlay (Pizza Tycoon HD)
+## HD rendering (Pizza Tycoon HD)
 
-Every `gfx::Surface` can carry an optional true-colour `gfx::HdImage` that is
-`hd_scale()` times its size, shared copy-on-write. Loading a VGA picture or a
-BOB frame attaches the matching PNG from the HD pack (`resources::HdPack`),
-resized once to the exact size. All surface operations keep the overlay in
-step with the indexed pixels: blits of HD surfaces carry their texels; plain
-pixels drawn over HD clear the texels under them so the original shows
-through. The `Renderer` expands each layer to `hd_scale` (rows split across
-threads) and lays the texels over the upscaled indexed pixels; the GPU scales
-the final frame to the window. Game logic and layout still run entirely in
-the 640x400 indexed space. See `docs/HD_REMASTER.md`.
+Game logic and layout still run entirely in the 640x400 indexed space; HD
+only changes what reaches the screen when `hd_scale` is 2 or more. The
+pieces, in the order a frame meets them (details and measurements in
+`docs/HD_REMASTER.md`):
+
+- **HD pack** (`resources::HdPack`). Loading a VGA picture or a BOB frame
+  looks up the matching PNG, resizes it once to exactly the original size x
+  2 x `hd_scale` and attaches it to the surface. The pictures a session used
+  are listed in `hd_warm.txt` next to the settings; at the next start one
+  background thread decodes them while the intro plays (stopping at 1.5 GiB),
+  and the renderer streams them to the GPU for up to 3 ms per frame.
+- **Draw lists** (`gfx::HdList`). Each `gfx::Surface` keeps, next to its
+  indexed pixels, the list of HD pictures drawn on it: picture, source part,
+  destination and an optional tint. A blit appends the source's entries,
+  clipped and moved; plain indexed pixels drawn over HD end the entries under
+  them, so the original shows through. No HD texels are copied on the CPU.
+- **GPU compositing** (`HdCompositor`). Per layer, it expands the indexed
+  pixels at engine resolution and draws the draw list as textured quads into
+  a render target `hd_scale` times larger. Pictures live in GPU textures
+  (1.5 GiB budget, least recently used dropped first); small ones (lines of
+  text among them) share atlas pages, sent in one upload per page. The
+  `Renderer` keeps up to 6 layer render targets in a pool and reuses them
+  from screen to screen, then combines the layers and scales the frame to
+  the window. Only textured quads and premultiplied-alpha blending are used,
+  so every SDL renderer works. `PLEGACY_CPU_COMPOSE=1` selects the CPU
+  fallback, which expands each layer on the CPU (rows split across threads)
+  and gives the same picture.
+- **HD text** (`resources::HdTypeface`, `Font`). At HD resolution each line
+  of text is laid out with the original font's line box, alignment and
+  baseline and drawn with a TrueType face from `data/fonts` (stb_truetype,
+  at the exact texel size). The letters exist only in the draw list: the
+  indexed pixels get none. Printable ASCII comes from a glyph sheet per font
+  size, built on background threads while the intro plays, as one tinted
+  quad per letter (shadow first); other lines, and lines narrowed to fit,
+  become one picture each in the atlas (pictures capped at 128 MiB on the
+  CPU). The `hd_text` option turns it off.
+- **Lighting** (`lighting::Scene`, `LightPass`). A lit screen (the
+  restaurant) reports its lights and ambient level each frame; after
+  `HdCompositor` has drawn the layer, `LightPass` multiplies it by a light
+  map built at engine resolution and adds a halo on the lights, on the GPU
+  with fixed-function blending. The `lighting` option turns it off; the CPU
+  fallback has none.
+- **Smooth motion** (`GuestWalkScene`). Walking guests and waiters are drawn
+  between their previous and next cell at the screen's frame rate. Only the
+  drawing changes: an HD gate checks that the game state after 2,000 ticks
+  is byte-for-byte the same with `smooth_motion` on and off.
 
 ## Input system
 
 Input is abstracted into two layers: physical keys (SDL backend) and semantic
 actions (game-level). Key bindings support chords (e.g. Ctrl+Shift+B) and are
-fully configurable (though not through a UI yet). Listeners register for
+fully configurable, on the Key bindings screen or in `bindings.conf`. Listeners register for
 actions with priority ordering, and an IME-aware text input mode uses RAII
 tokens for safe session management. Continuous axes are computed from input
 sources to support keyboard and gamepad input.
@@ -91,14 +127,47 @@ game's data files.
 
 ## Cross-platform
 
-Binary releases are available for Windows, Linux, macOS, and Haiku. The engine
-is designed to be highly portable and should build on most modern desktop platforms
-with SDL3 support, including the BSDs and other Unix-like systems.
+Pizza Tycoon HD releases are Windows only: a zip (game, data, DLLs, pack
+tools) and the bare exe, made by `scripts/release.ps1` or
+`scripts/build-windows-cross.sh`. The Linux and macOS builds are for
+development. Upstream Pizza Legacy publishes Windows, Linux and macOS
+releases. The engine is designed to be highly portable and should build on
+most modern desktop platforms with SDL3 support, including the BSDs and
+other Unix-like systems.
 
 Only the primary release platforms are regularly tested, so support for BSD and
 other secondary platforms is currently best-effort, but portability is a major
 project goal and platform-specific code is kept to a minimum.
 
 Save data and configuration files are stored in the appropriate user data
-directories for each platform; the only external files accessed are the
-original game assets from the directory you selected.
+directories for each platform. Besides those, the program reads:
+
+- the original game's files, from the folder you selected (`--game-path`);
+- `data/` next to the program (game data tables, `data/fonts` for HD text)
+  and the HD pack (`hd_pack`, `--hd-pack`, or an `hd` folder next to the
+  program);
+- `hd_warm.txt` next to the settings, which it also writes;
+- an `--exec` script, when given one.
+
+It writes only to the user data folder, except where a command is told to:
+`--export-assets <dir>` and the console's `screenshot`, `savevga`,
+`dumpgameloc`, `dump fingerprint` and `debug bindings save` (see
+`SECURITY.md`).
+
+## Repository layout
+
+- `src/`: the engine and game (C++20); `tests/`: its Catch2 tests.
+- `tools/hdpack/`: the HD pack tools (Python), with their pytest tests in
+  `tools/hdpack/tests/`; `tools/ci/`: the local CI gates and scans.
+- `scripts/`: one command per job, for Windows (`.ps1`) and Linux/macOS
+  (`.sh`): doctor, build, lint, scan, test, hd-gates, release, ci-local.
+  CI runs on the owner's PC (`scripts/ci-local.*`), not on hosted runners.
+- `data/`, `assets/`: files the program ships; `docs/`: documentation.
+
+## User interface: faithful by design
+
+The game screens recreate the 1994 layouts, which the remaster promises to
+keep (`docs/HD_REMASTER.md`). So game screens get no search, filter or sort
+controls and keep the original's density. New tool UIs (outside the
+recreated screens) are held to the usual rules: search, filter and sort on
+lists, and help text on every control.

@@ -18,13 +18,22 @@ original rules. This fork adds:
   will, a batch driver for a local ComfyUI (RTX GPU) to generate remastered
   art, and depth/normal maps for 2.5D lighting.
 * **GPU rendering**: HD art is drawn by the graphics card (Direct3D, Vulkan,
-  Metal or OpenGL). A fully redrawn 3840x2400 frame takes about 3.3 ms
-  (300 fps) on a Ryzen 7 5800X3D + RTX 3090 Ti, and a screen opens within one
-  60 Hz frame: art used last session is decoded and uploaded in the
-  background while the intro plays.
+  Metal or OpenGL). A fully redrawn 3840x2400 frame takes about 3 ms on
+  average and 4.4 ms at the 99th percentile (measured 2026-11-14 on
+  Direct3D 11 with an RTX-class GPU and a Ryzen 7 5800X3D; see
+  [docs/HD_REMASTER.md](docs/HD_REMASTER.md)). Art used last session is
+  decoded and uploaded in the background while the intro plays; how fast a
+  screen opens is checked by the HD gates (`scripts\hd-gates.ps1`).
+* **HD text** (option `hd_text`, on by default): at HD resolution every line
+  of text is drawn with a modern typeface at full resolution, in exactly the
+  place, alignment and line breaks of the 1994 font.
+* **HD lighting** (option `lighting`, on by default): candles, ovens, arcade
+  machines, TVs and the jukebox light the restaurant around them, and the
+  room follows the time of day. Only the picture changes.
 * **Smooth motion**: walking guests and waiters glide between steps at the
   screen's frame rate (option `smooth_motion`); the game itself is
-  unchanged, which the local CI proves on every build.
+  unchanged, which an HD gate checks on every local CI run with the
+  original game.
 
 <p align="center">
   <img src="screenshots/cover_box.jpg" width="38%" alt="Pizza Tycoon HD box cover">
@@ -46,22 +55,26 @@ ComfyUI setup, limits).
 
 | Script (Windows) | What it does |
 |---|---|
-| `scripts\doctor.ps1` | Checks tools, dependencies, game folder, ComfyUI |
-| `scripts\build.ps1` | Release build (vcpkg + CMake + Ninja), tests included |
-| `scripts\test.ps1` | C++ tests (no window), Python tests, format and lint checks |
+| `scripts\doctor.ps1` | Checks what the build needs (REQUIRED: fails the run) and what is optional (scanners, game folder, ComfyUI), with the fix for each |
+| `scripts\build.ps1` | Release build (pinned dependencies from `fetch-deps.ps1`, CMake, Ninja), tests included; fails on any warning |
+| `scripts\lint.ps1` | PSScriptAnalyzer; ruff, black and mypy (strict) on every Python tool; shellcheck when installed |
+| `scripts\scan.ps1` | Unfinished-work markers (dated allowlist), secrets and private paths, pip-audit, bandit |
+| `scripts\test.ps1` | clang-format check, smoke run (`--version`, `--help`), C++ tests (no window), Python tests |
 | `scripts\export-assets.ps1` | Writes the original art to `export\` |
 | `scripts\make-pack.ps1` | Builds `pack\` (baseline upscale or ComfyUI) and validates it |
-| `scripts\run-dev.ps1` | Plays the game with a pack at a chosen scale |
-| `scripts\release.ps1` | Packages the Windows zip, with checksums |
-| `scripts\hd-gates.ps1` | Runs the real game hidden: GPU = CPU picture, gameplay unchanged by smooth motion, 4K frame time limits |
-| `scripts\ci-local.ps1` | All quality gates, run locally (no hosted CI) |
+| `scripts\run-dev.ps1` | Plays the game with a pack at a chosen scale (builds it first if needed) |
+| `scripts\release.ps1` | Packages the Windows zip and exe, with checksums; the version comes from CMake's `project(VERSION)` |
+| `scripts\hd-gates.ps1` | Runs the real game hidden: HD screens render, GPU = CPU picture, gameplay unchanged by smooth motion, 4K frame time limits; keeps screenshots and logs under `build\hd-gates` when a gate fails |
+| `scripts\ci-local.ps1` | All of the above in order, run locally (no hosted CI); lists every skipped check at the end. `-RequireGame` (or `PLEGACY_TEST_GAME_PATH`) makes skipped game checks fail |
 
-Linux and macOS: `scripts/fetch-deps.sh`, `scripts/build.sh`,
-`scripts/test.sh`, `scripts/ci-local.sh`.
+Linux and macOS: `scripts/doctor.sh`, `scripts/fetch-deps.sh`,
+`scripts/build.sh`, `scripts/lint.sh`, `scripts/scan.sh`, `scripts/test.sh`,
+`scripts/hd-gates.sh`, `scripts/format.sh`, `scripts/ci-local.sh`.
 
 Windows build from Linux or WSL2 (no Visual Studio needed):
-`scripts/build-windows-cross.sh` makes one self-contained
-`Pizza Legacy.exe` and the release zip in `release/`.
+`scripts/build-windows-cross.sh` makes a `Pizza Legacy.exe` with no DLL
+dependencies (it still needs the `data` folder from the zip next to it) and
+the release zip in `release/`.
 
 The Windows program has no console window. Started from a terminal, it prints
 there (exports, `--help`).
@@ -132,9 +145,6 @@ use them for new games from then on. Keyboard and gamepad bindings are changed
 on the Key bindings screen under Controls, or by editing `bindings.conf` in the
 directory above; the file is created on first launch and documents all actions
 and their default bindings.
-gamepad bindings are changed on the Key bindings screen under Controls, or by
-editing `bindings.conf` in the directory above; the file is created on first
-launch and documents all actions and their default bindings.
 
 ## Current status
 

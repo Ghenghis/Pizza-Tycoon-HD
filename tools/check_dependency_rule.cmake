@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Enforces the dependency rule: core is not allowed to include the view layer.
 # Run via: cmake -DCHECK_ROOT=<src dir> -P tools/check_dependency_rule.cmake
 

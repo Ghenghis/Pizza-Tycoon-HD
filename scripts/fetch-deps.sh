@@ -1,8 +1,12 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Builds the pinned dependencies into deps/prefix and puts libADLMIDI where
 # CMake picks it up (third_party/libadlmidi). Safe to run again.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=scripts/deps.env
 . "$ROOT/scripts/deps.env"
 SRC="$ROOT/deps/src"
 PREFIX="${DEPS_PREFIX:-$ROOT/deps/prefix}"

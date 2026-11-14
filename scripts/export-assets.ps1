@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 <#
 .SYNOPSIS
   Writes every original picture and sprite frame to export\ (PNG + manifest.json).

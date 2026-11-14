@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Hits of `tools/ci/scan.py forbidden` that are allowed for now. Any other hit
+# fails the scan, and so does a hit whose entry has expired.
+#
+#   rule | path | text | expires | reason
+#
+# rule     marker, stub, placeholder, not-implemented, coming-soon, empty-catch,
+#          or * for every rule
+# path     repo-relative, forward slashes; * matches any characters
+# text     the hit's line must contain this (case-sensitive); * = any line
+# expires  YYYY-MM-DD; renew only with a new reason
+# reason   where the hit comes from, why it may stay, and what removes it
+#
+# "upstream" = the line came in with the unmodified Pizza Legacy
+# 1.0.0-beta.2 import (commit a685766). The fork's own code has no hits.
+# Audit numbers (R1...) refer to docs/gap-analysis/contract-compliance.md.
+
+# --- The scanner itself -------------------------------------------------------
+* | tools/ci/scan.py | * | 2027-11-14 | the scanner's own rule list and help text name the patterns it looks for
+
+# --- Real gaps in user flows (upstream): fix these first ----------------------
+marker | src/views/screens/Advertising.cpp | Show error message "There is already a campaign | 2026-12-14 | upstream, R1: the Shop button does nothing while a campaign runs; fix: post a status message as CityView.cpp does
+marker | src/views/screens/menus/MenuSaveAsGame.cpp | Show error popup to user | 2026-12-14 | upstream, R2: a failed save only logs; fix: show a popup or status message
+not-implemented | src/core/conversations/MayorConversation.cpp | advance_line_choice() not implemented | 2026-12-14 | upstream, R3: handler logs and returns false; fix: an explicit "the mayor has no choice lines" error, or implement it
+not-implemented | src/core/conversations/MayorConversation.cpp | lines() not implemented for | 2026-12-14 | upstream, R4: default branch returns no lines; fix: drop the default so -Wswitch flags every unhandled MayorLine
+not-implemented | src/core/conversations/ArmsDealerConversation.cpp | Get Lines Not yet implemented for line | 2026-12-14 | upstream (not in the audit): default branch of lines() returns no lines; fix: drop the default so -Wswitch flags every unhandled line
+not-implemented | src/core/conversations/BankConversation.cpp | Get Lines Not yet implemented for line | 2026-12-14 | upstream (not in the audit): default branch of lines() returns no lines; fix: drop the default so -Wswitch flags every unhandled line
+not-implemented | src/core/conversations/PoliceConversation.cpp | Get Lines not yet implemented for police line | 2026-12-14 | upstream (not in the audit): default branch of lines() returns no lines; fix: drop the default so -Wswitch flags every unhandled line
+not-implemented | src/core/conversations/RealtorConversation.cpp | Get Lines Not yet implemented for line | 2026-12-14 | upstream (not in the audit): default branch of lines() returns no lines; fix: drop the default so -Wswitch flags every unhandled line
+not-implemented | src/core/debug/commands/RestaurantCommands.cpp | clearing is not implemented as there's no clear() method | 2026-12-14 | upstream, stale comment: the line above it does call layout()->clear(); fix: delete the comment
+
+# --- Behaviour to confirm against the original (upstream) ---------------------
+marker | src/core/newspaper/NewspaperEventSystem.cpp | never scheduled | 2027-02-14 | upstream, R5: GroundWaterClear is never scheduled (as in the original); fix: schedule it behind the bug-fix rules or record it in docs/MODERNIZATIONS.md
+marker | src/core/conversations/PoliceConversation.cpp | Find depot inspection date | 2027-02-14 | upstream, R6: a value in the dialogue is unknown; fix: find it, or document it in docs/blueprint/game-systems.md
+marker | src/views/screens/restaurant/RestaurantView.cpp | figure out proper background color | 2027-02-14 | upstream, R7: guessed colour; fix: measure it from the original or document it as a choice
+marker | src/views/screens/city_view/CityView.cpp | TODO deal with | 2027-02-14 | upstream, R8: competitors' restaurants can't be entered (likely faithful); fix: confirm and replace the note with a statement
+marker | src/core/factories/CityFactory.cpp | Todo: restaurant? | 2027-02-14 | upstream, R13: map type 0x04 parsing unclear; fix: check against the data and document it
+marker | src/engine/input/InputManager.cpp | add options for this? | 2027-02-14 | upstream, R14: only the first gamepad is used; fix: document the limit and drop the note
+
+# --- Code debt (upstream): move each to an issue, then "See issue #N" --------
+marker | src/core/city/Car.cpp | Give cars a proper cleanup flag | 2027-02-14 | upstream, R9: code debt, no behaviour change
+marker | src/core/city/City.cpp | something with our premises array | 2027-02-14 | upstream, R10: code debt, no behaviour change
+marker | src/core/city/Property.cpp | Should we use some method in City | 2027-02-14 | upstream, R11: code debt, no behaviour change
+marker | src/core/character/Actor.h | get background_id from actor_type | 2027-02-14 | upstream, R12: code debt, no behaviour change
+marker | src/views/layers/ConsoleLayer.cpp | TODO calculate this | 2027-02-14 | upstream, R15: page size is a guess (cosmetic); fix: use the visible line count
+marker | src/views/layers/DebugLayer.cpp | DebugOverlayItem bus | 2027-02-14 | upstream, R16: code debt, no behaviour change
+marker | src/views/screens/Terminal.cpp | less hardcoded way | 2027-02-14 | upstream, R17: code debt, no behaviour change
+marker | src/views/screens/Terminal.cpp | We have TextStyle now | 2027-02-14 | upstream, R18: code debt; fix: use TextStyle
+marker | src/views/screens/menus/CharacterSelection.cpp | Move the background into their respective boxes | 2027-02-14 | upstream, R19: code debt, no behaviour change
+marker | src/views/screens/pizza/PizzaDesign.cpp | TODO maybe refactor this | 2027-02-14 | upstream, R20: code debt, no behaviour change
+
+# --- Not markers: domain words (renew yearly after a look) -------------------
+placeholder | src/core/newspaper/ArticleDatabase.cpp | placeholder | 2027-11-14 | upstream: '#' is the ingredient placeholder in the original newspaper templates (a data format term)
+placeholder | src/core/newspaper/ArticleDatabase.h | placeholders like "#" | 2027-11-14 | upstream: '#' is the ingredient placeholder in the original newspaper templates (a data format term)
+placeholder | src/core/debug/command/ParsedValue.h | Placeholder for an optional argument | 2027-11-14 | upstream: the value of an omitted optional console argument, by design
+placeholder | src/core/factories/CityFactory.cpp | '1' is a placeholder value | 2027-11-14 | upstream: describes a field of the original city data format
+placeholder | src/core/restaurant/Restaurant.h | 1 kg placeholder | 2027-11-14 | upstream: the 1 kg stand-in amount is the original game's rule
+not-implemented | src/resources/BlitmapManager.cpp | get<>() not implemented for this IconEnum | 2027-11-14 | upstream: static_assert text, a compile-time guard that is never reached at run time
+placeholder | tools/hdpack/hdpack.py | catches placeholder errors | 2027-11-14 | fork: {{placeholder}} is ComfyUI workflow template syntax, not unfinished work

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 <#
 .SYNOPSIS
   Builds the pinned dependencies (SDL3, zlib, Catch2) into deps\prefix and

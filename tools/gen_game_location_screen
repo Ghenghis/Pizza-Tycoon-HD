@@ -1,55 +1,114 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Cowomaly <cowomaly@nullium.net>
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Renders the game location screen into data/game_location.vga.
 
 The screen is drawn with the original game's fonts, which are not there yet
 when the game asks where the original game is. So it is rendered here, on a
 machine that has the game, and shipped in the data directory.
 
-Run it after editing the text in views/screens/GameLocationContent.h:
+Run it after editing the text in src/views/screens/GameLocationContent.h and
+rebuilding the game:
 
-    tools/gen_game_location_screen
+    tools/gen_game_location_screen [--binary <game>] [--game-path <dir>]
+
+The game folder comes from --game-path, else PLEGACY_TEST_GAME_PATH, else
+the game_path line of the game's own settings file.
 """
+
+from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from plcheck import game_path, resolve_binary  # noqa: E402
+from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 OUT_VGA = REPO / "data" / "game_location.vga"
+BINARY_NAMES = ("plegacy", "Pizza Legacy.exe", "plegacy.exe")
+
+# The game never opens a console window on Windows.
+HIDDEN: dict[str, Any] = {}
+if sys.platform == "win32":
+    HIDDEN["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+
+def settings_file() -> Path:
+    """Where the game keeps settings.conf: SDL_GetPrefPath("nl.pizzalegacy", "Pizza Legacy")."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "nl.pizzalegacy" / "Pizza Legacy" / "settings.conf"
+
+
+def game_path() -> str:
+    """The game_path the game remembers, or an empty string."""
+    try:
+        lines = settings_file().read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    for line in lines:
+        key, sep, value = line.strip().partition("=")
+        if sep and not key.startswith("#") and key.strip() == "game_path":
+            return value.strip()
+    return ""
+
+
+def resolve_binary(arg: str | None) -> Path:
+    """The game binary: --binary, else the first build found under build/."""
+    if arg:
+        path = Path(arg)
+        if not path.is_file():
+            sys.exit(f"error: no game binary at {path}")
+        return path
+    for folder in ("release", "debug", "win64"):
+        for name in BINARY_NAMES:
+            path = REPO / "build" / folder / name
+            if path.is_file():
+                return path
+    sys.exit("error: no game binary under build/; build it (scripts/build.sh or scripts\\build.ps1) or pass --binary")
 
 
 def render(binary: Path, out_vga: Path, workdir: Path, config: Path) -> None:
-    out_vga.unlink(missing_ok=True)
+    # Written next to the script first, so a failed run leaves the shipped file alone.
+    fresh = workdir / out_vga.name
     script = workdir / "render.plc"
-    script.write_text(f"nav gameloc\nsavevga {out_vga}\n")
-    result = subprocess.run(
+    script.write_text(f"nav gameloc\nsavevga {fresh.as_posix()}\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603 - the game binary with arguments built here
         [str(binary), "--config", str(config), "--exec", str(script)],
         capture_output=True,
         text=True,
-        env=os.environ | {"SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"},
+        timeout=300,
+        check=False,
+        env=os.environ | {"SDL_VIDEO_DRIVER": "dummy", "SDL_AUDIO_DRIVER": "dummy"},
+        **HIDDEN,
     )
-    if result.returncode != 0 or not out_vga.exists():
+    if result.returncode != 0 or not fresh.exists():
         sys.exit(f"error: rendering failed\n{result.stdout}{result.stderr}")
+    shutil.copyfile(fresh, out_vga)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", help="game binary to render with")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--binary", help="game binary to render with (default: the first build under build/)")
+    parser.add_argument("--game-path", default="", help="folder with PT.EXE (default: from the settings file)")
     args = parser.parse_args()
 
     binary = resolve_binary(args.binary)
 
-    original = game_path()
+    original = args.game_path or os.environ.get("PLEGACY_TEST_GAME_PATH", "") or game_path()
     if not original:
         sys.exit(
-            "error: no game_path in the settings file; "
-            "run the game once so it knows where the original is"
+            f"error: no game folder; pass --game-path, set PLEGACY_TEST_GAME_PATH, "
+            f"or run the game once so {settings_file()} has a game_path line"
         )
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -57,7 +116,7 @@ def main() -> int:
         # A config of its own, so a run of this tool cannot rewrite the
         # player's settings.
         config = workdir / "settings.conf"
-        config.write_text(f"game_path={original}\n")
+        config.write_text(f"game_path={original}\n", encoding="utf-8")
         render(binary, OUT_VGA, workdir, config)
         print(f"{OUT_VGA.relative_to(REPO)}: {OUT_VGA.stat().st_size} bytes")
 

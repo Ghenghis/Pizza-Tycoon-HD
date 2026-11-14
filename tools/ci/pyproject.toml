@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 ShadowByte
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Lint, format and type settings for the CI tools (hd_gates.py, scan.py), the
+# same as tools/hdpack/pyproject.toml. scripts/lint.* run them.
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "N"]
+ignore = ["S101", "S311"]
+
+[tool.ruff.lint.per-file-ignores]
+# These tools exist to run fixed programs (git, gitleaks, bandit, pip-audit,
+# the game under test) with arguments they build themselves; no shell, no
+# user-supplied command lines.
+"*.py" = ["S603", "S607"]
+
+[tool.mypy]
+strict = true
