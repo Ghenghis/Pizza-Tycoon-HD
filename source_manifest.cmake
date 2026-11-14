@@ -149,6 +149,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/helpers/JudgeAnimator.cpp
     src/views/helpers/TVPlaybackEngine.cpp
     src/views/helpers/TypewriterTextRenderer.cpp
+    src/views/helpers/ZoomTransition.cpp
     src/views/helpers/camera/CameraController.cpp
     src/views/helpers/camera/RmbDragScroller.cpp
     src/views/layers/ConsoleLayer.cpp
@@ -329,6 +330,7 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/Screenshot.cpp
     src/engine/audio/AudioManager.cpp
     src/engine/audio/EffectPack.cpp
+    src/engine/audio/MixTap.cpp
     src/engine/audio/VocDecoder.cpp
     src/engine/debug/ScreenCommands.cpp
     src/engine/geom/Camera.cpp
@@ -594,6 +596,7 @@ set(PLEGACY_HEADERS
     src/core/util/GameContext.h
     src/core/util/LegacyConstants.h
     src/core/util/Tools.h
+    src/core/util/Tween.h
     src/engine/BobRenderable.h
     src/engine/DebugLabel.h
     src/engine/DisplayConstants.h
@@ -629,6 +632,7 @@ set(PLEGACY_HEADERS
     src/engine/adapters/SDLRectAdapter.h
     src/engine/audio/AudioManager.h
     src/engine/audio/EffectPack.h
+    src/engine/audio/MixTap.h
     src/engine/audio/VocDecoder.h
     src/engine/debug/ScreenCommands.h
     src/engine/geom/Camera.h
@@ -744,7 +748,9 @@ set(PLEGACY_HEADERS
     src/views/helpers/SupplierListRenderer.h
     src/views/helpers/TVPlaybackEngine.h
     src/views/helpers/TypewriterTextRenderer.h
+    src/views/helpers/ZoomTransition.h
     src/views/helpers/camera/CameraController.h
+    src/views/helpers/camera/CameraSmoother.h
     src/views/helpers/camera/RmbDragScroller.h
     src/views/helpers/camera/ScrollEdges.h
     src/views/layers/ConsoleLayer.h

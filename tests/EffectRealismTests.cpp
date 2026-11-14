@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <nlohmann/json.hpp>
 #include <set>
@@ -488,5 +489,92 @@ TEST_CASE("music dips under an alert, smoothly, and comes back; ducking off "
   m.play(*phone, true);
   for (int i = 0; i < 10; ++i) {
     CHECK(block().back() == full);
+  }
+}
+
+// Not run by default: it needs the original game and a private pack, neither
+// of which is in the repo.
+//
+//   PLEGACY_TEST_GAME_PATH=<folder with PT.EXE> PLEGACY_SFX_PACK=<pack folder>
+//     test_plegacy "[sfx-pack-v1]"
+//
+// Loads the originals and the pack as the game does, then plays each
+// ambience scene's bed for 30 s of game time: its one-shots must come, and
+// the mix must not clip. Prints one line per entry and per scene.
+TEST_CASE("a private pack with ambience, through the real engine",
+          "[.][sfx-pack-v1][audio]") {
+  const auto game = test_support::game_path();
+  const char* pack_env = std::getenv("PLEGACY_SFX_PACK");
+  if (!game || !pack_env || !*pack_env) {
+    SKIP("needs PLEGACY_TEST_GAME_PATH and PLEGACY_SFX_PACK");
+  }
+  music_test::PausedAudio a;
+  if (!a.ok) {
+    SKIP("SDL has no dummy audio driver");
+  }
+  AudioManager& am = a.am;
+  for (int m = 0; m <= 11; ++m) {
+    am.load_m_container((*game / "SOUND" / ("M" + std::to_string(m))).string());
+  }
+  am.effects_loaded();
+  am.effects_seed(7);
+  am.effects_pack(fs::path(pack_env));
+  const auto done = am.select_effects(EffectsSet::ENHANCED);
+  INFO(done.error);
+  REQUIRE(done);
+  int refused = 0;
+  std::size_t layers = 0;
+  for (const audio::EffectOutcome& o : done.outcomes) {
+    const std::string what =
+        o.layer.empty() ? o.event : o.event + " / " + o.layer;
+    std::printf("[sfx-pack-v1] %-36s %zu variant(s)  %s\n", what.c_str(),
+                o.variants,
+                !o.replaced        ? ("REFUSED: " + o.reason).c_str()
+                : o.reason.empty() ? "ok"
+                                   : ("partly: " + o.reason).c_str());
+    refused += o.replaced && o.reason.empty() ? 0 : 1;
+    layers += o.replaced && !o.layer.empty() ? 1 : 0;
+  }
+  CHECK(refused == 0);
+  REQUIRE(layers > 0);
+
+  const auto* bank = am.mixer().effect_bank();
+  REQUIRE(bank);
+  std::vector<std::size_t> beds;
+  for (const auto& scene : bank->scenes) {
+    beds.push_back(scene.bed);
+  }
+  constexpr int frames_per_block = static_cast<int>(audio::MIX_BLOCK_FRAMES);
+  for (const std::size_t bed : beds) {
+    const auto id = static_cast<SoundId>(bed);
+    am.play_sound(id, audio::LoopMode::Loop);
+    am.tick(0);
+    int arrivals = 0;
+    int peak = 0;
+    std::size_t before = 0;
+    std::uint64_t at_frames = 0;
+    std::uint64_t ticked_ms = 0;
+    while (at_frames < 30ull * 44100) {
+      const auto out = music_test::fill(am);
+      at_frames += frames_per_block;
+      const std::uint64_t now_ms = at_frames * 1000 / 44100;
+      am.tick(static_cast<std::uint32_t>(now_ms - ticked_ms));
+      ticked_ms = now_ms;
+      for (const std::int16_t s : out) {
+        peak = std::max(peak, std::abs(static_cast<int>(s)));
+      }
+      const std::size_t voices = am.mixer().extra_voices();
+      arrivals += voices > before ? static_cast<int>(voices - before) : 0;
+      before = voices;
+    }
+    am.stop_sound(id);
+    for (int i = 0; i < 200 && am.mixer().extra_voices() > 0; ++i) {
+      music_test::fill(am);
+    }
+    std::printf("[sfx-pack-v1] scene %-20s %d one-shots in 30 s, peak %d\n",
+                std::string(audio::effect_event_id(id)).c_str(), arrivals,
+                peak);
+    CHECK(arrivals > 0);
+    CHECK(peak < 32767); // the mix never reaches full scale
   }
 }

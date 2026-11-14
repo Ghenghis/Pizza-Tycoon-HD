@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/audio/MixTap.h"
 #include "engine/music/MusicTypes.h"
 #include "engine/music/PcmRing.h"
 
@@ -560,6 +561,9 @@ public:
   // (SDL_PauseAudioDevice(device()) holds the device's lock until a running
   // callback is done).
   void fill_block(std::span<int16_t> out);
+  // The final mix, as fill_block() hands it to the device, for a recorder:
+  // off until enabled; each frame timed by its sample position.
+  [[nodiscard]] MixTap& mix_tap() { return mix_tap_; }
 
   // Sound effects. The enhanced pack is read from this folder (its
   // manifest.json, see docs/studio/notes/sfx-overrides.md). Game thread.
@@ -610,6 +614,8 @@ private:
   // source gives no music.
   bool render_source(music::Source source, uint32_t generation,
                      std::span<int16_t> block);
+  // Audio thread: the next block of the mix into out.
+  void mix_next(std::span<int16_t> out);
   // Game thread: opens the default playback device and starts the callback;
   // false (with the reason logged) when it cannot.
   bool open_stream();
@@ -682,6 +688,7 @@ private:
   bool fade_in_ = false;
   std::array<int16_t, MIX_CHANNELS> last_music_{};
   std::array<int16_t, MIX_BLOCK_SAMPLES> music_block_{};
+  MixTap mix_tap_;
 
   SDL_AudioStream* audio_stream_{nullptr};
   uint32_t device_id_ = 0;

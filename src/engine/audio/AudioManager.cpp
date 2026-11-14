@@ -1274,6 +1274,12 @@ bool AudioManager::render_source(music::Source source, uint32_t generation,
 }
 
 void AudioManager::fill_block(std::span<int16_t> out) {
+  mix_next(out);
+  // The game's own sound only, as the device gets it.
+  mix_tap_.write(out);
+}
+
+void AudioManager::mix_next(std::span<int16_t> out) {
   const std::span<int16_t> music(music_block_.data(), out.size());
   const uint64_t route = music_route_.load(std::memory_order_acquire);
   const music::Source source = route_source(route);
