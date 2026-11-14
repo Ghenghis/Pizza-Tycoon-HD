@@ -15,6 +15,10 @@ enum class Action {
   TogglePause,
   ToggleFullscreen,
   TakeScreenshot,
+  // HD only: the 1994 look instead of the HD one, and the two side by side
+  // (display only, nothing in the game changes).
+  ToggleLook,
+  ToggleCompare,
   Exit,
 
   // Game speed

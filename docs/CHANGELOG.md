@@ -7,11 +7,45 @@ Unreleased
   line breaks of the 1994 font, over the HD picture under it. The letters
   live only in the HD layer (no blocky original letters under them), and
   game state never depends on them. stb_truetype is bundled for this.
-* Screens open faster at HD: lines of text share atlas textures, sent to
-  the GPU in one upload per page instead of one texture each; layer render
-  targets are reused from the screen before instead of created again; and
-  the HD letters of every font are drawn on background threads while the
-  intro plays.
+* Screens open faster at HD:
+  * each font's letters are drawn once, into a glyph sheet, on a
+    background thread while the intro plays;
+  * a line of text is then one GPU quad per letter, coloured by the GPU,
+    with no new picture and no upload;
+  * quads are batched into one draw call per texture;
+  * the rare line that can't use the sheet shares an atlas texture, sent
+    in one upload per page;
+  * textures use the GPU's native ARGB8888 format, so uploads are never
+    converted first;
+  * one base texture serves every layer size;
+  * layer render targets are reused from the screen before.
+* F7 switches between the HD look and the original 1994 look (original
+  letters, no lights, no HD art), and F8 shows the two side by side with a
+  divider that follows the mouse. Both only change what is shown; both can
+  be rebound in Options, Keys.
+* The mouse pointer is smooth at every size. It is drawn from HD texels, or
+  from its pixels doubled with MMPX, instead of being a blown-up 11x11
+  arrow.
+* Saving can't corrupt anything any more:
+  * saves, autosaves, high scores, settings and key bindings are written
+    to a temporary file, with every step checked, and only then renamed
+    over the old file;
+  * a failed save says why and keeps the old file;
+  * a damaged or hostile save is rejected (size limits, validation, built
+    in a scratch game first) without touching the game in progress;
+  * a failed autosave is reported.
+* Sound effects and music are mixed together; overlapping effects used to
+  overwrite each other. Volume changes and music loading can no longer
+  stall or race the audio thread.
+* HD packs: PNG size limits are checked before decoding, a broken file falls
+  back to the original art, and the background loader can't crash the game.
+  `hdpack.py` refuses manifest names that point outside the pack.
+* The game recovers from a GPU driver reset (textures are made again), and a
+  failed texture upload is retried instead of being shown half-uploaded.
+* A log file is kept in the user folder (`logs/`, newest five), since the
+  Windows build has no console. Laptops with two GPUs use the fast one.
+* The game reports itself as Pizza Tycoon HD 1.1.0 (version from one place,
+  CMake); compiler warnings are errors.
 * HD lighting (option `lighting`, on by default; also in the options menu):
   candles, ovens and grills, arcade machines, TVs, the jukebox and vending
   machines light the restaurant around them, with flicker (flames, fire,

@@ -29,6 +29,8 @@ void configure_default_bindings(InputManager& in) {
   in.begin_section("Global");
   in.bind_button(chord("Ctrl+S"), Action::TakeScreenshot);
   in.bind_button(chord("Ctrl+F"), Action::ToggleFullscreen);
+  in.bind_button(chord("F7"), Action::ToggleLook);
+  in.bind_button(chord("F8"), Action::ToggleCompare);
   in.bind_button(chord("Ctrl+P"), Action::TogglePause);
   in.bind_button(chord("Ctrl+1"), Action::TimeScale1);
   in.bind_button(chord("Ctrl+2"), Action::TimeScale2);

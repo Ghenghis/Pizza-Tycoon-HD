@@ -9,6 +9,7 @@
 #include "engine/SDL_include.h"
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -60,6 +61,11 @@ public:
   // SDL_EVENT_RENDER_TARGETS_RESET (false) or SDL_EVENT_RENDER_DEVICE_RESET
   // (true, the display texture is made again by the caller first).
   void on_render_reset(bool device_lost);
+  // HD only, display only: the original 1994 look everywhere, or left of a
+  // divider at engine x divider_x (the two side by side). Nothing in the
+  // game changes; the HD text and lighting switches are the caller's.
+  void classic_look(bool on);
+  void compare(std::optional<int> divider_x);
 
   // Fade control - returns true when fade completes
   bool tick_fade();
@@ -128,6 +134,9 @@ private:
   int scale_;
   [[nodiscard]] bool software_crt() const;
 
+  void draw_compare_divider();
+  bool classic_ = false;
+  std::optional<int> compare_x_;
   std::unique_ptr<HdCompositor> gpu_;
   FrameTimes times_;
   std::unique_ptr<LightPass> light_;

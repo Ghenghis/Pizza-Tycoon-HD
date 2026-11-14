@@ -161,6 +161,55 @@ void Renderer::stream_ahead(double budget_ms) {
   gpu_->stream(add, budget_ms);
 }
 
+void Renderer::classic_look(bool on) {
+  if (classic_ != on) {
+    classic_ = on;
+    redraw_all();
+  }
+}
+
+void Renderer::compare(std::optional<int> divider_x) {
+  if (divider_x) {
+    *divider_x = std::clamp(*divider_x, 0, DisplayConstants::SCREEN_WIDTH);
+  }
+  if (compare_x_ != divider_x) {
+    // The divider is part of every layer's picture: all are drawn again.
+    compare_x_ = divider_x;
+    redraw_all();
+  }
+}
+
+void Renderer::draw_compare_divider() {
+  SDL_Renderer* r = sdl_.renderer.get();
+  const auto k = static_cast<float>(scale_);
+  const float x = static_cast<float>(*compare_x_) * k;
+  const auto h = static_cast<float>(frame_height());
+  // A light line with a dark edge, readable on any picture.
+  SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 160);
+  const SDL_FRect shade{x - k * 0.75f, 0, k * 1.5f, h};
+  SDL_RenderFillRect(r, &shade);
+  SDL_SetRenderDrawColor(r, 255, 244, 214, 255);
+  const SDL_FRect line{x - k * 0.25f, 0, k * 0.5f, h};
+  SDL_RenderFillRect(r, &line);
+  // Labels: SDL's 8x8 debug font, drawn at the engine pixel size, which
+  // suits the 1994 side well enough.
+  const float label_scale = std::max(1.0f, k * 0.5f);
+  SDL_SetRenderScale(r, label_scale, label_scale);
+  const float y = 4.0f * k / label_scale;
+  const float lx = x / label_scale;
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 200);
+  const SDL_FRect left_chip{lx - 44.0f, y - 2.0f, 40.0f, 12.0f};
+  const SDL_FRect right_chip{lx + 4.0f, y - 2.0f, 24.0f, 12.0f};
+  SDL_RenderFillRect(r, &left_chip);
+  SDL_RenderFillRect(r, &right_chip);
+  SDL_SetRenderDrawColor(r, 255, 244, 214, 255);
+  SDL_RenderDebugText(r, lx - 40.0f, y, "1994");
+  SDL_RenderDebugText(r, lx + 8.0f, y, "HD");
+  SDL_SetRenderScale(r, 1.0f, 1.0f);
+  SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
 void Renderer::on_render_reset(bool device_lost) {
   if (device_lost) {
     // The old device's textures are gone (SDL keeps the handles, without
@@ -274,8 +323,16 @@ void Renderer::render_gpu() {
       const uint64_t t0 = SDL_GetPerformanceCounter();
       view->render(ctx);
       const uint64_t t1 = SDL_GetPerformanceCounter();
+      // The 1994 look, all or left of the divider: no HD art there.
+      int art_from_x = 0;
+      if (classic_) {
+        art_from_x = area.w * scale_;
+      }
+      else if (compare_x_) {
+        art_from_x = std::max(0, (*compare_x_ - area.x) * scale_);
+      }
       gpu_->draw_layer(tex, *layer_surface,
-                       view->ignore_fade() ? 1.0f : fade_factor_);
+                       view->ignore_fade() ? 1.0f : fade_factor_, art_from_x);
       times_.views_ms += ms_between(t0, t1);
       times_.compose_ms += ms_between(t1, SDL_GetPerformanceCounter());
       gpu_cached_.insert(view);
@@ -297,7 +354,20 @@ void Renderer::render_gpu() {
                            static_cast<float>(area.y * scale_),
                            static_cast<float>(area.w * scale_),
                            static_cast<float>(area.h * scale_)};
-      SDL_RenderTexture(r, shown, nullptr, &dest);
+      if (lit && compare_x_) {
+        // Unlit (1994) left of the divider, lit right of it.
+        const int split = *compare_x_ * scale_;
+        const SDL_Rect left{0, 0, split, frame_height()};
+        const SDL_Rect right{split, 0, frame_width() - split, frame_height()};
+        SDL_SetRenderClipRect(r, &left);
+        SDL_RenderTexture(r, tex, nullptr, &dest);
+        SDL_SetRenderClipRect(r, &right);
+        SDL_RenderTexture(r, shown, nullptr, &dest);
+        SDL_SetRenderClipRect(r, nullptr);
+      }
+      else {
+        SDL_RenderTexture(r, shown, nullptr, &dest);
+      }
       frame_changed = true;
       below_changed |= rerender || relight;
     }
@@ -325,6 +395,9 @@ void Renderer::render_gpu() {
   // the window.
   SDL_SetRenderTarget(r, sdl_.texture.get());
   SDL_RenderTexture(r, back_tex_, nullptr, nullptr);
+  if (compare_x_) {
+    draw_compare_divider();
+  }
   if (cursor_sprite) {
     if (cursor_sprite != cursor_tex_sprite_ || !cursor_tex_) {
       if (cursor_tex_) {

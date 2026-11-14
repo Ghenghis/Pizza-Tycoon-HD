@@ -54,6 +54,18 @@ bool GlobalActionHandler::on_action(const input::ActionEvent& ev) {
     }
     return true;
 
+  case input::Action::ToggleLook:
+    if (callbacks_.toggle_look) {
+      callbacks_.toggle_look();
+    }
+    return true;
+
+  case input::Action::ToggleCompare:
+    if (callbacks_.toggle_compare) {
+      callbacks_.toggle_compare();
+    }
+    return true;
+
   case input::Action::TimeScale1:
   case input::Action::TimeScale2:
   case input::Action::TimeScale3:

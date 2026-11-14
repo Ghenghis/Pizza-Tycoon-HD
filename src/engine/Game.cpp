@@ -390,6 +390,10 @@ int Game::run() {
             options.fullscreen = !options.fullscreen;
             loop_state.game_state.request_fullscreen_change(options.fullscreen);
           },
+      .toggle_look =
+          [this, &loop_state] { toggle_look(loop_state, /*compare=*/false); },
+      .toggle_compare =
+          [this, &loop_state] { toggle_look(loop_state, /*compare=*/true); },
       .set_time_scale =
           [&loop_state](int scale) {
             loop_state.game_state.time_scale(scale);
@@ -620,8 +624,14 @@ int Game::run() {
     if (tick_accumulator_ms >= simulation_tick_ms) {
       tick_accumulator_ms = 0;
     }
-    lighting::set_enabled(state.options().lighting);
-    resources::HdTypefaces::set_enabled(state.options().hd_text);
+    // The 1994 look shows the original letters and no lights; the options
+    // themselves stay as they are.
+    lighting::set_enabled(state.options().lighting && !classic_look_);
+    resources::HdTypefaces::set_enabled(state.options().hd_text &&
+                                        !classic_look_);
+    renderer.classic_look(classic_look_);
+    renderer.compare(compare_looks_ ? std::optional<int>(pointer_->position().x)
+                                    : std::nullopt);
     context.clock.tick_alpha = view_frozen()
                                    ? 0.0f
                                    : static_cast<float>(tick_accumulator_ms) /
@@ -839,6 +849,32 @@ void Game::handle_events(LoopState& loop_state) {
     pre_relative_mouse_pos_ = pointer_->position();
   }
   prev_relative_mouse_mode_ = now_relative;
+}
+
+void Game::toggle_look(LoopState& loop_state, bool compare) {
+  if (gfx::hd_scale() <= 1 || !hd_gpu_compositing()) {
+    loop_state.game_state.status().post(StatusMsg{
+        .payload = std::string("The 1994 look needs HD rendering"),
+        .severity = StatusSeverity::Info,
+    });
+    return;
+  }
+  if (compare) {
+    compare_looks_ = !compare_looks_;
+    classic_look_ = false;
+  }
+  else {
+    classic_look_ = !classic_look_;
+    compare_looks_ = false;
+  }
+  const char* what = compare_looks_  ? "1994 | HD: move the mouse (F8 ends)"
+                     : classic_look_ ? "The 1994 look (F7 for HD)"
+                                     : "HD look";
+  Logger::info("Look: {}", what);
+  loop_state.game_state.status().post(StatusMsg{
+      .payload = std::string(what),
+      .severity = StatusSeverity::Info,
+  });
 }
 
 void Game::handle_resize_event(const SDL_Event& event, LoopState& loop_state) {

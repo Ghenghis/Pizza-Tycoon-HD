@@ -572,7 +572,7 @@ void HdCompositor::draw_runs(const std::vector<Run>& runs, std::size_t& pos,
 }
 
 void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
-                              float fade) {
+                              float fade, int art_from_x) {
   stats_ = {};
   const int k = gfx::hd_scale();
   const int w = layer.width();
@@ -627,12 +627,32 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
   flush_atlas();
   std::size_t pos = 0;
   batch_tex_ = nullptr;
+  // The 1994 look left of art_from_x: art is cut to the right of it, text
+  // (tinted letters, atlas lines) is not.
+  const bool no_art = art_from_x >= w * k;
+  const bool split = art_from_x > 0 && !no_art;
+  const SDL_Rect art_clip{art_from_x, 0, w * k - art_from_x, h * k};
+  bool clipped = false;
+  const auto clip_art = [&](bool on) {
+    if (on != clipped) {
+      flush_batch();
+      SDL_SetRenderClipRect(renderer_, on ? &art_clip : nullptr);
+      clipped = on;
+    }
+  };
   for (std::size_t i = 0; i < cmds.size(); ++i) {
     if (pos < runs_.size() && runs_[pos].floor == i) {
       flush_batch();
       draw_runs(runs_, pos, static_cast<uint32_t>(i), k);
     }
     const gfx::HdCmd& c = cmds[i];
+    const bool text = c.tint != 0 || (c.img && c.img->atlas);
+    if (no_art && !text) {
+      continue;
+    }
+    if (split) {
+      clip_art(!text);
+    }
     const Placed at = locate(c.img);
     SDL_Texture* tex = at.tex;
     if (!tex) {
@@ -698,6 +718,7 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
     SDL_RenderTexture(renderer_, tex, &src, &dst);
     ++stats_.quads;
   }
+  clip_art(false);
   flush_batch();
   draw_runs(runs_, pos, static_cast<uint32_t>(cmds.size()), k);
 }

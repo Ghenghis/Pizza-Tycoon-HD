@@ -18,6 +18,8 @@ public:
     std::function<void()> request_exit;
     std::function<void()> request_screenshot;
     std::function<void()> toggle_fullscreen;
+    std::function<void()> toggle_look;
+    std::function<void()> toggle_compare;
     std::function<void(int)> set_time_scale;
   };
 

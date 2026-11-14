@@ -79,6 +79,8 @@ private:
   };
 
   bool init(int display_height, const GameOptions& options);
+  // F7 (compare false) and F8 (compare true).
+  void toggle_look(LoopState& loop_state, bool compare);
   Renderable* change_state(GameState& gs);
   void apply_fullscreen(bool enabled);
   void load_game_data();
@@ -120,6 +122,9 @@ private:
   SDL_Surface_unique_ptr screen_;
   Surface surface_;
   bool prev_relative_mouse_mode_ = false;
+  // Display only (F7 / F8): the 1994 look, and the two looks side by side.
+  bool classic_look_ = false;
+  bool compare_looks_ = false;
   bool warp_pointer_on_resize_ = false;
   ScreenPoint pre_relative_mouse_pos_;
   std::string filename_;

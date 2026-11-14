@@ -38,7 +38,12 @@ public:
   // Replaces the contents of `target` (a render target of the layer's size
   // times hd_scale(), premultiplied alpha) with the layer. fade 1 = normal,
   // 0 = black. Leaves the render target set to `target`.
-  void draw_layer(SDL_Texture* target, const gfx::Surface& layer, float fade);
+  // art_from_x (texels of the layer): HD art is drawn only from there to
+  // the right, the original pixels to the left of it (the 1994 look, and
+  // the two side by side); HD text is drawn everywhere. 0 is all HD art,
+  // the layer's width or more none.
+  void draw_layer(SDL_Texture* target, const gfx::Surface& layer, float fade,
+                  int art_from_x = 0);
 
   // Where the GPU copy of a picture is: its texture and the top-left of the
   // picture in it (not 0,0 for pictures in a shared atlas page).

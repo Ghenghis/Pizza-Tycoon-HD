@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstring>
 #include <memory>
 #include <random>
 #include <vector>
@@ -123,7 +124,75 @@ int compare(const Surface& layer, float fade) {
   return worst;
 }
 
+// The GPU result of draw_layer as RGBA8888 texels.
+std::vector<uint32_t> gpu_pixels(const Surface& layer, int art_from_x) {
+  const int k = hd_scale();
+  const int w = layer.width() * k;
+  const int h = layer.height() * k;
+  SoftGpu gpu(w, h);
+  HdCompositor comp(gpu.renderer);
+  SDL_Texture* target = SDL_CreateTexture(
+      gpu.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, w, h);
+  comp.draw_layer(target, layer, 1.0f, art_from_x);
+  SDL_Surface* raw = SDL_RenderReadPixels(gpu.renderer, nullptr);
+  SDL_Surface* got = SDL_ConvertSurface(raw, SDL_PIXELFORMAT_RGBA8888);
+  std::vector<uint32_t> out(static_cast<std::size_t>(w) * h);
+  for (int y = 0; y < h; ++y) {
+    std::memcpy(out.data() + static_cast<std::size_t>(y) * w,
+                static_cast<const uint8_t*>(got->pixels) + y * got->pitch,
+                static_cast<std::size_t>(w) * 4);
+  }
+  SDL_DestroySurface(raw);
+  SDL_DestroySurface(got);
+  SDL_DestroyTexture(target);
+  return out;
+}
+
 } // namespace
+
+TEST_CASE("the 1994 look and the divider between the looks", "[hd][gpu]") {
+  resources::load_fallback_palette();
+  ScopedHdScale scale(2);
+  const int k = 2;
+  std::mt19937 rng(21);
+  Surface layer(60, 30, PaletteHandle{0}, 0);
+  layer.blit_raw(random_sprite(rng, 60, 30, true), ViewPoint{0, 0});
+  // A line of HD text: drawn on both sides.
+  auto sheet = std::make_shared<HdImage>(20, 10, pack_rgba(255, 255, 255, 255));
+  HdCmd letter;
+  letter.img = sheet;
+  letter.sw = 20;
+  letter.sh = 10;
+  letter.dx = 10;
+  letter.dy = 20;
+  letter.tint = pack_rgba(200, 10, 10, 255);
+  layer.hd_overlay(letter, 0, 0, 120, 60);
+  const int w = 60 * k;
+
+  const auto hd = gpu_pixels(layer, 0);
+  const auto classic = gpu_pixels(layer, w);
+  CHECK(hd != classic);
+  // Split at x = 30 engine pixels: left like the 1994 look, right like HD.
+  const auto split = gpu_pixels(layer, 30 * k);
+  int left_diff = 0;
+  int right_diff = 0;
+  for (int y = 0; y < 30 * k; ++y) {
+    for (int x = 0; x < w; ++x) {
+      const std::size_t i = static_cast<std::size_t>(y) * w + x;
+      if (x < 30 * k) {
+        left_diff += split[i] != classic[i] ? 1 : 0;
+      }
+      else {
+        right_diff += split[i] != hd[i] ? 1 : 0;
+      }
+    }
+  }
+  CHECK(left_diff == 0);
+  CHECK(right_diff == 0);
+  // The letters show in the 1994 look too (HD text is not art).
+  CHECK(classic[static_cast<std::size_t>(22 * k) * w + 12 * k] ==
+        hd[static_cast<std::size_t>(22 * k) * w + 12 * k]);
+}
 
 TEST_CASE("GPU compositing matches the CPU result", "[hd][gpu]") {
   resources::load_fallback_palette();
