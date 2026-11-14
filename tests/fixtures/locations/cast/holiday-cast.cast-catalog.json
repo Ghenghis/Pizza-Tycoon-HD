@@ -1,0 +1,804 @@
+{
+  "format": "pthd.cast-catalog",
+  "schema_version": "1.0.0",
+  "catalog_id": "holiday:cast",
+  "catalog_revision": 1,
+  "frame_contracts": [
+    {
+      "contract_id": "walker-12",
+      "roles": [
+        "staff:waiter",
+        "customer"
+      ],
+      "frame_count": 12,
+      "index_rule": "facing * 3 + phase; facing S=0 W=1 N=2 E=3; walk cycle 0,1,0,2",
+      "anchor_rule": "blit at world position minus (frame0.w / 2 + 10, frame0.h / 2 + 16)",
+      "alpha": {
+        "indexed": "palette-index-0-transparent",
+        "hd": "png-straight-alpha"
+      },
+      "palette": null,
+      "base_sheet": "bob/walk12.bob (waiter) or bob/walk{guest_type}.bob",
+      "source": "Walk.h:18,43-45,66-68; GuestWalkScene.cpp:280-296,303-321,378-384,487-491"
+    },
+    {
+      "contract_id": "seated-parts-28",
+      "roles": [
+        "customer"
+      ],
+      "frame_count": 28,
+      "index_rule": "part_base + facing + guest_type * 4; part bases head 0x00, torso 0x30, legs 0x60, arms 0x90/0xC0/0xF0/0x120",
+      "anchor_rule": "per-part offsets and anchor refs per facing (TL, Center, TR)",
+      "alpha": {
+        "indexed": "palette-index-0-transparent",
+        "hd": "png-straight-alpha"
+      },
+      "palette": null,
+      "base_sheet": "bob/gaeste.bob",
+      "source": "CharacterRenderer.cpp:13-44,74-101,134-155"
+    },
+    {
+      "contract_id": "guest-face",
+      "roles": [
+        "customer"
+      ],
+      "frame_count": 1,
+      "index_rule": "picture gfx/g{guest_type * 2 + variant}",
+      "anchor_rule": "blitted at the popup face position, eye-blink sub-rectangle overlaid",
+      "alpha": {
+        "indexed": "palette-index-0-transparent",
+        "hd": "png-straight-alpha"
+      },
+      "palette": null,
+      "base_sheet": "gfx/g{n}",
+      "source": "GuestPicker.cpp:39-41; GuestTalkPopup.cpp:202-213"
+    },
+    {
+      "contract_id": "staff-portrait",
+      "roles": [
+        "staff:waiter",
+        "staff:chef",
+        "staff:manager",
+        "host"
+      ],
+      "frame_count": 1,
+      "index_rule": "one 59x52 indexed portrait",
+      "anchor_rule": "framed portrait drawn by draw_framed_portrait at the card offset",
+      "alpha": {
+        "indexed": "palette-index-0-transparent",
+        "hd": "png-straight-alpha"
+      },
+      "palette": null,
+      "base_sheet": "the wearer's chr/cNe.pc portrait",
+      "source": "docs/blueprint/file-formats.md 1.11; Character.h:47,131; StaffView.cpp:982,1142; TurnPresenterView.h:23"
+    },
+    {
+      "contract_id": "actor-head",
+      "roles": [
+        "host"
+      ],
+      "frame_count": 6,
+      "index_rule": "frame = actor state; frame 5 = blinking eyes; head id 1..25",
+      "anchor_rule": "eye overlay at eye_x/eye_y_offsets[head - 1] * 2",
+      "alpha": {
+        "indexed": "palette-index-0-transparent",
+        "hd": "png-straight-alpha"
+      },
+      "palette": null,
+      "base_sheet": "bob/typ{head}e.bob",
+      "source": "Actor.h:38; Actor.cpp:71-75; ActorView.inl:28-36,285-300"
+    },
+    {
+      "contract_id": "decorative-loop",
+      "roles": [
+        "decorative"
+      ],
+      "frame_count": 8,
+      "index_rule": "loop 0..7; static frame 0 when reduced motion is on",
+      "anchor_rule": "bottom-centre anchor on a map or room tile; no collision, no navigation effect",
+      "alpha": {
+        "indexed": "palette-index-0-transparent",
+        "hd": "png-straight-alpha"
+      },
+      "palette": null,
+      "base_sheet": "none (omitted when missing)",
+      "source": "new presentation layer; no engine code yet"
+    }
+  ],
+  "characters": [
+    {
+      "character_id": "holiday:santa",
+      "name": "Santa",
+      "kind": "named-character",
+      "body": "human",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "santa",
+        "asset_id": "cast-concept/santa",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "host",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        },
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:mrs-claus",
+      "name": "Mrs. Claus",
+      "kind": "named-character",
+      "body": "human",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "mrs-claus",
+        "asset_id": "cast-concept/mrs-claus",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "host",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        },
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:rudolph",
+      "name": "Rudolph",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "rudolph",
+        "asset_id": "cast-concept/rudolph",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        },
+        {
+          "role": "host",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:frosty",
+      "name": "Frosty",
+      "kind": "named-character",
+      "body": "snowman",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "frosty",
+        "asset_id": "cast-concept/frosty",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        },
+        {
+          "role": "host",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:elf-chef",
+      "name": "Elf chef",
+      "kind": "fantasy-worker",
+      "body": "elf",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "elf-chef",
+        "asset_id": "cast-concept/elf-chef",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "staff:chef",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:elf-courier",
+      "name": "Elf courier",
+      "kind": "fantasy-worker",
+      "body": "elf",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "elf-courier",
+        "asset_id": "cast-concept/elf-courier",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "staff:waiter",
+          "frame_sets": [
+            {
+              "contract_id": "walker-12",
+              "state": "not-started",
+              "frames": []
+            },
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:gingerbread-baker",
+      "name": "Gingerbread baker",
+      "kind": "mascot",
+      "body": "gingerbread",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "gingerbread-baker",
+        "asset_id": "cast-concept/gingerbread-baker",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "staff:chef",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:nutcracker-host",
+      "name": "Nutcracker host",
+      "kind": "mascot",
+      "body": "toy",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "nutcracker-host",
+        "asset_id": "cast-concept/nutcracker-host",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "host",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        },
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:dasher",
+      "name": "Dasher",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "dasher",
+        "asset_id": "cast-concept/dasher",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:dancer",
+      "name": "Dancer",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "dancer",
+        "asset_id": "cast-concept/dancer",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:prancer",
+      "name": "Prancer",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "prancer",
+        "asset_id": "cast-concept/prancer",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:vixen",
+      "name": "Vixen",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "vixen",
+        "asset_id": "cast-concept/vixen",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:comet",
+      "name": "Comet",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "comet",
+        "asset_id": "cast-concept/comet",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:cupid",
+      "name": "Cupid",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "cupid",
+        "asset_id": "cast-concept/cupid",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:donner",
+      "name": "Donner",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "donner",
+        "asset_id": "cast-concept/donner",
+        "state": "concept-requested",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "character_id": "holiday:blitzen",
+      "name": "Blitzen",
+      "kind": "reindeer",
+      "body": "reindeer",
+      "event_tags": [
+        "christmas",
+        "north-pole"
+      ],
+      "concept": {
+        "catalog_entry": "blitzen",
+        "asset_id": "cast-concept/blitzen",
+        "state": "concept-requested",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "decorative",
+          "frame_sets": [
+            {
+              "contract_id": "decorative-loop",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "hide-decorative-only"
+        }
+      ],
+      "economics": "none"
+    }
+  ],
+  "costumes": [
+    {
+      "costume_id": "holiday:winter-chef-costume",
+      "name": "Holiday chef outfit",
+      "applies_to": [
+        "staff:chef"
+      ],
+      "event_tags": [
+        "christmas",
+        "winter"
+      ],
+      "concept": {
+        "catalog_entry": "winter-chef-costume",
+        "asset_id": "cast-concept/winter-chef-costume",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "staff:chef",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "costume_id": "holiday:winter-server-costume",
+      "name": "Holiday server outfit",
+      "applies_to": [
+        "staff:waiter"
+      ],
+      "event_tags": [
+        "christmas",
+        "winter"
+      ],
+      "concept": {
+        "catalog_entry": "winter-server-costume",
+        "asset_id": "cast-concept/winter-server-costume",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "staff:waiter",
+          "frame_sets": [
+            {
+              "contract_id": "walker-12",
+              "state": "not-started",
+              "frames": []
+            },
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "costume_id": "holiday:winter-delivery-costume",
+      "name": "Holiday delivery outfit",
+      "applies_to": [
+        "staff:waiter"
+      ],
+      "event_tags": [
+        "christmas",
+        "winter"
+      ],
+      "concept": {
+        "catalog_entry": "winter-delivery-costume",
+        "asset_id": "cast-concept/winter-delivery-costume",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "staff:waiter",
+          "frame_sets": [
+            {
+              "contract_id": "walker-12",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    },
+    {
+      "costume_id": "holiday:caroler-host-costume",
+      "name": "Festive host outfit",
+      "applies_to": [
+        "customer",
+        "host"
+      ],
+      "event_tags": [
+        "christmas",
+        "winter"
+      ],
+      "concept": {
+        "catalog_entry": "caroler-host-costume",
+        "asset_id": "cast-concept/caroler-host-costume",
+        "state": "concept-generated",
+        "batch": "20261114T183935Z"
+      },
+      "bindings": [
+        {
+          "role": "customer",
+          "frame_sets": [
+            {
+              "contract_id": "walker-12",
+              "state": "not-started",
+              "frames": []
+            },
+            {
+              "contract_id": "seated-parts-28",
+              "state": "not-started",
+              "frames": []
+            },
+            {
+              "contract_id": "guest-face",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-sheet",
+          "guest_type": 3
+        },
+        {
+          "role": "host",
+          "frame_sets": [
+            {
+              "contract_id": "staff-portrait",
+              "state": "not-started",
+              "frames": []
+            }
+          ],
+          "fallback": "base-character"
+        }
+      ],
+      "economics": "none"
+    }
+  ]
+}

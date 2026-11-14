@@ -1,0 +1,2853 @@
+{
+  "format": "pthd.catalog-index",
+  "schema_version": "1.0.0",
+  "catalog_revision": 1,
+  "generated_utc": "2026-11-14T00:00:00Z",
+  "ui_only": true,
+  "paging": {
+    "page_size_desktop": 12,
+    "page_size_tablet": 12,
+    "page_size_phone": 6,
+    "phone_max_short_side_dp": 599,
+    "overview_marker_budget": {
+      "target_min": 8,
+      "target_max": 12
+    },
+    "wrap": false
+  },
+  "geodata_sources": [
+    {
+      "source_id": "natural-earth-110m-land",
+      "publisher": "Natural Earth",
+      "dataset": "ne_110m_land (GeoJSON, nvkelso/natural-earth-vector)",
+      "version": "unpinned-master",
+      "url": "https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_land.geojson",
+      "license": "Public domain; https://www.naturalearthdata.com/about/terms-of-use/",
+      "sha256": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9",
+      "role": "coastlines"
+    }
+  ],
+  "regions": [
+    {
+      "region_id": "north-america",
+      "order": 1,
+      "title": "North America",
+      "bounds_e6": {
+        "west": -170000000,
+        "south": 10000000,
+        "east": -50000000,
+        "north": 83000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:north-america"
+    },
+    {
+      "region_id": "latin-america-caribbean",
+      "order": 2,
+      "title": "Latin America and the Caribbean",
+      "bounds_e6": {
+        "west": -120000000,
+        "south": -60000000,
+        "east": -30000000,
+        "north": 33000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:latin-america-caribbean"
+    },
+    {
+      "region_id": "europe",
+      "order": 3,
+      "title": "Europe",
+      "bounds_e6": {
+        "west": -25000000,
+        "south": 32000000,
+        "east": 50000000,
+        "north": 74000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:europe"
+    },
+    {
+      "region_id": "north-africa-western-asia",
+      "order": 4,
+      "title": "North Africa and Western Asia",
+      "bounds_e6": {
+        "west": -20000000,
+        "south": 5000000,
+        "east": 65000000,
+        "north": 47000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:north-africa-western-asia"
+    },
+    {
+      "region_id": "sub-saharan-africa",
+      "order": 5,
+      "title": "Sub-Saharan Africa",
+      "bounds_e6": {
+        "west": -20000000,
+        "south": -36000000,
+        "east": 55000000,
+        "north": 23000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:sub-saharan-africa"
+    },
+    {
+      "region_id": "central-south-asia",
+      "order": 6,
+      "title": "Central and South Asia",
+      "bounds_e6": {
+        "west": 42000000,
+        "south": -3000000,
+        "east": 97000000,
+        "north": 58000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:central-south-asia"
+    },
+    {
+      "region_id": "east-southeast-asia",
+      "order": 7,
+      "title": "East and Southeast Asia",
+      "bounds_e6": {
+        "west": 92000000,
+        "south": -14000000,
+        "east": 155000000,
+        "north": 60000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:east-southeast-asia"
+    },
+    {
+      "region_id": "oceania-pacific",
+      "order": 8,
+      "title": "Oceania and the Pacific",
+      "bounds_e6": {
+        "west": 108000000,
+        "south": -52000000,
+        "east": 180000000,
+        "north": 8000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:oceania-pacific"
+    }
+  ],
+  "bonus_routes": [
+    {
+      "route_id": "north-pole",
+      "title": "Santa's Pizza Village (bonus)",
+      "global_marker": {
+        "x": 5000,
+        "y": 400
+      },
+      "overview_asset": null
+    }
+  ],
+  "entries": [
+    {
+      "location_key": "qa-synthetic:d96-r1-0001",
+      "revision": 1,
+      "display_name": "QA NORT 0000",
+      "short_name": "Q1-1",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0002",
+      "revision": 1,
+      "display_name": "QA NORT 7919",
+      "short_name": "Q1-2",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0003",
+      "revision": 1,
+      "display_name": "QA NORT 5838",
+      "short_name": "Q1-3",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0004",
+      "revision": 1,
+      "display_name": "QA NORT 3757",
+      "short_name": "Q1-4",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0005",
+      "revision": 1,
+      "display_name": "QA NORT 1676",
+      "short_name": "Q1-5",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0006",
+      "revision": 1,
+      "display_name": "QA NORT 9595",
+      "short_name": "Q1-6",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0007",
+      "revision": 1,
+      "display_name": "QA NORT 7514",
+      "short_name": "Q1-7",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0008",
+      "revision": 1,
+      "display_name": "QA NORT 5433",
+      "short_name": "Q1-8",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0009",
+      "revision": 1,
+      "display_name": "QA NORT 3352",
+      "short_name": "Q1-9",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0010",
+      "revision": 1,
+      "display_name": "QA NORT 1271",
+      "short_name": "Q1-10",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0011",
+      "revision": 1,
+      "display_name": "QA NORT 9190",
+      "short_name": "Q1-11",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r1-0012",
+      "revision": 1,
+      "display_name": "QA NORT 7109",
+      "short_name": "Q1-12",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0001",
+      "revision": 1,
+      "display_name": "QA LATI 0000",
+      "short_name": "Q2-1",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0002",
+      "revision": 1,
+      "display_name": "QA LATI 7919",
+      "short_name": "Q2-2",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0003",
+      "revision": 1,
+      "display_name": "QA LATI 5838",
+      "short_name": "Q2-3",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0004",
+      "revision": 1,
+      "display_name": "QA LATI 3757",
+      "short_name": "Q2-4",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0005",
+      "revision": 1,
+      "display_name": "QA LATI 1676",
+      "short_name": "Q2-5",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0006",
+      "revision": 1,
+      "display_name": "QA LATI 9595",
+      "short_name": "Q2-6",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0007",
+      "revision": 1,
+      "display_name": "QA LATI 7514",
+      "short_name": "Q2-7",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0008",
+      "revision": 1,
+      "display_name": "QA LATI 5433",
+      "short_name": "Q2-8",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0009",
+      "revision": 1,
+      "display_name": "QA LATI 3352",
+      "short_name": "Q2-9",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0010",
+      "revision": 1,
+      "display_name": "QA LATI 1271",
+      "short_name": "Q2-10",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0011",
+      "revision": 1,
+      "display_name": "QA LATI 9190",
+      "short_name": "Q2-11",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r2-0012",
+      "revision": 1,
+      "display_name": "QA LATI 7109",
+      "short_name": "Q2-12",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0001",
+      "revision": 1,
+      "display_name": "QA EURO 0000",
+      "short_name": "Q3-1",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0002",
+      "revision": 1,
+      "display_name": "QA EURO 7919",
+      "short_name": "Q3-2",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0003",
+      "revision": 1,
+      "display_name": "QA EURO 5838",
+      "short_name": "Q3-3",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0004",
+      "revision": 1,
+      "display_name": "QA EURO 3757",
+      "short_name": "Q3-4",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0005",
+      "revision": 1,
+      "display_name": "QA EURO 1676",
+      "short_name": "Q3-5",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0006",
+      "revision": 1,
+      "display_name": "QA EURO 9595",
+      "short_name": "Q3-6",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0007",
+      "revision": 1,
+      "display_name": "QA EURO 7514",
+      "short_name": "Q3-7",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0008",
+      "revision": 1,
+      "display_name": "QA EURO 5433",
+      "short_name": "Q3-8",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0009",
+      "revision": 1,
+      "display_name": "QA EURO 3352",
+      "short_name": "Q3-9",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0010",
+      "revision": 1,
+      "display_name": "QA EURO 1271",
+      "short_name": "Q3-10",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0011",
+      "revision": 1,
+      "display_name": "QA EURO 9190",
+      "short_name": "Q3-11",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r3-0012",
+      "revision": 1,
+      "display_name": "QA EURO 7109",
+      "short_name": "Q3-12",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0001",
+      "revision": 1,
+      "display_name": "QA NORT 0000",
+      "short_name": "Q4-1",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0002",
+      "revision": 1,
+      "display_name": "QA NORT 7919",
+      "short_name": "Q4-2",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0003",
+      "revision": 1,
+      "display_name": "QA NORT 5838",
+      "short_name": "Q4-3",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0004",
+      "revision": 1,
+      "display_name": "QA NORT 3757",
+      "short_name": "Q4-4",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0005",
+      "revision": 1,
+      "display_name": "QA NORT 1676",
+      "short_name": "Q4-5",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0006",
+      "revision": 1,
+      "display_name": "QA NORT 9595",
+      "short_name": "Q4-6",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0007",
+      "revision": 1,
+      "display_name": "QA NORT 7514",
+      "short_name": "Q4-7",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0008",
+      "revision": 1,
+      "display_name": "QA NORT 5433",
+      "short_name": "Q4-8",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0009",
+      "revision": 1,
+      "display_name": "QA NORT 3352",
+      "short_name": "Q4-9",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0010",
+      "revision": 1,
+      "display_name": "QA NORT 1271",
+      "short_name": "Q4-10",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0011",
+      "revision": 1,
+      "display_name": "QA NORT 9190",
+      "short_name": "Q4-11",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r4-0012",
+      "revision": 1,
+      "display_name": "QA NORT 7109",
+      "short_name": "Q4-12",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0001",
+      "revision": 1,
+      "display_name": "QA SUB- 0000",
+      "short_name": "Q5-1",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0002",
+      "revision": 1,
+      "display_name": "QA SUB- 7919",
+      "short_name": "Q5-2",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0003",
+      "revision": 1,
+      "display_name": "QA SUB- 5838",
+      "short_name": "Q5-3",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0004",
+      "revision": 1,
+      "display_name": "QA SUB- 3757",
+      "short_name": "Q5-4",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0005",
+      "revision": 1,
+      "display_name": "QA SUB- 1676",
+      "short_name": "Q5-5",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0006",
+      "revision": 1,
+      "display_name": "QA SUB- 9595",
+      "short_name": "Q5-6",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0007",
+      "revision": 1,
+      "display_name": "QA SUB- 7514",
+      "short_name": "Q5-7",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0008",
+      "revision": 1,
+      "display_name": "QA SUB- 5433",
+      "short_name": "Q5-8",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0009",
+      "revision": 1,
+      "display_name": "QA SUB- 3352",
+      "short_name": "Q5-9",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0010",
+      "revision": 1,
+      "display_name": "QA SUB- 1271",
+      "short_name": "Q5-10",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0011",
+      "revision": 1,
+      "display_name": "QA SUB- 9190",
+      "short_name": "Q5-11",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r5-0012",
+      "revision": 1,
+      "display_name": "QA SUB- 7109",
+      "short_name": "Q5-12",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0001",
+      "revision": 1,
+      "display_name": "QA CENT 0000",
+      "short_name": "Q6-1",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0002",
+      "revision": 1,
+      "display_name": "QA CENT 7919",
+      "short_name": "Q6-2",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0003",
+      "revision": 1,
+      "display_name": "QA CENT 5838",
+      "short_name": "Q6-3",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0004",
+      "revision": 1,
+      "display_name": "QA CENT 3757",
+      "short_name": "Q6-4",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0005",
+      "revision": 1,
+      "display_name": "QA CENT 1676",
+      "short_name": "Q6-5",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0006",
+      "revision": 1,
+      "display_name": "QA CENT 9595",
+      "short_name": "Q6-6",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0007",
+      "revision": 1,
+      "display_name": "QA CENT 7514",
+      "short_name": "Q6-7",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0008",
+      "revision": 1,
+      "display_name": "QA CENT 5433",
+      "short_name": "Q6-8",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0009",
+      "revision": 1,
+      "display_name": "QA CENT 3352",
+      "short_name": "Q6-9",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0010",
+      "revision": 1,
+      "display_name": "QA CENT 1271",
+      "short_name": "Q6-10",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0011",
+      "revision": 1,
+      "display_name": "QA CENT 9190",
+      "short_name": "Q6-11",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r6-0012",
+      "revision": 1,
+      "display_name": "QA CENT 7109",
+      "short_name": "Q6-12",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0001",
+      "revision": 1,
+      "display_name": "QA EAST 0000",
+      "short_name": "Q7-1",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0002",
+      "revision": 1,
+      "display_name": "QA EAST 7919",
+      "short_name": "Q7-2",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0003",
+      "revision": 1,
+      "display_name": "QA EAST 5838",
+      "short_name": "Q7-3",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0004",
+      "revision": 1,
+      "display_name": "QA EAST 3757",
+      "short_name": "Q7-4",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0005",
+      "revision": 1,
+      "display_name": "QA EAST 1676",
+      "short_name": "Q7-5",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0006",
+      "revision": 1,
+      "display_name": "QA EAST 9595",
+      "short_name": "Q7-6",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0007",
+      "revision": 1,
+      "display_name": "QA EAST 7514",
+      "short_name": "Q7-7",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0008",
+      "revision": 1,
+      "display_name": "QA EAST 5433",
+      "short_name": "Q7-8",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0009",
+      "revision": 1,
+      "display_name": "QA EAST 3352",
+      "short_name": "Q7-9",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0010",
+      "revision": 1,
+      "display_name": "QA EAST 1271",
+      "short_name": "Q7-10",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0011",
+      "revision": 1,
+      "display_name": "QA EAST 9190",
+      "short_name": "Q7-11",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r7-0012",
+      "revision": 1,
+      "display_name": "QA EAST 7109",
+      "short_name": "Q7-12",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0001",
+      "revision": 1,
+      "display_name": "QA OCEA 0000",
+      "short_name": "Q8-1",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0002",
+      "revision": 1,
+      "display_name": "QA OCEA 7919",
+      "short_name": "Q8-2",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0003",
+      "revision": 1,
+      "display_name": "QA OCEA 5838",
+      "short_name": "Q8-3",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0004",
+      "revision": 1,
+      "display_name": "QA OCEA 3757",
+      "short_name": "Q8-4",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0005",
+      "revision": 1,
+      "display_name": "QA OCEA 1676",
+      "short_name": "Q8-5",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0006",
+      "revision": 1,
+      "display_name": "QA OCEA 9595",
+      "short_name": "Q8-6",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0007",
+      "revision": 1,
+      "display_name": "QA OCEA 7514",
+      "short_name": "Q8-7",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0008",
+      "revision": 1,
+      "display_name": "QA OCEA 5433",
+      "short_name": "Q8-8",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0009",
+      "revision": 1,
+      "display_name": "QA OCEA 3352",
+      "short_name": "Q8-9",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "draft",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0010",
+      "revision": 1,
+      "display_name": "QA OCEA 1271",
+      "short_name": "Q8-10",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "validated",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0011",
+      "revision": 1,
+      "display_name": "QA OCEA 9190",
+      "short_name": "Q8-11",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "integrated-candidate",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "qa-synthetic:d96-r8-0012",
+      "revision": 1,
+      "display_name": "QA OCEA 7109",
+      "short_name": "Q8-12",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "qa-synthetic",
+      "admission": "gameplay-accepted",
+      "editable": true,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    }
+  ]
+}

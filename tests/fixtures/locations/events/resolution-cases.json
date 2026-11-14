@@ -1,0 +1,139 @@
+{
+  "format": "pthd.event-resolution-expectations",
+  "catalog_id": "pthd-events:core",
+  "catalog_revision": 1,
+  "rule": "active = events with option enabled, applicable to the location, and whose rule date d (in year-1, year, year+1) satisfies d - before <= date <= d + after; sorted by priority desc then event_id. Off -> []. No clock read in in-game mode; no RNG in any mode.",
+  "cases": [
+    {
+      "case_id": "off-mode",
+      "mode": "off",
+      "date": "1995-12-24",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "expected_active": [],
+      "expected_preview": []
+    },
+    {
+      "case_id": "in-game-advent",
+      "mode": "in-game-calendar",
+      "date": "1995-12-20",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "expected_active": [
+        "pthd-events:christmas-decor"
+      ],
+      "expected_preview": []
+    },
+    {
+      "case_id": "year-boundary",
+      "mode": "in-game-calendar",
+      "date": "1996-01-01",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "expected_active": [
+        "pthd-events:new-year-fireworks",
+        "pthd-events:christmas-decor"
+      ],
+      "expected_preview": [],
+      "note": "Dec 25 of the previous year + 7 days reaches Jan 1"
+    },
+    {
+      "case_id": "secular-swap",
+      "mode": "in-game-calendar",
+      "date": "1995-12-20",
+      "location_key": "classic:paris",
+      "disabled": [
+        "pthd-events:christmas-decor"
+      ],
+      "enabled": [
+        "pthd-events:winter-lights"
+      ],
+      "expected_active": [
+        "pthd-events:winter-lights"
+      ],
+      "expected_preview": []
+    },
+    {
+      "case_id": "north-pole-summer",
+      "mode": "in-game-calendar",
+      "date": "1996-07-01",
+      "location_key": "pthd:santas-pizza-village",
+      "disabled": [],
+      "expected_active": [],
+      "expected_preview": [],
+      "note": "the village is playable and snowy all year; its Christmas overlay is dated"
+    },
+    {
+      "case_id": "north-pole-december",
+      "mode": "in-game-calendar",
+      "date": "1995-12-01",
+      "location_key": "pthd:santas-pizza-village",
+      "disabled": [],
+      "expected_active": [
+        "pthd-events:north-pole-christmas",
+        "pthd-events:christmas-decor"
+      ],
+      "expected_preview": []
+    },
+    {
+      "case_id": "real-date-auckland",
+      "mode": "real-date",
+      "utc_instant": "2026-12-31T12:00:00Z",
+      "time_zone": "Pacific/Auckland",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "expected_local_date": "2027-01-01",
+      "expected_active": [
+        "pthd-events:new-year-fireworks",
+        "pthd-events:christmas-decor"
+      ],
+      "expected_preview": []
+    },
+    {
+      "case_id": "real-date-los-angeles",
+      "mode": "real-date",
+      "utc_instant": "2026-12-31T12:00:00Z",
+      "time_zone": "America/Los_Angeles",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "expected_local_date": "2026-12-31",
+      "expected_active": [
+        "pthd-events:new-year-fireworks",
+        "pthd-events:christmas-decor"
+      ],
+      "expected_preview": [],
+      "note": "Jan 1 with before_days 1 includes Dec 31"
+    },
+    {
+      "case_id": "manual-preview",
+      "mode": "in-game-calendar",
+      "date": "1996-07-01",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "preview": "pthd-events:new-year-fireworks",
+      "expected_active": [],
+      "expected_preview": [
+        "pthd-events:new-year-fireworks"
+      ],
+      "note": "preview is display-only: settings, game date, save and RNG unchanged; cleared on exit"
+    },
+    {
+      "case_id": "reduced-motion",
+      "mode": "in-game-calendar",
+      "date": "1996-01-01",
+      "location_key": "classic:paris",
+      "disabled": [],
+      "reduced_motion": true,
+      "expected_active": [
+        "pthd-events:new-year-fireworks",
+        "pthd-events:christmas-decor"
+      ],
+      "expected_overlays": [
+        "events/fireworks-static",
+        "events/winter-lights-static",
+        "events/christmas-tree"
+      ],
+      "expected_preview": []
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "format": "pthd.asset-admission",
+  "schema_version": "1.0.0",
+  "asset_id": "location-art/north-pole-santas-pizza-village",
+  "revision": "candidate-v1",
+  "kind": "location-reference-backdrop",
+  "role": "bonus-route preview / mood reference (not a map)",
+  "state": "candidate",
+  "authenticity": "fictional",
+  "location_key": "pthd:santas-pizza-village",
+  "provenance": {
+    "source_type": "generated",
+    "model": "juggernautXL_v9.safetensors",
+    "seed": "2026122500",
+    "prompt_id": "0dfaa093-a9e5-4ae1-8419-060abf686c42",
+    "workflow": {
+      "path": "world-region-art/20261114T183818Z/north-pole-santas-pizza-village.workflow.json",
+      "sha256": null
+    },
+    "batch_receipt": "world-region-art/20261114T183818Z/receipt.json",
+    "hardware": "RTX 3090 Ti"
+  },
+  "native": {
+    "path": "comfy-out/world-regions/20261114T183818Z/01-north-pole-santas-pizza-village-native_00001_.png",
+    "sha256": "0a92805dba2f7d869fad7ceb0894f9b33069b042a923e418ce3715168818b095",
+    "bytes": 2410566,
+    "width": 1536,
+    "height": 960
+  },
+  "derived": [
+    {
+      "path": "comfy-out/world-regions/20261114T183818Z/01-north-pole-santas-pizza-village-4k_00001_.png",
+      "sha256": "ed5d36d018403eb2d20d328f02306e5a116efd34eb73f82b04af4f69ff16ba43",
+      "bytes": 9882832,
+      "width": 3840,
+      "height": 2400,
+      "method": "lanczos-resize",
+      "purpose": "display size"
+    }
+  ],
+  "rights": {
+    "status": "unknown",
+    "license": "Checkpoint/output redistribution policy must be confirmed"
+  },
+  "review": [
+    {
+      "to_state": "candidate",
+      "reviewer_kind": "automated-check",
+      "date_utc": "2026-11-14T18:38:33Z",
+      "notes": "generated-unreviewed",
+      "checks": {
+        "decode": "not-run"
+      }
+    }
+  ],
+  "semantic_notes": "Storybook illustration; not a tile set, map definition or character sheet."
+}

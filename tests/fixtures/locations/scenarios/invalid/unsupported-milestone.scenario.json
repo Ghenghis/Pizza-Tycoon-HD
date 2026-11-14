@@ -1,0 +1,72 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:north-pole-invalid-unsupported-milestone",
+  "revision": 1,
+  "preset_group": "pthd:north-pole",
+  "display": {
+    "title": "Invalid: unsupported",
+    "subtitle": "fixture",
+    "summary": "Must fail: ControlsWorld is not in objective registry v1.",
+    "intro": "x",
+    "goal_summary": "x",
+    "victory_summary": "x",
+    "difficulty_label": "standard"
+  },
+  "roster": [
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": "current-published"
+    }
+  ],
+  "start": {
+    "location_key": "pthd:santas-pizza-village",
+    "game_mode": "freemode",
+    "difficulty": 3
+  },
+  "rules": {
+    "win": {
+      "mode": "none"
+    },
+    "travel": {
+      "model": "disabled"
+    },
+    "game_rules": {}
+  },
+  "objectives": {
+    "goal": {
+      "all_of": [
+        {
+          "objective_id": "world",
+          "milestone": "ControlsWorld",
+          "polarity": "achieve",
+          "label": "Control the world",
+          "within_game_days": null
+        }
+      ]
+    },
+    "optional": [],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  },
+  "presentation": {
+    "suggested_event_mode": "in-game-calendar",
+    "decoration_events": [
+      "pthd-events:north-pole-christmas"
+    ],
+    "default_costumes": [
+      {
+        "role": "staff:waiter",
+        "costume_id": "holiday:winter-server-costume"
+      },
+      {
+        "role": "staff:chef",
+        "costume_id": "holiday:winter-chef-costume"
+      }
+    ],
+    "host_character": "holiday:santa"
+  }
+}

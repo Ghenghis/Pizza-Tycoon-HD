@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pthd:schema:cast-catalog:1.0.0",
+  "title": "Pizza Tycoon HD cast and costume catalog 1.0.0",
+  "description": "Stable character and costume identities, their bindings to roles the engine draws today, and the frame sets each binding needs (contract section 14). Appearance only: nothing here can change a Character's stats, wages, skills or any economic value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_version", "catalog_id", "catalog_revision", "frame_contracts", "characters", "costumes"],
+  "properties": {
+    "format": { "const": "pthd.cast-catalog" },
+    "schema_version": { "const": "1.0.0" },
+    "catalog_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,63}$" },
+    "catalog_revision": { "type": "integer", "minimum": 1 },
+    "frame_contracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "description": "Copied from the engine's draw code; a binding is admitted only if its frame set satisfies its contract.",
+      "items": { "$ref": "#/$defs/frame_contract" }
+    },
+    "characters": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/character" }
+    },
+    "costumes": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/costume" }
+    }
+  },
+  "$defs": {
+    "cast_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,47}$" },
+    "role": {
+      "enum": ["staff:waiter", "staff:chef", "staff:manager", "customer", "host", "decorative"],
+      "description": "staff:* = appearance of an existing Staff member (JobRole CHEF/WAITER/MANAGER, Character.h:26-31); customer = appearance of a guest type; host = presenter portrait on existing dialog/alert surfaces (no host job exists in the engine); decorative = overlay sprite with no collision or navigation effect."
+    },
+    "admission_state": {
+      "enum": ["not-started", "concept-requested", "concept-generated", "concept-curated", "frames-in-progress", "runtime-validated", "admitted", "rejected"]
+    },
+    "frame_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id", "roles", "frame_count", "index_rule", "anchor_rule", "alpha", "base_sheet", "source"],
+      "properties": {
+        "contract_id": { "enum": ["walker-12", "seated-parts-28", "guest-face", "staff-portrait", "actor-head", "decorative-static", "decorative-loop"] },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/role" } },
+        "frame_count": { "type": "integer", "minimum": 1, "maximum": 512 },
+        "index_rule": { "type": "string", "maxLength": 200 },
+        "anchor_rule": { "type": "string", "maxLength": 200 },
+        "alpha": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["indexed", "hd"],
+          "properties": {
+            "indexed": { "const": "palette-index-0-transparent" },
+            "hd": { "const": "png-straight-alpha" }
+          }
+        },
+        "palette": { "anyOf": [{ "type": "integer", "minimum": 0, "maximum": 70 }, { "type": "null" }] },
+        "base_sheet": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Classic sheet whose frame with the same index is the fallback (e.g. bob/walk12.bob)."
+        },
+        "source": { "type": "string", "maxLength": 300, "description": "file:line of the draw code the contract was taken from." }
+      }
+    },
+    "frame_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id", "state", "frames"],
+      "properties": {
+        "contract_id": { "$ref": "#/$defs/frame_contract/properties/contract_id" },
+        "state": { "$ref": "#/$defs/admission_state" },
+        "frames": {
+          "type": "array",
+          "maxItems": 512,
+          "description": "Empty until frames exist. A missing or invalid index resolves to the base sheet's frame (contract section 14.4).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["index", "asset_id", "asset_revision", "width", "height", "anchor"],
+            "properties": {
+              "index": { "type": "integer", "minimum": 0, "maximum": 511 },
+              "asset_id": { "type": "string", "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*){0,4}$" },
+              "asset_revision": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{0,31}$" },
+              "width": { "type": "integer", "minimum": 1, "maximum": 512 },
+              "height": { "type": "integer", "minimum": 1, "maximum": 512 },
+              "anchor": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["x", "y"],
+                "properties": {
+                  "x": { "type": "integer", "minimum": -512, "maximum": 512 },
+                  "y": { "type": "integer", "minimum": -512, "maximum": 512 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "frame_sets", "fallback"],
+      "properties": {
+        "role": { "$ref": "#/$defs/role" },
+        "guest_type": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11,
+          "description": "customer only: which of the 12 guest types this skin may replace (GuestPicker.cpp:34-37)."
+        },
+        "frame_sets": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "$ref": "#/$defs/frame_set" } },
+        "fallback": {
+          "enum": ["base-sheet", "base-character", "hide-decorative-only"],
+          "description": "base-sheet: draw the classic frame with the same index. base-character: draw the wearer without the costume. hide-decorative-only: a decorative overlay may be omitted; a person never is."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "role": { "const": "customer" } } }, "then": { "required": ["guest_type"] } },
+        { "if": { "properties": { "role": { "const": "decorative" } } }, "else": { "properties": { "fallback": { "enum": ["base-sheet", "base-character"] } } } }
+      ]
+    },
+    "concept_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_entry", "asset_id", "state"],
+      "properties": {
+        "catalog_entry": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,47}$", "description": "id in world-region-art/holiday-cast-catalog-v1.json" },
+        "asset_id": { "type": "string", "maxLength": 128 },
+        "state": { "$ref": "#/$defs/admission_state" },
+        "batch": { "type": "string", "maxLength": 32 }
+      }
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["character_id", "name", "kind", "body", "event_tags", "concept", "bindings", "economics"],
+      "properties": {
+        "character_id": { "$ref": "#/$defs/cast_id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "kind": { "enum": ["named-character", "reindeer", "mascot", "fantasy-worker"] },
+        "body": { "enum": ["human", "elf", "reindeer", "snowman", "gingerbread", "toy"] },
+        "event_tags": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" } },
+        "concept": { "$ref": "#/$defs/concept_ref" },
+        "bindings": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/binding" } },
+        "economics": { "const": "none", "description": "A cast character never carries stats; bound to staff it is a skin over the existing Staff record." }
+      }
+    },
+    "costume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["costume_id", "name", "applies_to", "event_tags", "concept", "bindings", "economics"],
+      "properties": {
+        "costume_id": { "$ref": "#/$defs/cast_id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "applies_to": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/role" } },
+        "event_tags": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" } },
+        "concept": { "$ref": "#/$defs/concept_ref" },
+        "bindings": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/binding" } },
+        "economics": { "const": "none", "description": "Costumes never change skills, wages, popularity or any other economic value." }
+      }
+    }
+  }
+}

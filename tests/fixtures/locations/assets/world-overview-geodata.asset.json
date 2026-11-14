@@ -1,0 +1,44 @@
+{
+  "format": "pthd.asset-admission",
+  "schema_version": "1.0.0",
+  "asset_id": "geo/world-overview",
+  "revision": "v1",
+  "kind": "geographic-background",
+  "role": "global overview background (coastlines only)",
+  "state": "candidate",
+  "authenticity": "geodata",
+  "provenance": {
+    "source_type": "geodata-render",
+    "geodata_ref": "natural-earth-110m-land",
+    "inputs": [
+      {
+        "path": "world-region-art/menu-concept-v1/ne_110m_land.geojson",
+        "sha256": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9"
+      }
+    ]
+  },
+  "native": {
+    "path": "world-region-art/region-overviews-v1/world.png",
+    "sha256": "e7bafecac2ead844225140e338198ba7db9424d21650531dc3e5a9cfca6e7a92",
+    "bytes": 108807,
+    "width": null,
+    "height": null
+  },
+  "derived": [],
+  "rights": {
+    "status": "redistributable",
+    "license": "Natural Earth: public domain"
+  },
+  "review": [
+    {
+      "to_state": "candidate",
+      "reviewer_kind": "automated-check",
+      "date_utc": "2026-11-14T18:41:00Z",
+      "notes": "CPU vector render; pixel size not recorded in the manifest; width and height stay null until measured, which curation requires.",
+      "checks": {
+        "decode": "not-run"
+      }
+    }
+  ],
+  "semantic_notes": "Coastlines from geodata; no political boundaries; not city topology."
+}

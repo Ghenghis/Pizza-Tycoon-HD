@@ -1,0 +1,1320 @@
+{
+  "format": "pthd.catalog-index",
+  "schema_version": "1.0.0",
+  "catalog_revision": 1,
+  "generated_utc": "2026-11-14T00:00:00Z",
+  "ui_only": false,
+  "paging": {
+    "page_size_desktop": 12,
+    "page_size_tablet": 12,
+    "page_size_phone": 6,
+    "phone_max_short_side_dp": 599,
+    "overview_marker_budget": {
+      "target_min": 8,
+      "target_max": 12
+    },
+    "wrap": false
+  },
+  "geodata_sources": [
+    {
+      "source_id": "natural-earth-110m-land",
+      "publisher": "Natural Earth",
+      "dataset": "ne_110m_land (GeoJSON, nvkelso/natural-earth-vector)",
+      "version": "unpinned-master",
+      "url": "https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_land.geojson",
+      "license": "Public domain; https://www.naturalearthdata.com/about/terms-of-use/",
+      "sha256": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9",
+      "role": "coastlines"
+    }
+  ],
+  "regions": [
+    {
+      "region_id": "north-america",
+      "order": 1,
+      "title": "North America",
+      "bounds_e6": {
+        "west": -170000000,
+        "south": 10000000,
+        "east": -50000000,
+        "north": 83000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:north-america"
+    },
+    {
+      "region_id": "latin-america-caribbean",
+      "order": 2,
+      "title": "Latin America and the Caribbean",
+      "bounds_e6": {
+        "west": -120000000,
+        "south": -60000000,
+        "east": -30000000,
+        "north": 33000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:latin-america-caribbean"
+    },
+    {
+      "region_id": "europe",
+      "order": 3,
+      "title": "Europe",
+      "bounds_e6": {
+        "west": -25000000,
+        "south": 32000000,
+        "east": 50000000,
+        "north": 74000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:europe"
+    },
+    {
+      "region_id": "north-africa-western-asia",
+      "order": 4,
+      "title": "North Africa and Western Asia",
+      "bounds_e6": {
+        "west": -20000000,
+        "south": 5000000,
+        "east": 65000000,
+        "north": 47000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:north-africa-western-asia"
+    },
+    {
+      "region_id": "sub-saharan-africa",
+      "order": 5,
+      "title": "Sub-Saharan Africa",
+      "bounds_e6": {
+        "west": -20000000,
+        "south": -36000000,
+        "east": 55000000,
+        "north": 23000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:sub-saharan-africa"
+    },
+    {
+      "region_id": "central-south-asia",
+      "order": 6,
+      "title": "Central and South Asia",
+      "bounds_e6": {
+        "west": 42000000,
+        "south": -3000000,
+        "east": 97000000,
+        "north": 58000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:central-south-asia"
+    },
+    {
+      "region_id": "east-southeast-asia",
+      "order": 7,
+      "title": "East and Southeast Asia",
+      "bounds_e6": {
+        "west": 92000000,
+        "south": -14000000,
+        "east": 155000000,
+        "north": 60000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:east-southeast-asia"
+    },
+    {
+      "region_id": "oceania-pacific",
+      "order": 8,
+      "title": "Oceania and the Pacific",
+      "bounds_e6": {
+        "west": 108000000,
+        "south": -52000000,
+        "east": 180000000,
+        "north": 8000000
+      },
+      "projection": "equirectangular",
+      "geodata_ref": "natural-earth-110m-land",
+      "overview_asset": null,
+      "kit": "kit:oceania-pacific"
+    }
+  ],
+  "bonus_routes": [
+    {
+      "route_id": "north-pole",
+      "title": "Santa's Pizza Village (bonus)",
+      "global_marker": {
+        "x": 5000,
+        "y": 400
+      },
+      "overview_asset": null
+    }
+  ],
+  "entries": [
+    {
+      "location_key": "classic:paris",
+      "revision": null,
+      "display_name": "Paris",
+      "short_name": "Paris",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "fr"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:berlin",
+      "revision": null,
+      "display_name": "Berlin",
+      "short_name": "Berlin",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "de"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:baltimore",
+      "revision": null,
+      "display_name": "Baltimore",
+      "short_name": "Baltimore",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "us"
+        ],
+        "states": [
+          "us-md"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:vienna",
+      "revision": null,
+      "display_name": "Vienna",
+      "short_name": "Vienna",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "at"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:chicago",
+      "revision": null,
+      "display_name": "Chicago",
+      "short_name": "Chicago",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "us"
+        ],
+        "states": [
+          "us-il"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:new-york",
+      "revision": null,
+      "display_name": "New York",
+      "short_name": "New York",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "us"
+        ],
+        "states": [
+          "us-ny"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:madrid",
+      "revision": null,
+      "display_name": "Madrid",
+      "short_name": "Madrid",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "es"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:rome",
+      "revision": null,
+      "display_name": "Rome",
+      "short_name": "Rome",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "it"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:stockholm",
+      "revision": null,
+      "display_name": "Stockholm",
+      "short_name": "Stockholm",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "se"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    },
+    {
+      "location_key": "classic:london",
+      "revision": null,
+      "display_name": "London",
+      "short_name": "London",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "geo": null,
+      "facets": {
+        "countries": [
+          "gb"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "source": "classic",
+      "admission": "classic",
+      "editable": false,
+      "definition_sha256": null,
+      "thumbnail": null,
+      "scenarios": [],
+      "updated_utc": "2026-11-14T00:00:00Z"
+    }
+  ],
+  "menu": {
+    "teasers": [
+      {
+        "target": {
+          "region": "north-america"
+        },
+        "featured": [
+          "classic:baltimore",
+          "classic:chicago",
+          "classic:new-york"
+        ],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "latin-america-caribbean"
+        },
+        "featured": [],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "europe"
+        },
+        "featured": [
+          "classic:paris",
+          "classic:berlin",
+          "classic:vienna"
+        ],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "north-africa-western-asia"
+        },
+        "featured": [],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "sub-saharan-africa"
+        },
+        "featured": [],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "central-south-asia"
+        },
+        "featured": [],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "east-southeast-asia"
+        },
+        "featured": [],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "region": "oceania-pacific"
+        },
+        "featured": [],
+        "backdrop": null
+      },
+      {
+        "target": {
+          "bonus_route": "north-pole"
+        },
+        "featured": [],
+        "backdrop": null
+      }
+    ],
+    "preview_route": [
+      "menu",
+      "world-overview",
+      "region-overview",
+      "location-preview"
+    ],
+    "visibility": {
+      "play_requires": [
+        "classic",
+        "gameplay-accepted"
+      ],
+      "edit_requires": "editable",
+      "continue_requires": "latest-resumable-save"
+    }
+  },
+  "content_plan": [
+    {
+      "location_key": "pthd:toronto-ontario-canada",
+      "display_name": "Toronto",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "facets": {
+        "countries": [
+          "ca"
+        ],
+        "states": [
+          "ca-on"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "dense"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "dense neighborhood",
+      "story": "Fit a small lunch business to mixed demand and rent pressure; choose menu breadth versus ingredient waste.",
+      "art_candidate": {
+        "asset_id": "location-art/toronto-ontario-canada",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:victoria-british-columbia-canada",
+      "display_name": "Victoria",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "facets": {
+        "countries": [
+          "ca"
+        ],
+        "states": [
+          "ca-bc"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal neighborhood",
+      "story": "Balance local repeat customers with varied daily demand through pricing and replenishment.",
+      "art_candidate": {
+        "asset_id": "location-art/victoria-british-columbia-canada",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:santa-fe-new-mexico-united-states",
+      "display_name": "Santa Fe",
+      "placement": {
+        "kind": "region",
+        "region": "north-america"
+      },
+      "facets": {
+        "countries": [
+          "us"
+        ],
+        "states": [
+          "us-nm"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland neighborhood",
+      "story": "Establish an affordable neighborhood restaurant with limited starting cash and furniture investment.",
+      "art_candidate": {
+        "asset_id": "location-art/santa-fe-new-mexico-united-states",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:mexico-city-mexico",
+      "display_name": "Mexico City",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "facets": {
+        "countries": [
+          "mx"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "metropolitan district",
+      "story": "Stand out through recipes and service investment in a competitive market.",
+      "art_candidate": {
+        "asset_id": "location-art/mexico-city-mexico",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:valparaiso-chile",
+      "display_name": "Valparaíso",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "facets": {
+        "countries": [
+          "cl"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "hillside"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal hillside neighborhood",
+      "story": "Run a small waterfront-area business with a carefully budgeted interior.",
+      "art_candidate": {
+        "asset_id": "location-art/valparaiso-chile",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:mendoza-argentina",
+      "display_name": "Mendoza",
+      "placement": {
+        "kind": "region",
+        "region": "latin-america-caribbean"
+      },
+      "facets": {
+        "countries": [
+          "ar"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland neighborhood",
+      "story": "Develop repeat trade through dependable stock, staff and a focused menu.",
+      "art_candidate": {
+        "asset_id": "location-art/mendoza-argentina",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:rotterdam-netherlands",
+      "display_name": "Rotterdam",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "facets": {
+        "countries": [
+          "nl"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "urban"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "modern urban district",
+      "story": "Open a contemporary restaurant, then expand or improve service quality.",
+      "art_candidate": {
+        "asset_id": "location-art/rotterdam-netherlands",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:split-croatia",
+      "display_name": "Split",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "facets": {
+        "countries": [
+          "hr"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal neighborhood",
+      "story": "Furnish a small premises and keep the menu available as the business grows.",
+      "art_candidate": {
+        "asset_id": "location-art/split-croatia",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:lyon-france",
+      "display_name": "Lyon",
+      "placement": {
+        "kind": "region",
+        "region": "europe"
+      },
+      "facets": {
+        "countries": [
+          "fr"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland neighborhood",
+      "story": "Build reputation through recipe quality, pricing and reliable operations.",
+      "art_candidate": {
+        "asset_id": "location-art/lyon-france",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:amman-jordan",
+      "display_name": "Amman",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "facets": {
+        "countries": [
+          "jo"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "urban"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland urban neighborhood",
+      "story": "Make a viable restaurant from a modest premises through rent, menu and staff choices.",
+      "art_candidate": {
+        "asset_id": "location-art/amman-jordan",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:muscat-oman",
+      "display_name": "Muscat",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "facets": {
+        "countries": [
+          "om"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal district",
+      "story": "Invest selectively in frontage and dining room while preserving working capital.",
+      "art_candidate": {
+        "asset_id": "location-art/muscat-oman",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:tunis-tunisia",
+      "display_name": "Tunis",
+      "placement": {
+        "kind": "region",
+        "region": "north-africa-western-asia"
+      },
+      "facets": {
+        "countries": [
+          "tn"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "metropolitan neighborhood",
+      "story": "Compete through consistent service and purchasing discipline.",
+      "art_candidate": {
+        "asset_id": "location-art/tunis-tunisia",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:accra-ghana",
+      "display_name": "Accra",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "facets": {
+        "countries": [
+          "gh"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "urban"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "urban district",
+      "story": "Establish a neighborhood restaurant and fund its next improvement from operating income.",
+      "art_candidate": {
+        "asset_id": "location-art/accra-ghana",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:mombasa-kenya",
+      "display_name": "Mombasa",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "facets": {
+        "countries": [
+          "ke"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal neighborhood",
+      "story": "Balance menu variety with stock and supplier commitments in a compact premises.",
+      "art_candidate": {
+        "asset_id": "location-art/mombasa-kenya",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:kigali-rwanda",
+      "display_name": "Kigali",
+      "placement": {
+        "kind": "region",
+        "region": "sub-saharan-africa"
+      },
+      "facets": {
+        "countries": [
+          "rw"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland neighborhood",
+      "story": "Choose gradual expansion versus furnishing and staff investment while keeping service quality.",
+      "art_candidate": {
+        "asset_id": "location-art/kigali-rwanda",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:almaty-kazakhstan",
+      "display_name": "Almaty",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "facets": {
+        "countries": [
+          "kz"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland city district",
+      "story": "Plan a cash-conscious launch, then grow through pricing and quality decisions.",
+      "art_candidate": {
+        "asset_id": "location-art/almaty-kazakhstan",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:kochi-kerala-india",
+      "display_name": "Kochi",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "facets": {
+        "countries": [
+          "in"
+        ],
+        "states": [
+          "in-kl"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal neighborhood",
+      "story": "Keep ingredients available and manage supplier contracts while broadening the menu.",
+      "art_candidate": {
+        "asset_id": "location-art/kochi-kerala-india",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:kathmandu-nepal",
+      "display_name": "Kathmandu",
+      "placement": {
+        "kind": "region",
+        "region": "central-south-asia"
+      },
+      "facets": {
+        "countries": [
+          "np"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland neighborhood",
+      "story": "Adapt a small dining layout to staff and customer flow.",
+      "art_candidate": {
+        "asset_id": "location-art/kathmandu-nepal",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:seoul-south-korea",
+      "display_name": "Seoul",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "facets": {
+        "countries": [
+          "kr"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "metropolitan"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "metropolitan district",
+      "story": "Establish a clear identity through menu, advertising and service investment.",
+      "art_candidate": {
+        "asset_id": "location-art/seoul-south-korea",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:da-nang-vietnam",
+      "display_name": "Da Nang",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "facets": {
+        "countries": [
+          "vn"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal neighborhood",
+      "story": "Develop a reliable menu while balancing stock and premises costs.",
+      "art_candidate": {
+        "asset_id": "location-art/da-nang-vietnam",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:chiang-mai-thailand",
+      "display_name": "Chiang Mai",
+      "placement": {
+        "kind": "region",
+        "region": "east-southeast-asia"
+      },
+      "facets": {
+        "countries": [
+          "th"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland neighborhood",
+      "story": "Build repeat business through staffing, quality and measured expansion.",
+      "art_candidate": {
+        "asset_id": "location-art/chiang-mai-thailand",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:melbourne-victoria-australia",
+      "display_name": "Melbourne",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "facets": {
+        "countries": [
+          "au"
+        ],
+        "states": [
+          "au-vic"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "urban"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "urban district",
+      "story": "Improve a small restaurant's service and menu before taking a second premises.",
+      "art_candidate": {
+        "asset_id": "location-art/melbourne-victoria-australia",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:suva-fiji",
+      "display_name": "Suva",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "facets": {
+        "countries": [
+          "fj"
+        ],
+        "states": [],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "coastal"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "coastal neighborhood",
+      "story": "Balance furnishing, stock and staffing priorities in a small business.",
+      "art_candidate": {
+        "asset_id": "location-art/suva-fiji",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:alice-springs-northern-territory-australia",
+      "display_name": "Alice Springs",
+      "placement": {
+        "kind": "region",
+        "region": "oceania-pacific"
+      },
+      "facets": {
+        "countries": [
+          "au"
+        ],
+        "states": [
+          "au-nt"
+        ],
+        "communities": [],
+        "biomes": [],
+        "settings": [
+          "inland"
+        ],
+        "seasons": [
+          "all-year"
+        ]
+      },
+      "setting": "inland district",
+      "story": "Manage a modest initial budget and steady operations.",
+      "art_candidate": {
+        "asset_id": "location-art/alice-springs-northern-territory-australia",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    },
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "display_name": "Santa's Pizza Village",
+      "placement": {
+        "kind": "bonus",
+        "route": "north-pole"
+      },
+      "facets": {
+        "countries": [],
+        "states": [],
+        "communities": [],
+        "biomes": [
+          "fictional-winter"
+        ],
+        "settings": [
+          "village"
+        ],
+        "seasons": [
+          "all-year",
+          "winter"
+        ]
+      },
+      "setting": "fictional storybook North Pole village",
+      "story": "Open a modest village pizzeria, serve the workshop neighborhood and grow into the square. Presets: Cozy Village, Workshop Rush, Pizza Empire; continue as sandbox after the goal.",
+      "art_candidate": {
+        "asset_id": "location-art/north-pole-santas-pizza-village",
+        "revision": "candidate-v1"
+      },
+      "counts_when": "gameplay-accepted"
+    }
+  ]
+}

@@ -1,0 +1,521 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pthd:schema:asset-admission:1.0.0",
+  "title": "Pizza Tycoon HD asset admission record 1.0.0",
+  "description": "One record per art or geodata asset revision, tracking it from generated candidate to admitted runtime content (contract section 15). Presence of a file is never admission. Generated art is decorative only: it can never define coastlines, coordinates, tiles, collisions or any simulation input.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "asset_id",
+    "revision",
+    "kind",
+    "role",
+    "state",
+    "authenticity",
+    "provenance",
+    "native",
+    "derived",
+    "rights",
+    "review",
+    "semantic_notes"
+  ],
+  "properties": {
+    "format": {
+      "const": "pthd.asset-admission"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "asset_id": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*){0,4}$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,31}$"
+    },
+    "kind": {
+      "enum": [
+        "location-reference-backdrop",
+        "regional-overview",
+        "geographic-background",
+        "menu-backdrop",
+        "character-concept",
+        "costume-concept",
+        "sprite-frames",
+        "portrait",
+        "tile-hd-overlay",
+        "facade-module",
+        "scenery-module",
+        "ui-element",
+        "effect"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "maxLength": 120,
+      "description": "Intended runtime role, e.g. 'location preview thumbnail' or 'staff:waiter walker-12 frame set'."
+    },
+    "state": {
+      "enum": [
+        "candidate",
+        "curated",
+        "style-reviewed",
+        "runtime-validated",
+        "admitted",
+        "rejected"
+      ],
+      "description": "Forward-only except to rejected. Each transition appends one review entry. Only admitted assets may be displayed by the runtime."
+    },
+    "authenticity": {
+      "enum": [
+        "generic-modern-reference",
+        "researched-reference",
+        "community-reviewed",
+        "fictional",
+        "geodata"
+      ],
+      "description": "The 24 location scene candidates are generic-modern-reference: not region-authentic, not playable maps."
+    },
+    "location_key": {
+      "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key"
+    },
+    "region": {
+      "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/region_id"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type"
+      ],
+      "properties": {
+        "source_type": {
+          "enum": [
+            "generated",
+            "authored",
+            "geodata-render",
+            "original-derived",
+            "open-source"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "seed": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "prompt_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "workflow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "maxLength": 260
+            },
+            "sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "batch_receipt": {
+          "type": "string",
+          "maxLength": 260
+        },
+        "hardware": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "geodata_ref": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9.-]{2,63}$"
+        },
+        "inputs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "maxLength": 260
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source_type": {
+                "const": "generated"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "model",
+              "seed",
+              "prompt_id",
+              "workflow",
+              "batch_receipt"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_type": {
+                "const": "geodata-render"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "geodata_ref"
+            ]
+          }
+        }
+      ]
+    },
+    "native": {
+      "$ref": "#/$defs/file"
+    },
+    "derived": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "Resizes, crops, palette conversions and frame cuts, each with its method. A display resize is never additional authored detail.",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/file"
+          }
+        ],
+        "type": "object",
+        "unevaluatedProperties": false,
+        "required": [
+          "method"
+        ],
+        "properties": {
+          "method": {
+            "enum": [
+              "lanczos-resize",
+              "crop",
+              "palette-quantize",
+              "frame-cut",
+              "alpha-extract",
+              "mip"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 120
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Filled at runtime-validated. Budgets per platform from contract section 15.3.",
+      "properties": {
+        "binding_key": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "palette": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 70
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_contract": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "anchor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          }
+        },
+        "max_decoded_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "platforms": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "windows-x64",
+              "android-arm64"
+            ]
+          }
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "license"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "unknown",
+            "local-only",
+            "redistributable",
+            "authorized",
+            "prohibited"
+          ]
+        },
+        "license": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "attribution": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400
+        }
+      }
+    },
+    "review": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "to_state",
+          "reviewer_kind",
+          "date_utc",
+          "notes"
+        ],
+        "properties": {
+          "to_state": {
+            "$ref": "#/properties/state"
+          },
+          "reviewer_kind": {
+            "enum": [
+              "user",
+              "curator",
+              "automated-check",
+              "agent"
+            ]
+          },
+          "date_utc": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "checks": {
+            "type": "object",
+            "maxProperties": 32,
+            "additionalProperties": {
+              "enum": [
+                "pass",
+                "fail",
+                "not-run"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "semantic_notes": {
+      "type": "string",
+      "maxLength": 600
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": [
+              "runtime-validated",
+              "admitted"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runtime"
+        ],
+        "properties": {
+          "rights": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "redistributable",
+                  "authorized",
+                  "local-only"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "admitted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "authenticity": {
+            "not": {
+              "const": "generic-modern-reference"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": [
+              "curated",
+              "style-reviewed",
+              "runtime-validated",
+              "admitted"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "native": {
+            "properties": {
+              "width": {
+                "type": "integer"
+              },
+              "height": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 260
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null only while state is candidate (size not yet recorded)."
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

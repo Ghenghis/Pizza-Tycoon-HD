@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pthd:schema:scenario:1.0.0",
+  "title": "Pizza Tycoon HD scenario / preset 1.0.0",
+  "description": "An Expanded-mode scenario: an immutable roster, a start, rules and objectives. Every objective is a MilestoneId the engine already records (objective registry v1, contract section 11.2). A preset never introduces a new mechanic. The scenario as admitted at game creation is copied into the save (contract section 6).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_version", "scenario_id", "revision", "display", "roster", "start", "rules", "objectives", "availability"],
+  "properties": {
+    "format": { "const": "pthd.scenario" },
+    "schema_version": { "const": "1.0.0" },
+    "scenario_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,63}$" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "preset_group": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,63}$",
+      "description": "Presets of one destination share a group (e.g. pthd:north-pole) so New Game can show them side by side."
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "summary", "intro", "goal_summary", "victory_summary"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "subtitle": { "type": "string", "maxLength": 60 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "intro": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "goal_summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "victory_summary": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "difficulty_label": { "enum": ["forgiving", "standard", "demanding", "long"] }
+      }
+    },
+    "roster": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "description": "Order = runtime CityId. Immutable for a game once created. Validator SCN-1: unique keys; classic entries only with classic pins.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["location_key", "pin"],
+        "properties": {
+          "location_key": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key" },
+          "pin": {
+            "oneOf": [
+              { "const": "classic" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["revision", "definition_sha256"],
+                "properties": {
+                  "revision": { "type": "integer", "minimum": 1 },
+                  "definition_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                }
+              },
+              {
+                "const": "current-published",
+                "description": "Resolved to an exact revision and hash when the game is created; the save stores the resolved pin."
+              }
+            ]
+          }
+        }
+      }
+    },
+    "start": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location_key", "game_mode", "difficulty"],
+      "properties": {
+        "location_key": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key" },
+        "game_mode": {
+          "enum": ["freemode", "quickstart"],
+          "description": "GameMode::FREEMODE / QUICKSTART (src/core/GameTypes.h:30-34). MISSION_MODE is Classic-only in contract 1.0."
+        },
+        "quickstart_size": {
+          "enum": ["small", "big"],
+          "description": "init::RestaurantSize (NewGameConfig.h:26); selects the q/f layouts in GameState.cpp:1119-1134. Required when game_mode is quickstart."
+        },
+        "difficulty": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "init::DifficultyLevel 1 PUSHOVER .. 5 IMPOSSIBLE (NewGameConfig.h:27-33)."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "game_mode": { "const": "quickstart" } } }, "then": { "required": ["quickstart_size"] } }
+      ]
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["win", "travel", "game_rules"],
+      "properties": {
+        "win": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode"],
+              "description": "No world-domination ending. Required for presets that continue as sandbox (the existing win path ends the game: WinSequenceView.cpp:97).",
+              "properties": { "mode": { "const": "none" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "scope", "percent"],
+              "description": "Generalised MilestoneTracker::check_world_domination (MilestoneTracker.cpp:206-254).",
+              "properties": {
+                "mode": { "const": "market_share" },
+                "scope": {
+                  "oneOf": [
+                    { "enum": ["any_location", "all_locations"] },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["locations"],
+                      "properties": {
+                        "locations": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "uniqueItems": true,
+                          "items": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key" }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "percent": { "type": "integer", "minimum": 1, "maximum": 100, "description": "Classic value is win_threshold = 5 (MilestoneTracker.cpp:215)." }
+              }
+            }
+          ]
+        },
+        "travel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model"],
+          "properties": {
+            "model": { "enum": ["disabled", "geo_manhattan"] },
+            "dollars_per_unit_milli": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000,
+              "description": "geo_manhattan: cost = (difficulty + 1) * manhattan(geo in 0.1 degree units, longitude wrapped) * value / 1000 dollars. Classic EuroMap::calculate_cost is untouched (EuroMap.cpp:262-269)."
+            },
+            "bonus_route_cost_dollars": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "description": "Flat cost (times difficulty + 1) to or from a bonus destination, which has no geo."
+            }
+          }
+        },
+        "game_rules": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "GameRules fields (src/core/state/GameRules.h:60-74) except win_condition, which is replaced by win. Omitted fields take the player's options as today.",
+          "properties": {
+            "fix_legacy_bugs": { "type": "boolean" },
+            "mafia_shakedowns_target_all_restaurants": { "type": "boolean" },
+            "demand_fulfillment_popularity": { "type": "boolean" },
+            "pizza_judging": { "enum": ["original", "relaxed"], "description": "PizzaJudging { Original, Relaxed } (src/core/food/PizzaJudging.h:17)." },
+            "cook_book": { "type": "boolean" },
+            "police": { "type": "boolean" },
+            "suppliers_remember_missed_payments": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "objectives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "optional", "after_goal"],
+      "properties": {
+        "goal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all_of"],
+          "properties": {
+            "all_of": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "$ref": "#/$defs/objective" } }
+          }
+        },
+        "optional": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "Optional operating challenges, reported in the goal summary; never block the goal.",
+          "items": { "$ref": "#/$defs/objective" }
+        },
+        "after_goal": {
+          "enum": ["continue-sandbox", "end-game"],
+          "description": "continue-sandbox: show the victory summary, then keep playing the same game. Must not reuse the mission ending (GameState.cpp:519-531) or the win sequence (WinSequenceView.cpp:97)."
+        }
+      }
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["always_available", "calendar_lock"],
+      "properties": {
+        "always_available": { "const": true },
+        "calendar_lock": { "const": false, "description": "No scenario, location or save may be locked to a date (contract section 12)." }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional cosmetic suggestions; the player's event settings always win.",
+      "properties": {
+        "suggested_event_mode": { "enum": ["off", "in-game-calendar"] },
+        "decoration_events": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,63}$" }
+        },
+        "default_costumes": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "Costume suggestions by role; the save stores what the player accepted (presentation block).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "costume_id"],
+            "properties": {
+              "role": { "enum": ["staff:waiter", "staff:chef", "staff:manager", "customer"] },
+              "costume_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,47}$" }
+            }
+          }
+        },
+        "host_character": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,47}$" }
+      }
+    }
+  },
+  "$defs": {
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective_id", "milestone", "polarity", "label"],
+      "properties": {
+        "objective_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+        "milestone": { "$ref": "#/$defs/supported_milestone" },
+        "polarity": {
+          "enum": ["achieve", "avoid"],
+          "description": "achieve: met when the milestone is recorded for the human player. avoid: met while it has never been recorded; checked when the goal completes."
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "hint": { "type": "string", "maxLength": 200 },
+        "within_game_days": {
+          "anyOf": [{ "type": "null" }, { "type": "integer", "minimum": 1, "maximum": 36500 }],
+          "description": "Optional in-game deadline. Never a real-time or real-date deadline."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "polarity": { "const": "avoid" } } },
+          "then": { "properties": { "milestone": { "$ref": "#/$defs/avoidable_milestone" } } },
+          "else": { "properties": { "milestone": { "not": { "$ref": "#/$defs/avoidable_milestone" } } } }
+        }
+      ]
+    },
+    "supported_milestone": {
+      "description": "Objective registry v1: MilestoneId values (src/core/events/MilestoneId.h) with a verified emitter, listed with file:line in contract section 11.2.",
+      "enum": [
+        "OpenedFirstRestaurant",
+        "OpensSecondRestaurant",
+        "HasFiveRestaurants",
+        "Sold1KPizzasPerDay",
+        "Achieved10PctMarketShareInCity",
+        "Achieved20PctMarketShareInCity",
+        "Achieved50PctMarketShareInCity",
+        "AwardedFirstStar",
+        "FirstTwoStarRestaurant",
+        "FirstThreeStarRestaurant",
+        "AchievedTurnover10KPerDay",
+        "PizzaReachedNo1InCharts",
+        "AbleToMeet100PctDeliveries",
+        "AverageServiceTimeLessThan4Minutes",
+        "HasAssetsOf100K",
+        "YouHaveAssetsOf500K",
+        "YouHaveBecomeMillionaire",
+        "FullyTrainedMasterchef",
+        "FullyQualifiedWaiter",
+        "FirstPriceInPizzaCompetition",
+        "Has25KWeeksProfitInOneRestaurant",
+        "Has1000CustomersPerDayInOneRestaurant",
+        "PerfectDeliveriesFor1WeekAcross5Restaurants",
+        "RepresentedInAllAreas",
+        "TakesOutFirstLoan",
+        "FinancialDifficultiesFirstTime"
+      ]
+    },
+    "avoidable_milestone": {
+      "enum": ["TakesOutFirstLoan", "FinancialDifficultiesFirstTime"]
+    }
+  }
+}

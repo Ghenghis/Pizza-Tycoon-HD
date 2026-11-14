@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pthd:schema:catalog-index:1.0.0",
+  "title": "Pizza Tycoon HD world catalog index 1.0.0",
+  "description": "Offline index the world browser, Studio library and main menu read (contract section 10). Small entries only: definitions are loaded on demand. Geography (regions, coordinates) comes from pinned geodata sources; art is referenced only through admitted asset records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_version", "catalog_revision", "generated_utc", "ui_only", "paging", "geodata_sources", "regions", "bonus_routes", "entries"],
+  "properties": {
+    "format": { "const": "pthd.catalog-index" },
+    "schema_version": { "const": "1.0.0" },
+    "catalog_revision": { "type": "integer", "minimum": 1 },
+    "generated_utc": { "$ref": "#/$defs/utc" },
+    "ui_only": {
+      "type": "boolean",
+      "description": "true marks a synthetic QA catalog. The runtime refuses to start or travel into any entry of a ui_only catalog."
+    },
+    "paging": { "$ref": "#/$defs/paging" },
+    "geodata_sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/geodata_source" }
+    },
+    "regions": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/region" }
+    },
+    "bonus_routes": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/bonus_route" }
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/entry" }
+    },
+    "menu": { "$ref": "#/$defs/menu" },
+    "content_plan": {
+      "type": "array",
+      "maxItems": 256,
+      "description": "Production targets (contract section 10.8). A plan item is not a catalog entry and never counts as content until its entry is gameplay-accepted.",
+      "items": { "$ref": "#/$defs/plan_item" }
+    }
+  },
+  "$defs": {
+    "utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "asset_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "revision"],
+      "description": "Points at an asset admission record (asset-admission.schema.json). Only state admitted may be displayed at runtime; anything else falls back.",
+      "properties": {
+        "asset_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*){0,3}$", "maxLength": 128 },
+        "revision": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{0,31}$" }
+      }
+    },
+    "paging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_size_desktop", "page_size_tablet", "page_size_phone", "phone_max_short_side_dp", "overview_marker_budget", "wrap"],
+      "properties": {
+        "page_size_desktop": { "const": 12 },
+        "page_size_tablet": { "const": 12 },
+        "page_size_phone": { "const": 6 },
+        "phone_max_short_side_dp": {
+          "const": 599,
+          "description": "Device class phone when the window's short side is below 600 dp (Android sw600dp convention); Windows is always desktop."
+        },
+        "overview_marker_budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target_min", "target_max"],
+          "properties": {
+            "target_min": { "const": 8 },
+            "target_max": { "const": 12 }
+          }
+        },
+        "wrap": { "const": false, "description": "Previous/next stop at the ends of the filtered order (contract section 10.4)." }
+      }
+    },
+    "geodata_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "publisher", "dataset", "version", "url", "license", "sha256", "role"],
+      "properties": {
+        "source_id": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{2,63}$" },
+        "publisher": { "type": "string", "maxLength": 80 },
+        "dataset": { "type": "string", "maxLength": 80 },
+        "version": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Release tag. 'unpinned-master' is allowed only in drafts; validator CAT-3 blocks it for a shipped catalog."
+        },
+        "url": { "type": "string", "maxLength": 300 },
+        "license": { "type": "string", "maxLength": 200 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "retrieved_utc": { "$ref": "#/$defs/utc" },
+        "role": { "enum": ["coastlines", "gazetteer", "boundaries"] }
+      }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["region_id", "order", "title", "bounds_e6", "projection", "geodata_ref", "overview_asset"],
+      "properties": {
+        "region_id": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/region_id" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "title": { "type": "string", "maxLength": 48 },
+        "bounds_e6": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["west", "south", "east", "north"],
+          "description": "Navigation crop window in micro-degrees, not a geopolitical assignment. Crops may overlap; a location belongs to exactly one region by its placement, and may be discovered from a neighbour.",
+          "properties": {
+            "west": { "type": "integer", "minimum": -180000000, "maximum": 180000000 },
+            "south": { "type": "integer", "minimum": -90000000, "maximum": 90000000 },
+            "east": { "type": "integer", "minimum": -180000000, "maximum": 180000000 },
+            "north": { "type": "integer", "minimum": -90000000, "maximum": 90000000 }
+          }
+        },
+        "projection": { "const": "equirectangular" },
+        "geodata_ref": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{2,63}$" },
+        "overview_asset": { "anyOf": [{ "$ref": "#/$defs/asset_ref" }, { "type": "null" }] },
+        "kit": { "anyOf": [{ "type": "string", "pattern": "^kit:[a-z0-9][a-z0-9-]{1,47}$" }, { "type": "null" }] }
+      }
+    },
+    "bonus_route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route_id", "title", "global_marker", "overview_asset"],
+      "properties": {
+        "route_id": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/bonus_route_id" },
+        "title": { "type": "string", "maxLength": 48 },
+        "global_marker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y"],
+          "description": "Position of the bonus-route icon on the global overview canvas in basis points (0..10000). It is an illustrated icon slot, not a geographic claim.",
+          "properties": {
+            "x": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "y": { "type": "integer", "minimum": 0, "maximum": 10000 }
+          }
+        },
+        "overview_asset": { "anyOf": [{ "$ref": "#/$defs/asset_ref" }, { "type": "null" }] }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location_key", "revision", "display_name", "short_name", "placement", "geo", "facets", "source", "admission", "editable", "definition_sha256", "updated_utc"],
+      "properties": {
+        "location_key": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key" },
+        "revision": { "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "short_name": { "type": "string", "minLength": 1, "maxLength": 12 },
+        "placement": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/properties/world/properties/placement" },
+        "geo": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/properties/world/properties/geo" },
+        "facets": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/properties/facets" },
+        "source": { "enum": ["classic", "first-party", "user", "imported", "qa-synthetic"] },
+        "admission": {
+          "enum": ["classic", "draft", "validated", "integrated-candidate", "gameplay-accepted", "withdrawn"],
+          "description": "classic = one of the original ten, built from the user's game files. Only classic and gameplay-accepted entries are playable (contract section 8)."
+        },
+        "editable": { "type": "boolean" },
+        "definition_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "thumbnail": { "anyOf": [{ "$ref": "#/$defs/asset_ref" }, { "type": "null" }] },
+        "scenarios": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,63}$" }
+        },
+        "updated_utc": { "$ref": "#/$defs/utc" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "classic" } } },
+          "then": { "properties": { "admission": { "const": "classic" }, "location_key": { "pattern": "^classic:" }, "editable": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "source": { "const": "qa-synthetic" } } },
+          "then": { "properties": { "location_key": { "pattern": "^qa-synthetic:" } } }
+        }
+      ]
+    },
+    "menu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["teasers", "preview_route", "visibility"],
+      "description": "Only the data the main menu needs (contract section 13). Layout and styling belong to the UI owner.",
+      "properties": {
+        "teasers": {
+          "type": "array",
+          "maxItems": 9,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target", "featured", "backdrop"],
+            "properties": {
+              "target": {
+                "oneOf": [
+                  { "type": "object", "additionalProperties": false, "required": ["region"], "properties": { "region": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/region_id" } } },
+                  { "type": "object", "additionalProperties": false, "required": ["bonus_route"], "properties": { "bonus_route": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/bonus_route_id" } } }
+                ]
+              },
+              "featured": {
+                "type": "array",
+                "maxItems": 3,
+                "uniqueItems": true,
+                "description": "Only classic or gameplay-accepted entries; empty is allowed and shows the region without a Play action.",
+                "items": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key" }
+              },
+              "backdrop": { "anyOf": [{ "$ref": "#/$defs/asset_ref" }, { "type": "null" }] }
+            }
+          }
+        },
+        "preview_route": {
+          "const": ["menu", "world-overview", "region-overview", "location-preview"],
+          "description": "Read-only screens. None of them constructs a City, touches GameState or draws from any RNG stream."
+        },
+        "visibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["play_requires", "edit_requires", "continue_requires"],
+          "properties": {
+            "play_requires": { "const": ["classic", "gameplay-accepted"] },
+            "edit_requires": { "const": "editable" },
+            "continue_requires": { "const": "latest-resumable-save" }
+          }
+        }
+      }
+    },
+    "plan_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location_key", "display_name", "placement", "facets", "setting", "story", "art_candidate", "counts_when"],
+      "properties": {
+        "location_key": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/$defs/location_key" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "placement": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/properties/world/properties/placement" },
+        "facets": { "$ref": "urn:pthd:schema:location-definition:1.0.0#/properties/facets" },
+        "setting": { "type": "string", "maxLength": 60 },
+        "story": { "type": "string", "maxLength": 400 },
+        "art_candidate": { "anyOf": [{ "$ref": "#/$defs/asset_ref" }, { "type": "null" }] },
+        "counts_when": { "const": "gameplay-accepted" }
+      }
+    }
+  }
+}

@@ -1,0 +1,710 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pthd:schema:location-definition:1.0.0",
+  "title": "Pizza Tycoon HD LocationDefinition 1.0.0",
+  "description": "One playable Expanded-mode location on the fixed 160x120 grid (ADR-02). Structure only: the semantic rules (road continuity, street access, actor roles, supplier coverage, affordable startup, ...) are validator rules listed in docs/studio/location-contract.md section 5. The document contains no floating-point numbers, so the canonical form for hashing is RFC 8785 (JCS). Classic cities are never LocationDefinitions: they are referenced as classic:* keys and built from the user's own game files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "location_key",
+    "revision",
+    "display",
+    "world",
+    "facets",
+    "grid",
+    "tiles",
+    "districts",
+    "district_cells",
+    "properties",
+    "actors",
+    "food_suppliers",
+    "ingredient_base_prices",
+    "building_names",
+    "economy",
+    "assets",
+    "provenance"
+  ],
+  "properties": {
+    "format": { "const": "pthd.location" },
+    "schema_version": {
+      "const": "1.0.0",
+      "description": "A reader accepts only the versions it was built for; unknown versions are refused with an update message (contract section 6.4)."
+    },
+    "location_key": {
+      "$ref": "#/$defs/location_key",
+      "not": { "pattern": "^classic:" },
+      "description": "Stable content identity. Never derived from or changed by the display name. The classic: namespace is reserved for the original ten cities."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647,
+      "description": "Monotonic per location_key. A published revision is immutable; any edit creates revision + 1."
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "short_name"],
+      "properties": {
+        "name": { "$ref": "#/$defs/latin1_text", "minLength": 1, "maxLength": 24 },
+        "short_name": {
+          "$ref": "#/$defs/latin1_text",
+          "minLength": 1,
+          "maxLength": 12,
+          "description": "Marker label on the regional overview and phone list rows."
+        },
+        "aliases": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/latin1_text", "minLength": 1, "maxLength": 24 }
+        },
+        "description": { "type": "string", "maxLength": 500 },
+        "tags": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" }
+        }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["placement", "geo"],
+      "description": "Where the location sits in the world catalog. Overview marker positions are not stored: the catalog projects geo into the region's geographic bounds (contract section 10.3). Art never positions a location.",
+      "properties": {
+        "placement": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "region"],
+              "properties": {
+                "kind": { "const": "region" },
+                "region": { "$ref": "#/$defs/region_id" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "route"],
+              "description": "Fictional bonus destination outside every real region and country (Santa's Pizza Village).",
+              "properties": {
+                "kind": { "const": "bonus" },
+                "route": { "$ref": "#/$defs/bonus_route_id" }
+              }
+            }
+          ]
+        },
+        "geo": {
+          "description": "Coordinate in micro-degrees. gazetteer = taken from a pinned licensed geodata source named in source_ref (authoritative); user-placed = inverse projection of a Studio click on the overview (fictional or approximate). Must be null for a bonus placement (validator WORLD-2).",
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["lon_e6", "lat_e6", "source"],
+              "properties": {
+                "lon_e6": { "type": "integer", "minimum": -180000000, "maximum": 180000000 },
+                "lat_e6": { "type": "integer", "minimum": -90000000, "maximum": 90000000 },
+                "source": { "enum": ["gazetteer", "user-placed"] },
+                "source_ref": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{2,63}$" }
+              }
+            }
+          ]
+        },
+        "label_side": { "enum": ["n", "e", "s", "w"] }
+      }
+    },
+    "facets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["countries", "states", "communities", "biomes", "settings", "seasons"],
+      "description": "Many-to-many discovery tags (contract section 10.5). Never identity, never a simulation input, never a substitute for research.",
+      "properties": {
+        "countries": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]{2}$", "description": "ISO 3166-1 alpha-2, lower case." }
+        },
+        "states": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]{2}-[a-z0-9]{1,3}$", "description": "ISO 3166-2 subdivision code, lower case." }
+        },
+        "communities": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,47}$", "description": "Reviewed community attribution slug; optional." }
+        },
+        "biomes": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["temperate", "continental", "mediterranean", "arid", "semi-arid", "tropical", "subtropical", "highland", "polar", "fictional-winter"] }
+        },
+        "settings": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["dense", "urban", "metropolitan", "coastal", "inland", "hillside", "village"] }
+        },
+        "seasons": {
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "enum": ["all-year", "winter", "spring", "summer", "autumn", "wet", "dry"] },
+          "description": "Seasonal art variants that exist for the location. Availability is never seasonal."
+        }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "district_cell_columns", "district_cell_rows", "tile_encoding"],
+      "description": "Fixed in 1.x (ADR-02): MAP_TILES_PER_ROW/COLUMN and NUMBER_OF_DISTRICT_CELL_COLUMNS/ROWS, src/core/util/Constants.h:15-18.",
+      "properties": {
+        "width": { "const": 160 },
+        "height": { "const": 120 },
+        "district_cell_columns": { "const": 20 },
+        "district_cell_rows": { "const": 15 },
+        "tile_encoding": { "const": "hex-rows-v1" }
+      }
+    },
+    "tiles": {
+      "type": "array",
+      "minItems": 120,
+      "maxItems": 120,
+      "description": "Row y = 0..119 top to bottom. Each row is 160 tile bytes as 320 lower-case hex digits, x = 0..159 left to right. Byte meaning is the dat/mapN.dat tile code (docs/blueprint/file-formats.md 1.9); runtime tile index = y * 160 + x.",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{320}$" }
+    },
+    "districts": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "Order defines the runtime DistrictIndex (0-based). At most 16 because cells are read through the low nibble (src/core/city/City.cpp:484-487). Validator: at least 1.",
+      "items": { "$ref": "#/$defs/district" }
+    },
+    "district_cells": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "description": "Cell row 0..14, each 20 cells as 2 hex digits; one cell covers 8x8 tiles. Value = index into districts (high nibble must be 0). Validator REF-2: value < number of districts.",
+      "items": { "type": "string", "pattern": "^(0[0-9a-f]){20}$" }
+    },
+    "properties": {
+      "type": "array",
+      "maxItems": 512,
+      "description": "Exactly one entry per premise tile (validator PROP-1). The runtime key of a property is its tile index, as in saves today (src/core/save/SaveGameCity.cpp:32).",
+      "items": { "$ref": "#/$defs/property" }
+    },
+    "actors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["realtors", "banks", "insurers", "mayor", "police", "mafia", "arms_dealers"],
+      "description": "Roles are explicit instead of positional (CityFactory.cpp:521-528). Runtime ActorIds are assigned in Classic order: realtors, banks, insurers, mayor, police, mafia, arms dealers (contract section 3.3). Validator ACT-1 sets the minimum counts.",
+      "properties": {
+        "realtors": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/realtor" } },
+        "banks": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/bank" } },
+        "insurers": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/insurer" } },
+        "mayor": { "anyOf": [{ "$ref": "#/$defs/mayor" }, { "type": "null" }] },
+        "police": { "type": "array", "maxItems": 9, "items": { "$ref": "#/$defs/police" } },
+        "mafia": { "type": "array", "maxItems": 2, "items": { "$ref": "#/$defs/underworld" } },
+        "arms_dealers": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/underworld" } }
+      }
+    },
+    "food_suppliers": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/food_supplier" }
+    },
+    "ingredient_base_prices": {
+      "type": "array",
+      "minItems": 96,
+      "maxItems": 96,
+      "description": "Base price in cents per ingredient id 0..95 (max_ingredient_count; same table as dat/cityN.pc offset 2026, CityFactory.cpp:220-230). Entries for unused ids must be 0; validator SUP-3 requires > 0 for every valid id.",
+      "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
+    },
+    "building_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["church", "bank", "cinema", "school", "disco", "bar", "department_store", "hotel"],
+      "description": "Named-building tiles (0x88..0xF8) take the next name of their type in map order, wrapping (CityFactory.cpp:119-127).",
+      "properties": {
+        "church": { "$ref": "#/$defs/name_list" },
+        "bank": { "$ref": "#/$defs/name_list" },
+        "cinema": { "$ref": "#/$defs/name_list" },
+        "school": { "$ref": "#/$defs/name_list" },
+        "disco": { "$ref": "#/$defs/name_list" },
+        "bar": { "$ref": "#/$defs/name_list" },
+        "department_store": { "$ref": "#/$defs/name_list" },
+        "hotel": { "$ref": "#/$defs/name_list" }
+      }
+    },
+    "economy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startup"],
+      "properties": {
+        "startup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reference_cash_cents", "min_affordable_premises"],
+          "description": "Inputs to validator ECON-1. The scenario check at game creation repeats it with the chosen characters' starting money.",
+          "properties": {
+            "reference_cash_cents": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+            "min_affordable_premises": { "type": "integer", "minimum": 1, "maximum": 50 }
+          }
+        },
+        "template": {
+          "anyOf": [{ "$ref": "#/$defs/template_ref" }, { "type": "null" }],
+          "description": "Provenance only. The runtime never looks a template up: all values are realized in this document."
+        },
+        "difficulty_hint": { "enum": ["easy", "normal", "hard"] }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tile_atlas", "medium_atlas", "attachments"],
+      "description": "Presentation only. Nothing here can change tiles, districts, prices or any other simulation input.",
+      "properties": {
+        "kit": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kit_id", "revision"],
+              "description": "Per-region art kit (contract section 10.6). Presentation only; a user may swap or override it in the project art layer.",
+              "properties": {
+                "kit_id": { "type": "string", "pattern": "^kit:[a-z0-9][a-z0-9-]{1,47}$" },
+                "revision": { "type": "integer", "minimum": 1 }
+              }
+            }
+          ]
+        },
+        "tile_atlas": { "$ref": "#/$defs/asset_binding" },
+        "medium_atlas": { "$ref": "#/$defs/asset_binding" },
+        "thumbnail": { "anyOf": [{ "$ref": "#/$defs/attachment_ref" }, { "type": "null" }] },
+        "attachments": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/attachment" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "generator", "created_utc"],
+      "properties": {
+        "origin": { "enum": ["generated", "manual", "imported", "mixed"] },
+        "project_id": { "$ref": "#/$defs/project_id" },
+        "generator": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "version", "template", "settings_sha256", "seed"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{2,63}$" },
+                "version": { "$ref": "#/$defs/semver" },
+                "template": { "$ref": "#/$defs/template_ref" },
+                "settings_sha256": { "$ref": "#/$defs/sha256" },
+                "seed": { "$ref": "#/$defs/u64_decimal" },
+                "stage_seeds": {
+                  "type": "object",
+                  "maxProperties": 16,
+                  "propertyNames": { "$ref": "#/$defs/stage_id" },
+                  "additionalProperties": { "$ref": "#/$defs/u64_decimal" }
+                }
+              }
+            }
+          ]
+        },
+        "created_utc": { "$ref": "#/$defs/utc" }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonicalization", "definition_sha256"],
+      "description": "Required once admitted (validator INT-1). definition_sha256 = SHA-256 of the JCS form of this document with the integrity member removed.",
+      "properties": {
+        "canonicalization": { "const": "jcs-rfc8785" },
+        "definition_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  },
+  "$defs": {
+    "location_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}:[a-z0-9][a-z0-9-]{1,63}$",
+      "maxLength": 96
+    },
+    "entity_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,47}$",
+      "description": "Unique across the whole definition (validator ID-1)."
+    },
+    "project_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "region_id": {
+      "enum": [
+        "north-america",
+        "latin-america-caribbean",
+        "europe",
+        "north-africa-western-asia",
+        "sub-saharan-africa",
+        "central-south-asia",
+        "east-southeast-asia",
+        "oceania-pacific"
+      ]
+    },
+    "bonus_route_id": {
+      "enum": ["north-pole"],
+      "description": "Fictional bonus destinations shown on the global overview, never inside a real region or country."
+    },
+    "stage_id": {
+      "enum": ["terrain", "roads", "districts", "premises", "actors", "suppliers", "economy", "names", "placement"]
+    },
+    "semver": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "u64_decimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "description": "Unsigned 64-bit value as decimal text (JSON numbers above 2^53 are not portable). Validator rejects values above 18446744073709551615."
+    },
+    "utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "latin1_text": {
+      "type": "string",
+      "pattern": "^[\\u0020-\\u007e\\u00a0-\\u00ff]*$",
+      "description": "Printable ISO-8859-1 only: the original bitmap fonts and the binary city records are ISO-8859-1 (CityFactory.cpp:210,256,327)."
+    },
+    "name_list": {
+      "type": "array",
+      "maxItems": 24,
+      "items": { "$ref": "#/$defs/latin1_text", "minLength": 1, "maxLength": 15 }
+    },
+    "u8": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "u16": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "tile_xy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 159 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 119 }
+      }
+    },
+    "district": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "number",
+        "type",
+        "traffic_intensity",
+        "crime_stats",
+        "control_screen_alternate_color",
+        "demographic_factor",
+        "demographic_base",
+        "average_income_factor",
+        "service_speed_sensitivity",
+        "min_standard_pizzas",
+        "min_user_pizzas",
+        "average_premise_size",
+        "average_size_modifier",
+        "price_level",
+        "rent_level",
+        "premises_availability",
+        "population_weights_milli"
+      ],
+      "description": "Field meanings follow DistrictDataRaw (CityFactory.cpp:36-64, docs/blueprint/file-formats.md 1.8).",
+      "properties": {
+        "id": { "$ref": "#/$defs/entity_id" },
+        "name": { "$ref": "#/$defs/latin1_text", "minLength": 1, "maxLength": 23 },
+        "number": { "type": "integer", "minimum": 1, "maximum": 255, "description": "District::id() (raw byte 1, usually index + 1)." },
+        "type": { "enum": ["residential", "industrial", "business", "leisure", "shopping", "traffic"] },
+        "traffic_intensity": { "$ref": "#/$defs/u8" },
+        "crime_stats": { "$ref": "#/$defs/u8" },
+        "control_screen_alternate_color": { "type": "boolean" },
+        "demographic_factor": { "$ref": "#/$defs/u8" },
+        "demographic_base": { "$ref": "#/$defs/u8" },
+        "average_income_factor": { "$ref": "#/$defs/u8" },
+        "service_speed_sensitivity": { "$ref": "#/$defs/u8" },
+        "min_standard_pizzas": { "type": "integer", "minimum": 0, "maximum": 25, "description": "Decoded value (raw byte / 10)." },
+        "min_user_pizzas": { "type": "integer", "minimum": 0, "maximum": 15, "description": "Decoded value (raw byte >> 4)." },
+        "average_premise_size": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "average_size_modifier": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "price_level": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Dollars per tile; validator ECON-2 caps it at 10737." },
+        "rent_level": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Dollars per tile per month (Property::get_monthly_rent, Property.cpp:276-282)." },
+        "premises_availability": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "population_weights_milli": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "description": "Consumer-type order children, young people, blue collar, white collar, business people, senior citizens. Runtime float = value / 1000 (the classic file stores f32).",
+          "items": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+        },
+        "legacy_bytes": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{0,208}$",
+          "description": "Optional uninterpreted bytes of a converted classic record, kept for round trips only."
+        }
+      }
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "tile",
+        "street_side",
+        "interior",
+        "kitchen",
+        "entrance_offset",
+        "kitchen_entry_offset",
+        "realtor",
+        "initial_status",
+        "purchase_price_cents"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/entity_id" },
+        "label": { "$ref": "#/$defs/latin1_text", "maxLength": 24 },
+        "kind": { "enum": ["business_premise", "depot"] },
+        "tile": { "$ref": "#/$defs/tile_xy" },
+        "street_side": {
+          "enum": ["n", "e", "s", "w"],
+          "description": "The customer entrance faces this neighbour tile; validator PROP-3 requires a road or path tile there that belongs to the road network."
+        },
+        "interior": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["w", "h"],
+          "description": "Interior size in restaurant tiles; Classic range min_premise_side..max_premise_side (CityFactory.cpp:680-681).",
+          "properties": {
+            "w": { "type": "integer", "minimum": 10, "maximum": 20 },
+            "h": { "type": "integer", "minimum": 10, "maximum": 20 }
+          }
+        },
+        "kitchen": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["w", "h"],
+          "properties": {
+            "w": { "type": "integer", "minimum": 12, "maximum": 20 },
+            "h": { "type": "integer", "minimum": 7, "maximum": 20 }
+          }
+        },
+        "entrance_offset": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18,
+          "description": "First tile of the 3-tile doorway in the bottom wall (WalkNavigation.cpp:241-261). Validator PROP-2: <= interior.w - 2."
+        },
+        "kitchen_entry_offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 13,
+          "description": "Validator PROP-2: <= kitchen.h - 7 (Classic draw range, CityFactory.cpp:718)."
+        },
+        "realtor": { "$ref": "#/$defs/entity_id" },
+        "initial_status": { "enum": ["not_available", "for_sale", "for_rent", "for_sale_rent"] },
+        "purchase_price_cents": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+      }
+    },
+    "actor_common": {
+      "type": "object",
+      "required": ["id", "name", "head", "phone"],
+      "properties": {
+        "id": { "$ref": "#/$defs/entity_id" },
+        "name": { "$ref": "#/$defs/latin1_text", "minLength": 1, "maxLength": 23 },
+        "head": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "Portrait sheet bob/typ{head}e.bob (Actor.cpp:71-75; classic file stores head - 1). At most 25: ActorView indexes the 25-entry eye-offset tables with head - 1 (ActorView.inl:28-36, 290-299)."
+        },
+        "phone": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "Decoded phone number; 0 = none. Validator ID-2: non-zero numbers unique."
+        }
+      }
+    },
+    "realtor": {
+      "allOf": [{ "$ref": "#/$defs/actor_common" }],
+      "unevaluatedProperties": false,
+      "type": "object",
+      "required": ["rip_off_chance"],
+      "properties": {
+        "rip_off_chance": { "$ref": "#/$defs/u8" },
+        "unknown_1": { "$ref": "#/$defs/u8" },
+        "unknown_2": { "$ref": "#/$defs/u8" }
+      }
+    },
+    "bank": {
+      "allOf": [{ "$ref": "#/$defs/actor_common" }],
+      "unevaluatedProperties": false,
+      "type": "object",
+      "required": ["interest_rate_modifier", "loan_amount_multiplier"],
+      "properties": {
+        "interest_rate_modifier": { "$ref": "#/$defs/u8" },
+        "loan_amount_multiplier": { "$ref": "#/$defs/u8" }
+      }
+    },
+    "insurer": {
+      "allOf": [{ "$ref": "#/$defs/actor_common" }],
+      "unevaluatedProperties": false,
+      "type": "object",
+      "required": ["premium_factor", "willingness_threshold", "rejection_percentage"],
+      "properties": {
+        "premium_factor": { "$ref": "#/$defs/u8" },
+        "willingness_threshold": { "$ref": "#/$defs/u8" },
+        "rejection_percentage": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "mayor": {
+      "allOf": [{ "$ref": "#/$defs/actor_common" }],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "police": {
+      "allOf": [{ "$ref": "#/$defs/actor_common" }],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "underworld": {
+      "allOf": [{ "$ref": "#/$defs/actor_common" }],
+      "unevaluatedProperties": false,
+      "type": "object",
+      "required": ["crime_danger_level"],
+      "properties": {
+        "crime_danger_level": { "$ref": "#/$defs/u8" },
+        "unknown_1": { "$ref": "#/$defs/u8" },
+        "unknown_2": { "$ref": "#/$defs/u8" },
+        "unknown_3": { "$ref": "#/$defs/u8" }
+      }
+    },
+    "food_supplier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number",
+        "category",
+        "name",
+        "quality",
+        "price_factor",
+        "head",
+        "minimum_contract_dollars",
+        "loyalty_level_dollars",
+        "price_levels"
+      ],
+      "description": "Record of dat/cityN.pc food suppliers (CityFactory.cpp:232-318). Saves find a supplier by number (SaveGameCity.cpp:716-735).",
+      "properties": {
+        "id": { "$ref": "#/$defs/entity_id" },
+        "number": { "$ref": "#/$defs/u8" },
+        "category": { "enum": ["vegetables", "meat", "fruit", "cheese"] },
+        "name": { "$ref": "#/$defs/latin1_text", "minLength": 1, "maxLength": 25 },
+        "quality": { "$ref": "#/$defs/u8" },
+        "price_factor": { "$ref": "#/$defs/u8" },
+        "head": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "The supplier conversation draws this head through ActorView (SupplierConversation.cpp:62), so the same 1..25 bound applies."
+        },
+        "minimum_contract_dollars": { "$ref": "#/$defs/u16" },
+        "loyalty_level_dollars": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "price_levels": {
+          "type": "array",
+          "minItems": 22,
+          "maxItems": 22,
+          "description": "Price level per product within the category; 0 = not sold.",
+          "items": { "$ref": "#/$defs/u8" }
+        }
+      }
+    },
+    "template_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "sha256"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9.-]{2,63}$" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "contained_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*\\\\)(?!.*:)[A-Za-z0-9._/-]+$",
+      "description": "Relative to the location's bundle folder. No absolute paths, '..', backslashes or drive letters (validator ASSET-1 re-checks after normalisation)."
+    },
+    "asset_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "fallback"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^(classic:gfx/[a-z0-9_]{1,16}|bundle:[A-Za-z0-9._/-]{1,200})$",
+          "description": "classic:gfx/landsym = the user's original atlas (AssetMetadata.cpp:82), HD pack applies as today. bundle: = indexed art shipped in the location bundle."
+        },
+        "fallback": { "enum": ["classic", "placeholder"] }
+      }
+    },
+    "attachment_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachment"],
+      "properties": { "attachment": { "$ref": "#/$defs/entity_id" } }
+    },
+    "attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "file", "state", "source"],
+      "description": "Optional art attached after generation (ADR-03). Never a simulation input.",
+      "properties": {
+        "id": { "$ref": "#/$defs/entity_id" },
+        "role": { "enum": ["thumbnail", "overview-marker", "tile-hd-overlay", "storefront-hd", "concept"] },
+        "file": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "bytes", "width", "height"],
+          "properties": {
+            "path": { "$ref": "#/$defs/contained_path" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "bytes": { "type": "integer", "minimum": 1, "maximum": 16777216 },
+            "width": { "type": "integer", "minimum": 1, "maximum": 4096 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 4096 }
+          }
+        },
+        "state": { "enum": ["quarantine", "approved", "rejected"] },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "rights_status"],
+          "properties": {
+            "type": { "enum": ["generated", "operator_supplied", "open_source", "placeholder"] },
+            "provider": { "type": "string", "maxLength": 64 },
+            "job_id": { "type": "string", "maxLength": 128 },
+            "rights_status": { "enum": ["unknown", "local_only", "redistributable", "authorized", "prohibited"] }
+          }
+        }
+      }
+    }
+  }
+}

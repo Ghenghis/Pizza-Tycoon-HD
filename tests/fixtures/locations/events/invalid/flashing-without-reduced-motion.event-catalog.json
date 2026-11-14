@@ -1,0 +1,52 @@
+{
+  "format": "pthd.event-catalog",
+  "schema_version": "1.0.0",
+  "catalog_id": "pthd-events:invalid-flashing",
+  "catalog_revision": 1,
+  "sources": [
+    {
+      "source_id": "gregorian-fixed-dates",
+      "title": "Fixed civil dates (proleptic Gregorian)",
+      "publisher": "contract",
+      "reference": "fixed month/day rules need no table",
+      "verification": "verified"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "pthd-events:new-year-fireworks",
+      "revision": 1,
+      "title": "New Year fireworks",
+      "category": "secular-holiday",
+      "alternative_of": null,
+      "applicability": {
+        "scope": "everywhere",
+        "hemisphere": "any"
+      },
+      "date_rule": {
+        "kind": "fixed-date",
+        "month": 1,
+        "day": 1
+      },
+      "window": {
+        "before_days": 1,
+        "after_days": 0
+      },
+      "priority": 60,
+      "overlays": [
+        {
+          "slot": "effect",
+          "asset_id": "events/fireworks",
+          "asset_revision": "planned-v1",
+          "motion": "flashing",
+          "reduced_motion_replacement": null
+        }
+      ],
+      "options": {
+        "optional": true,
+        "default_enabled": true,
+        "audio": false
+      }
+    }
+  ]
+}

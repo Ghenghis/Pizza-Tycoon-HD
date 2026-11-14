@@ -1,0 +1,193 @@
+{
+  "format": "pthd.event-catalog",
+  "schema_version": "1.0.0",
+  "catalog_id": "pthd-events:core",
+  "catalog_revision": 1,
+  "sources": [
+    {
+      "source_id": "gregorian-fixed-dates",
+      "title": "Fixed civil dates (proleptic Gregorian)",
+      "publisher": "contract",
+      "reference": "fixed month/day rules need no table",
+      "verification": "verified"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "pthd-events:christmas-decor",
+      "revision": 1,
+      "title": "Christmas decorations",
+      "category": "religious-holiday",
+      "alternative_of": null,
+      "applicability": {
+        "scope": "everywhere",
+        "hemisphere": "any"
+      },
+      "date_rule": {
+        "kind": "fixed-date",
+        "month": 12,
+        "day": 25
+      },
+      "window": {
+        "before_days": 24,
+        "after_days": 7
+      },
+      "priority": 50,
+      "overlays": [
+        {
+          "slot": "city-building",
+          "asset_id": "events/christmas-lights",
+          "asset_revision": "planned-v1",
+          "motion": "subtle",
+          "reduced_motion_replacement": {
+            "slot": "city-building",
+            "asset_id": "events/winter-lights-static",
+            "asset_revision": "planned-v1",
+            "motion": "static",
+            "reduced_motion_replacement": null
+          }
+        },
+        {
+          "slot": "restaurant-decor",
+          "asset_id": "events/christmas-tree",
+          "asset_revision": "planned-v1",
+          "motion": "static",
+          "reduced_motion_replacement": null
+        }
+      ],
+      "options": {
+        "optional": true,
+        "default_enabled": true,
+        "audio": false
+      }
+    },
+    {
+      "event_id": "pthd-events:winter-lights",
+      "revision": 1,
+      "title": "Winter lights",
+      "category": "secular-holiday",
+      "alternative_of": "pthd-events:christmas-decor",
+      "applicability": {
+        "scope": "everywhere",
+        "hemisphere": "any"
+      },
+      "date_rule": {
+        "kind": "fixed-date",
+        "month": 12,
+        "day": 21
+      },
+      "window": {
+        "before_days": 20,
+        "after_days": 11
+      },
+      "priority": 40,
+      "overlays": [
+        {
+          "slot": "city-building",
+          "asset_id": "events/winter-lights-static",
+          "asset_revision": "planned-v1",
+          "motion": "static",
+          "reduced_motion_replacement": null
+        }
+      ],
+      "options": {
+        "optional": true,
+        "default_enabled": false,
+        "audio": false
+      }
+    },
+    {
+      "event_id": "pthd-events:new-year-fireworks",
+      "revision": 1,
+      "title": "New Year fireworks",
+      "category": "secular-holiday",
+      "alternative_of": null,
+      "applicability": {
+        "scope": "everywhere",
+        "hemisphere": "any"
+      },
+      "date_rule": {
+        "kind": "fixed-date",
+        "month": 1,
+        "day": 1
+      },
+      "window": {
+        "before_days": 1,
+        "after_days": 0
+      },
+      "priority": 60,
+      "overlays": [
+        {
+          "slot": "effect",
+          "asset_id": "events/fireworks",
+          "asset_revision": "planned-v1",
+          "motion": "flashing",
+          "reduced_motion_replacement": {
+            "slot": "effect",
+            "asset_id": "events/fireworks-static",
+            "asset_revision": "planned-v1",
+            "motion": "static",
+            "reduced_motion_replacement": null
+          }
+        }
+      ],
+      "options": {
+        "optional": true,
+        "default_enabled": true,
+        "audio": false
+      }
+    },
+    {
+      "event_id": "pthd-events:north-pole-christmas",
+      "revision": 1,
+      "title": "Village Christmas",
+      "category": "location-theme",
+      "alternative_of": null,
+      "applicability": {
+        "scope": "listed",
+        "bonus_routes": [
+          "north-pole"
+        ],
+        "hemisphere": "any"
+      },
+      "date_rule": {
+        "kind": "fixed-date",
+        "month": 12,
+        "day": 25
+      },
+      "window": {
+        "before_days": 30,
+        "after_days": 10
+      },
+      "priority": 70,
+      "overlays": [
+        {
+          "slot": "people-costume",
+          "asset_id": "events/santa-host",
+          "asset_revision": "planned-v1",
+          "motion": "static",
+          "reduced_motion_replacement": null,
+          "costume_id": "holiday:winter-server-costume"
+        },
+        {
+          "slot": "effect",
+          "asset_id": "events/aurora",
+          "asset_revision": "planned-v1",
+          "motion": "animated",
+          "reduced_motion_replacement": {
+            "slot": "effect",
+            "asset_id": "events/aurora-static",
+            "asset_revision": "planned-v1",
+            "motion": "static",
+            "reduced_motion_replacement": null
+          }
+        }
+      ],
+      "options": {
+        "optional": true,
+        "default_enabled": true,
+        "audio": false
+      }
+    }
+  ]
+}

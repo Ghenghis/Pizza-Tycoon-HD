@@ -1,0 +1,60 @@
+{
+  "format": "pthd.asset-admission",
+  "schema_version": "1.0.0",
+  "asset_id": "location-art/toronto-ontario-canada",
+  "revision": "candidate-v1",
+  "kind": "location-reference-backdrop",
+  "role": "location preview / mood reference (not a map)",
+  "state": "candidate",
+  "authenticity": "generic-modern-reference",
+  "location_key": "pthd:toronto-ontario-canada",
+  "region": "north-america",
+  "provenance": {
+    "source_type": "generated",
+    "model": "juggernautXL_v9.safetensors",
+    "seed": "2026113400",
+    "prompt_id": "4a070577-c157-43d2-8f9d-2babc4a3da78",
+    "workflow": {
+      "path": "world-region-art/20261114T183013Z/toronto-ontario-canada.workflow.json",
+      "sha256": null
+    },
+    "batch_receipt": "world-region-art/20261114T183013Z/receipt.json",
+    "hardware": "RTX 3090 Ti"
+  },
+  "native": {
+    "path": "comfy-out/world-regions/20261114T183013Z/01-toronto-ontario-canada-native_00001_.png",
+    "sha256": "1a0c04bb533b5751e2c4f584ab6467b203e9e47e1dfc8dcff10dfdc41cf9fc30",
+    "bytes": 2102539,
+    "width": 1536,
+    "height": 960
+  },
+  "derived": [
+    {
+      "path": "comfy-out/world-regions/20261114T183013Z/01-toronto-ontario-canada-4k_00001_.png",
+      "sha256": "67fc167a24bf7b67980b9da8d95367f3ccf1f0543a596aa214258a4628b47ecc",
+      "bytes": 8055884,
+      "width": 3840,
+      "height": 2400,
+      "method": "lanczos-resize",
+      "purpose": "display size; not additional authored detail"
+    }
+  ],
+  "rights": {
+    "status": "unknown",
+    "license": "Checkpoint/output redistribution policy must be confirmed before release"
+  },
+  "review": [
+    {
+      "to_state": "candidate",
+      "reviewer_kind": "automated-check",
+      "date_utc": "2026-11-14T18:30:13Z",
+      "notes": "Generated; contact-sheet review required; not admitted runtime content.",
+      "checks": {
+        "decode": "not-run",
+        "baked-text": "not-run",
+        "reference-review": "not-run"
+      }
+    }
+  ],
+  "semantic_notes": "Not a playable map, tile set, sprite animation or costume; baked signs need review/cleanup."
+}

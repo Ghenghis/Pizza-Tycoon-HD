@@ -1,0 +1,42 @@
+{
+  "format": "pthd.fixture-expectations",
+  "contract": "docs/studio/location-contract.md 1.0.0",
+  "stages": "SCHEMA-1 = JSON Schema (docs/studio/*.schema.json) fails, semantic rules are not run. Otherwise every semantic rule runs and all errors are reported.",
+  "fixtures": [
+    { "path": "valid/harbor-bay.location.json", "schema": "location.schema.json", "expect": "pass" },
+    { "path": "valid/harbor-bay.project.json", "schema": "project.schema.json", "expect": "pass" },
+    { "path": "invalid/disconnected-roads.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["ROAD-3"] },
+    { "path": "invalid/unreachable-door.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["PROP-3"] },
+    { "path": "invalid/impossible-budget.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["ECON-1"] },
+    { "path": "invalid/duplicate-ids.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["ID-1"] },
+    { "path": "invalid/out-of-bounds.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["SCHEMA-1"], "pointer": "/properties/0/tile/x" },
+    { "path": "invalid/district-cell-out-of-range.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["REF-2"] },
+    { "path": "invalid/missing-mayor.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["ACT-1"] },
+    { "path": "invalid/owned-shop-front.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["TILE-1"] },
+    { "path": "invalid/bonus-with-geo.location.json", "schema": "location.schema.json", "expect": "fail", "rules": ["WORLD-2"] },
+    { "path": "catalog/world-catalog-v1.json", "schema": "catalog.schema.json", "expect": "pass", "warnings": ["CAT-3"] },
+    { "path": "catalog-qa/qa-35.catalog.json", "schema": "catalog.schema.json", "expect": "pass", "ui_only": true },
+    { "path": "catalog-qa/qa-64.catalog.json", "schema": "catalog.schema.json", "expect": "pass", "ui_only": true },
+    { "path": "catalog-qa/qa-96.catalog.json", "schema": "catalog.schema.json", "expect": "pass", "ui_only": true },
+    { "path": "catalog-qa/qa-1000.catalog.json", "schema": "catalog.schema.json", "expect": "pass", "ui_only": true },
+    { "path": "catalog-qa/qa-uneven-empty.catalog.json", "schema": "catalog.schema.json", "expect": "pass", "ui_only": true },
+    { "path": "scenarios/north-pole-cozy-village.scenario.json", "schema": "scenario.schema.json", "expect": "pass" },
+    { "path": "scenarios/north-pole-workshop-rush.scenario.json", "schema": "scenario.schema.json", "expect": "pass" },
+    { "path": "scenarios/north-pole-pizza-empire.scenario.json", "schema": "scenario.schema.json", "expect": "pass" },
+    { "path": "scenarios/invalid/unsupported-milestone.scenario.json", "schema": "scenario.schema.json", "expect": "fail", "rules": ["SCHEMA-1"], "pointer": "/objectives/goal/all_of/0/milestone" },
+    { "path": "scenarios/invalid/win-ends-sandbox.scenario.json", "schema": "scenario.schema.json", "expect": "fail", "rules": ["SCN-3"] },
+    { "path": "events/core-events.event-catalog.json", "schema": "event-catalog.schema.json", "expect": "pass" },
+    { "path": "events/invalid/flashing-without-reduced-motion.event-catalog.json", "schema": "event-catalog.schema.json", "expect": "fail", "rules": ["EVT-4"] },
+    { "path": "cast/holiday-cast.cast-catalog.json", "schema": "cast-catalog.schema.json", "expect": "pass", "entries": 20 },
+    { "path": "assets/toronto-candidate.asset.json", "schema": "asset-admission.schema.json", "expect": "pass" },
+    { "path": "assets/north-pole-candidate.asset.json", "schema": "asset-admission.schema.json", "expect": "pass" },
+    { "path": "assets/world-overview-geodata.asset.json", "schema": "asset-admission.schema.json", "expect": "pass" },
+    { "path": "assets/invalid/admitted-unknown-rights.asset.json", "schema": "asset-admission.schema.json", "expect": "fail", "rules": ["SCHEMA-1"], "pointer": "/rights/status" },
+    { "path": "assets/invalid/admitted-generic-reference.asset.json", "schema": "asset-admission.schema.json", "expect": "fail", "rules": ["SCHEMA-1"], "pointer": "/authenticity" }
+  ],
+  "oracles": [
+    { "path": "catalog-qa/expected-pages.json", "for": "catalog-qa/*.catalog.json" },
+    { "path": "catalog-qa/page-math-cases.json", "for": "paging and clamping (UI only)" },
+    { "path": "events/resolution-cases.json", "for": "events/core-events.event-catalog.json" }
+  ]
+}

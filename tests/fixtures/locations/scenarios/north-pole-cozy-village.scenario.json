@@ -1,0 +1,95 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:north-pole-cozy-village",
+  "revision": 1,
+  "preset_group": "pthd:north-pole",
+  "display": {
+    "title": "Cozy Village",
+    "subtitle": "Santa's Pizza Village",
+    "summary": "A forgiving start in a ready-made village pizzeria.",
+    "intro": "Welcome to Santa's Pizza Village. Your pizzeria is ready: build a menu, keep the ovens busy and make the workshop neighborhood happy.",
+    "goal_summary": "Reach $100,000 in cash and earn your first star.",
+    "victory_summary": "The village loves your pizzeria. Keep playing as long as you like.",
+    "difficulty_label": "forgiving"
+  },
+  "roster": [
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": "current-published"
+    }
+  ],
+  "start": {
+    "location_key": "pthd:santas-pizza-village",
+    "game_mode": "quickstart",
+    "difficulty": 1,
+    "quickstart_size": "big"
+  },
+  "rules": {
+    "win": {
+      "mode": "none"
+    },
+    "travel": {
+      "model": "disabled"
+    },
+    "game_rules": {}
+  },
+  "objectives": {
+    "goal": {
+      "all_of": [
+        {
+          "objective_id": "assets-100k",
+          "milestone": "HasAssetsOf100K",
+          "polarity": "achieve",
+          "label": "Build up $100,000 in cash",
+          "within_game_days": null
+        },
+        {
+          "objective_id": "first-star",
+          "milestone": "AwardedFirstStar",
+          "polarity": "achieve",
+          "label": "Earn your restaurant's first star",
+          "within_game_days": null
+        }
+      ]
+    },
+    "optional": [
+      {
+        "objective_id": "quick-service",
+        "milestone": "AverageServiceTimeLessThan4Minutes",
+        "polarity": "achieve",
+        "label": "Serve in under 4 minutes on average",
+        "within_game_days": null
+      },
+      {
+        "objective_id": "no-loans",
+        "milestone": "TakesOutFirstLoan",
+        "polarity": "avoid",
+        "label": "Grow without a bank loan",
+        "within_game_days": null
+      }
+    ],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  },
+  "presentation": {
+    "suggested_event_mode": "in-game-calendar",
+    "decoration_events": [
+      "pthd-events:north-pole-christmas"
+    ],
+    "default_costumes": [
+      {
+        "role": "staff:waiter",
+        "costume_id": "holiday:winter-server-costume"
+      },
+      {
+        "role": "staff:chef",
+        "costume_id": "holiday:winter-chef-costume"
+      }
+    ],
+    "host_character": "holiday:santa"
+  }
+}

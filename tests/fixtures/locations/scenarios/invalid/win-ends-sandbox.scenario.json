@@ -1,0 +1,74 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:north-pole-invalid-win-ends-sandbox",
+  "revision": 1,
+  "preset_group": "pthd:north-pole",
+  "display": {
+    "title": "Invalid: win vs sandbox",
+    "subtitle": "fixture",
+    "summary": "Must fail SCN-3: a market-share win ends the game, contradicting continue-sandbox.",
+    "intro": "x",
+    "goal_summary": "x",
+    "victory_summary": "x",
+    "difficulty_label": "standard"
+  },
+  "roster": [
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": "current-published"
+    }
+  ],
+  "start": {
+    "location_key": "pthd:santas-pizza-village",
+    "game_mode": "freemode",
+    "difficulty": 3
+  },
+  "rules": {
+    "win": {
+      "mode": "market_share",
+      "scope": "any_location",
+      "percent": 5
+    },
+    "travel": {
+      "model": "disabled"
+    },
+    "game_rules": {}
+  },
+  "objectives": {
+    "goal": {
+      "all_of": [
+        {
+          "objective_id": "assets-100k",
+          "milestone": "HasAssetsOf100K",
+          "polarity": "achieve",
+          "label": "Build up $100,000 in cash",
+          "within_game_days": null
+        }
+      ]
+    },
+    "optional": [],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  },
+  "presentation": {
+    "suggested_event_mode": "in-game-calendar",
+    "decoration_events": [
+      "pthd-events:north-pole-christmas"
+    ],
+    "default_costumes": [
+      {
+        "role": "staff:waiter",
+        "costume_id": "holiday:winter-server-costume"
+      },
+      {
+        "role": "staff:chef",
+        "costume_id": "holiday:winter-chef-costume"
+      }
+    ],
+    "host_character": "holiday:santa"
+  }
+}

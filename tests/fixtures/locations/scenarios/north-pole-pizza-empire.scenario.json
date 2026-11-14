@@ -1,0 +1,101 @@
+{
+  "format": "pthd.scenario",
+  "schema_version": "1.0.0",
+  "scenario_id": "pthd:north-pole-pizza-empire",
+  "revision": 1,
+  "preset_group": "pthd:north-pole",
+  "display": {
+    "title": "Pizza Empire",
+    "subtitle": "Santa's Pizza Empire",
+    "summary": "A longer expansion and reputation goal across the whole village.",
+    "intro": "Start small, then spread across the village square, the workshop lanes and beyond.",
+    "goal_summary": "Own five restaurants, hold 20% of the village market and $500,000 in cash.",
+    "victory_summary": "Santa's Pizza Empire is real. Keep playing as long as you like.",
+    "difficulty_label": "long"
+  },
+  "roster": [
+    {
+      "location_key": "pthd:santas-pizza-village",
+      "pin": "current-published"
+    }
+  ],
+  "start": {
+    "location_key": "pthd:santas-pizza-village",
+    "game_mode": "freemode",
+    "difficulty": 3
+  },
+  "rules": {
+    "win": {
+      "mode": "none"
+    },
+    "travel": {
+      "model": "disabled"
+    },
+    "game_rules": {}
+  },
+  "objectives": {
+    "goal": {
+      "all_of": [
+        {
+          "objective_id": "five-restaurants",
+          "milestone": "HasFiveRestaurants",
+          "polarity": "achieve",
+          "label": "Own five restaurants",
+          "within_game_days": null
+        },
+        {
+          "objective_id": "market-20",
+          "milestone": "Achieved20PctMarketShareInCity",
+          "polarity": "achieve",
+          "label": "Reach 20% market share in the village",
+          "within_game_days": null
+        },
+        {
+          "objective_id": "assets-500k",
+          "milestone": "YouHaveAssetsOf500K",
+          "polarity": "achieve",
+          "label": "Build up $500,000 in cash",
+          "within_game_days": null
+        }
+      ]
+    },
+    "optional": [
+      {
+        "objective_id": "all-districts",
+        "milestone": "RepresentedInAllAreas",
+        "polarity": "achieve",
+        "label": "Have a restaurant in every district",
+        "within_game_days": null
+      },
+      {
+        "objective_id": "three-stars",
+        "milestone": "FirstThreeStarRestaurant",
+        "polarity": "achieve",
+        "label": "Run a three-star restaurant",
+        "within_game_days": null
+      }
+    ],
+    "after_goal": "continue-sandbox"
+  },
+  "availability": {
+    "always_available": true,
+    "calendar_lock": false
+  },
+  "presentation": {
+    "suggested_event_mode": "in-game-calendar",
+    "decoration_events": [
+      "pthd-events:north-pole-christmas"
+    ],
+    "default_costumes": [
+      {
+        "role": "staff:waiter",
+        "costume_id": "holiday:winter-server-costume"
+      },
+      {
+        "role": "staff:chef",
+        "costume_id": "holiday:winter-chef-costume"
+      }
+    ],
+    "host_character": "holiday:santa"
+  }
+}

@@ -1,0 +1,601 @@
+{
+  "format": "pthd.catalog-qa-expectations",
+  "ui_only": true,
+  "catalogs": [
+    {
+      "catalog": "qa-35",
+      "total": 35,
+      "regions": {
+        "north-america": {
+          "count": 6,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 6,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d35-r1-0001",
+          "last_key": "qa-synthetic:d35-r1-0006",
+          "empty_state": false
+        },
+        "latin-america-caribbean": {
+          "count": 3,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 3,
+          "last_page_items_phone": 3,
+          "first_key": "qa-synthetic:d35-r2-0001",
+          "last_key": "qa-synthetic:d35-r2-0002",
+          "empty_state": false
+        },
+        "europe": {
+          "count": 10,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 10,
+          "last_page_items_phone": 4,
+          "first_key": "qa-synthetic:d35-r3-0001",
+          "last_key": "qa-synthetic:d35-r3-0006",
+          "empty_state": false
+        },
+        "north-africa-western-asia": {
+          "count": 3,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 3,
+          "last_page_items_phone": 3,
+          "first_key": "qa-synthetic:d35-r4-0001",
+          "last_key": "qa-synthetic:d35-r4-0002",
+          "empty_state": false
+        },
+        "sub-saharan-africa": {
+          "count": 3,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 3,
+          "last_page_items_phone": 3,
+          "first_key": "qa-synthetic:d35-r5-0001",
+          "last_key": "qa-synthetic:d35-r5-0002",
+          "empty_state": false
+        },
+        "central-south-asia": {
+          "count": 3,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 3,
+          "last_page_items_phone": 3,
+          "first_key": "qa-synthetic:d35-r6-0001",
+          "last_key": "qa-synthetic:d35-r6-0002",
+          "empty_state": false
+        },
+        "east-southeast-asia": {
+          "count": 3,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 3,
+          "last_page_items_phone": 3,
+          "first_key": "qa-synthetic:d35-r7-0001",
+          "last_key": "qa-synthetic:d35-r7-0002",
+          "empty_state": false
+        },
+        "oceania-pacific": {
+          "count": 3,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 3,
+          "last_page_items_phone": 3,
+          "first_key": "qa-synthetic:d35-r8-0001",
+          "last_key": "qa-synthetic:d35-r8-0002",
+          "empty_state": false
+        }
+      },
+      "all_locations": {
+        "count": 35,
+        "pages_desktop": 3,
+        "pages_phone": 6,
+        "first_key": "qa-synthetic:d35-r1-0001",
+        "last_key": "qa-synthetic:d35-bonus-0001"
+      },
+      "bonus_routes": {
+        "north-pole": {
+          "count": 1,
+          "pages_desktop": 1,
+          "pages_phone": 1
+        }
+      },
+      "distribution": [
+        6,
+        3,
+        10,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "bonus": 1
+    },
+    {
+      "catalog": "qa-64",
+      "total": 64,
+      "regions": {
+        "north-america": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r1-0001",
+          "last_key": "qa-synthetic:d64-r1-0006",
+          "empty_state": false
+        },
+        "latin-america-caribbean": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r2-0001",
+          "last_key": "qa-synthetic:d64-r2-0006",
+          "empty_state": false
+        },
+        "europe": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r3-0001",
+          "last_key": "qa-synthetic:d64-r3-0006",
+          "empty_state": false
+        },
+        "north-africa-western-asia": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r4-0001",
+          "last_key": "qa-synthetic:d64-r4-0006",
+          "empty_state": false
+        },
+        "sub-saharan-africa": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r5-0001",
+          "last_key": "qa-synthetic:d64-r5-0006",
+          "empty_state": false
+        },
+        "central-south-asia": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r6-0001",
+          "last_key": "qa-synthetic:d64-r6-0006",
+          "empty_state": false
+        },
+        "east-southeast-asia": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r7-0001",
+          "last_key": "qa-synthetic:d64-r7-0006",
+          "empty_state": false
+        },
+        "oceania-pacific": {
+          "count": 8,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 8,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:d64-r8-0001",
+          "last_key": "qa-synthetic:d64-r8-0006",
+          "empty_state": false
+        }
+      },
+      "all_locations": {
+        "count": 64,
+        "pages_desktop": 6,
+        "pages_phone": 11,
+        "first_key": "qa-synthetic:d64-r1-0001",
+        "last_key": "qa-synthetic:d64-r8-0006"
+      },
+      "bonus_routes": {
+        "north-pole": {
+          "count": 0,
+          "pages_desktop": 0,
+          "pages_phone": 0
+        }
+      },
+      "distribution": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "bonus": 0
+    },
+    {
+      "catalog": "qa-96",
+      "total": 96,
+      "regions": {
+        "north-america": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r1-0001",
+          "last_key": "qa-synthetic:d96-r1-0006",
+          "empty_state": false
+        },
+        "latin-america-caribbean": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r2-0001",
+          "last_key": "qa-synthetic:d96-r2-0006",
+          "empty_state": false
+        },
+        "europe": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r3-0001",
+          "last_key": "qa-synthetic:d96-r3-0006",
+          "empty_state": false
+        },
+        "north-africa-western-asia": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r4-0001",
+          "last_key": "qa-synthetic:d96-r4-0006",
+          "empty_state": false
+        },
+        "sub-saharan-africa": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r5-0001",
+          "last_key": "qa-synthetic:d96-r5-0006",
+          "empty_state": false
+        },
+        "central-south-asia": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r6-0001",
+          "last_key": "qa-synthetic:d96-r6-0006",
+          "empty_state": false
+        },
+        "east-southeast-asia": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r7-0001",
+          "last_key": "qa-synthetic:d96-r7-0006",
+          "empty_state": false
+        },
+        "oceania-pacific": {
+          "count": 12,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 12,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:d96-r8-0001",
+          "last_key": "qa-synthetic:d96-r8-0006",
+          "empty_state": false
+        }
+      },
+      "all_locations": {
+        "count": 96,
+        "pages_desktop": 8,
+        "pages_phone": 16,
+        "first_key": "qa-synthetic:d96-r1-0001",
+        "last_key": "qa-synthetic:d96-r8-0006"
+      },
+      "bonus_routes": {
+        "north-pole": {
+          "count": 0,
+          "pages_desktop": 0,
+          "pages_phone": 0
+        }
+      },
+      "distribution": [
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12
+      ],
+      "bonus": 0
+    },
+    {
+      "catalog": "qa-1000",
+      "total": 1000,
+      "regions": {
+        "north-america": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r1-0001",
+          "last_key": "qa-synthetic:d1000-r1-0102",
+          "empty_state": false
+        },
+        "latin-america-caribbean": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r2-0001",
+          "last_key": "qa-synthetic:d1000-r2-0102",
+          "empty_state": false
+        },
+        "europe": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r3-0001",
+          "last_key": "qa-synthetic:d1000-r3-0102",
+          "empty_state": false
+        },
+        "north-africa-western-asia": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r4-0001",
+          "last_key": "qa-synthetic:d1000-r4-0102",
+          "empty_state": false
+        },
+        "sub-saharan-africa": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r5-0001",
+          "last_key": "qa-synthetic:d1000-r5-0102",
+          "empty_state": false
+        },
+        "central-south-asia": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r6-0001",
+          "last_key": "qa-synthetic:d1000-r6-0102",
+          "empty_state": false
+        },
+        "east-southeast-asia": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r7-0001",
+          "last_key": "qa-synthetic:d1000-r7-0102",
+          "empty_state": false
+        },
+        "oceania-pacific": {
+          "count": 125,
+          "pages_desktop": 11,
+          "pages_tablet": 11,
+          "pages_phone": 21,
+          "last_page_items_desktop": 5,
+          "last_page_items_phone": 5,
+          "first_key": "qa-synthetic:d1000-r8-0001",
+          "last_key": "qa-synthetic:d1000-r8-0102",
+          "empty_state": false
+        }
+      },
+      "all_locations": {
+        "count": 1000,
+        "pages_desktop": 84,
+        "pages_phone": 167,
+        "first_key": "qa-synthetic:d1000-r1-0001",
+        "last_key": "qa-synthetic:d1000-r8-0102"
+      },
+      "bonus_routes": {
+        "north-pole": {
+          "count": 0,
+          "pages_desktop": 0,
+          "pages_phone": 0
+        }
+      },
+      "distribution": [
+        125,
+        125,
+        125,
+        125,
+        125,
+        125,
+        125,
+        125
+      ],
+      "bonus": 0
+    },
+    {
+      "catalog": "qa-uneven-empty",
+      "total": 54,
+      "regions": {
+        "north-america": {
+          "count": 0,
+          "pages_desktop": 0,
+          "pages_tablet": 0,
+          "pages_phone": 0,
+          "last_page_items_desktop": 0,
+          "last_page_items_phone": 0,
+          "first_key": null,
+          "last_key": null,
+          "empty_state": true
+        },
+        "latin-america-caribbean": {
+          "count": 1,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 1,
+          "last_page_items_phone": 1,
+          "first_key": "qa-synthetic:duneven-empty-r2-0001",
+          "last_key": "qa-synthetic:duneven-empty-r2-0001",
+          "empty_state": false
+        },
+        "europe": {
+          "count": 13,
+          "pages_desktop": 2,
+          "pages_tablet": 2,
+          "pages_phone": 3,
+          "last_page_items_desktop": 1,
+          "last_page_items_phone": 1,
+          "first_key": "qa-synthetic:duneven-empty-r3-0001",
+          "last_key": "qa-synthetic:duneven-empty-r3-0006",
+          "empty_state": false
+        },
+        "north-africa-western-asia": {
+          "count": 0,
+          "pages_desktop": 0,
+          "pages_tablet": 0,
+          "pages_phone": 0,
+          "last_page_items_desktop": 0,
+          "last_page_items_phone": 0,
+          "first_key": null,
+          "last_key": null,
+          "empty_state": true
+        },
+        "sub-saharan-africa": {
+          "count": 25,
+          "pages_desktop": 3,
+          "pages_tablet": 3,
+          "pages_phone": 5,
+          "last_page_items_desktop": 1,
+          "last_page_items_phone": 1,
+          "first_key": "qa-synthetic:duneven-empty-r5-0001",
+          "last_key": "qa-synthetic:duneven-empty-r5-0006",
+          "empty_state": false
+        },
+        "central-south-asia": {
+          "count": 6,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 6,
+          "last_page_items_phone": 6,
+          "first_key": "qa-synthetic:duneven-empty-r6-0001",
+          "last_key": "qa-synthetic:duneven-empty-r6-0006",
+          "empty_state": false
+        },
+        "east-southeast-asia": {
+          "count": 7,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 2,
+          "last_page_items_desktop": 7,
+          "last_page_items_phone": 1,
+          "first_key": "qa-synthetic:duneven-empty-r7-0001",
+          "last_key": "qa-synthetic:duneven-empty-r7-0006",
+          "empty_state": false
+        },
+        "oceania-pacific": {
+          "count": 2,
+          "pages_desktop": 1,
+          "pages_tablet": 1,
+          "pages_phone": 1,
+          "last_page_items_desktop": 2,
+          "last_page_items_phone": 2,
+          "first_key": "qa-synthetic:duneven-empty-r8-0001",
+          "last_key": "qa-synthetic:duneven-empty-r8-0002",
+          "empty_state": false
+        }
+      },
+      "all_locations": {
+        "count": 54,
+        "pages_desktop": 5,
+        "pages_phone": 9,
+        "first_key": "qa-synthetic:duneven-empty-r2-0001",
+        "last_key": "qa-synthetic:duneven-empty-r8-0002"
+      },
+      "bonus_routes": {
+        "north-pole": {
+          "count": 0,
+          "pages_desktop": 0,
+          "pages_phone": 0
+        }
+      },
+      "distribution": [
+        0,
+        1,
+        13,
+        0,
+        25,
+        6,
+        7,
+        2
+      ],
+      "bonus": 0
+    }
+  ]
+}
