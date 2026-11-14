@@ -166,6 +166,22 @@ bool Mixer::music_enabled() const noexcept {
   return music_enabled_.load(std::memory_order_relaxed);
 }
 
+void Mixer::master_volume(float volume) noexcept {
+  master_volume_.store(unit_range(volume), std::memory_order_relaxed);
+}
+
+float Mixer::master_volume() const noexcept {
+  return master_volume_.load(std::memory_order_relaxed);
+}
+
+void Mixer::output_muted(bool muted) noexcept {
+  output_muted_.store(muted, std::memory_order_relaxed);
+}
+
+bool Mixer::output_muted() const noexcept {
+  return output_muted_.load(std::memory_order_relaxed);
+}
+
 void Mixer::take_request(Effect& e) {
   uint32_t request = e.request.load(std::memory_order_acquire);
   if (request == 0) {
@@ -224,12 +240,16 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
   const std::span<float> acc(acc_.data(), out.size());
   std::fill(acc.begin(), acc.end(), 0.0f);
 
+  // The master volume and the mute fold into both gains, so they ramp too.
+  const float master = output_muted() ? 0.0f : master_volume();
   const float music_target =
-      music_enabled() ? music_volume_.load(std::memory_order_relaxed) : 0.0f;
+      music_enabled() ? music_volume_.load(std::memory_order_relaxed) * master
+                      : 0.0f;
   mix_add(acc, music, music_gain_, music_target);
   music_gain_ = music_target;
 
-  const float sound_target = sound_volume_.load(std::memory_order_relaxed);
+  const float sound_target =
+      sound_volume_.load(std::memory_order_relaxed) * master;
   const std::size_t count = effect_count();
   for (std::size_t i = 0; i < count; ++i) {
     Effect& e = effects_[i];
@@ -262,6 +282,33 @@ void Mixer::render(std::span<int16_t> out, std::span<const int16_t> music) {
   }
 }
 
+/* Device changes */
+
+DeviceAction device_event_action(uint32_t event_type, bool recording,
+                                 uint32_t which, uint32_t open_device,
+                                 int live_devices) noexcept {
+  if (recording) {
+    return DeviceAction::NONE;
+  }
+  if (event_type == SDL_EVENT_AUDIO_DEVICE_REMOVED) {
+    if (open_device == 0) {
+      return DeviceAction::NONE;
+    }
+    // With nothing to play on, SDL would keep the stream running into a
+    // silent stand-in device and the song would move on unheard.
+    if (live_devices <= 0) {
+      return DeviceAction::CLOSE;
+    }
+    // Our own device is only reported gone when SDL could not move it to
+    // the new default device.
+    return which == open_device ? DeviceAction::REOPEN : DeviceAction::NONE;
+  }
+  if (event_type == SDL_EVENT_AUDIO_DEVICE_ADDED) {
+    return open_device == 0 ? DeviceAction::REOPEN : DeviceAction::NONE;
+  }
+  return DeviceAction::NONE;
+}
+
 /* AudioManager */
 
 #if PLEGACY_ENABLE_MUSIC
@@ -277,9 +324,110 @@ AudioManager::AudioManager()
 
 AudioManager::~AudioManager() {
   // Stops the callback before any member it uses goes away.
-  if (audio_stream_) {
-    SDL_DestroyAudioStream(audio_stream_);
+  close_stream();
+}
+
+bool AudioManager::open_stream() {
+  SDL_AudioSpec spec{
+      .format = SDL_AUDIO_S16,
+      .channels = CHANNELS,
+      .freq = SAMPLE_RATE,
+  };
+  audio_stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                            &spec, audio_callback, this);
+  if (!audio_stream_) {
+    Logger::warn("Failed to open SDL audio device: {}", SDL_GetError());
+    return false;
   }
+  device_id_ = SDL_GetAudioStreamDevice(audio_stream_);
+  // Device starts paused
+  SDL_ResumeAudioDevice(device_id_);
+  return true;
+}
+
+void AudioManager::close_stream() {
+  if (audio_stream_) {
+    // Returns once a callback that is running has finished.
+    SDL_DestroyAudioStream(audio_stream_);
+    audio_stream_ = nullptr;
+  }
+  device_id_ = 0;
+}
+
+bool AudioManager::reopen_device() {
+  if (!audio_enabled_) {
+    return false;
+  }
+  close_stream();
+  if (!open_stream()) {
+    Logger::warn("No audio device; the sound comes back when one is added");
+    return false;
+  }
+  Logger::info("Audio device {} opened", device_id_);
+  return true;
+}
+
+void AudioManager::handle_event(const SDL_Event& event) {
+  switch (event.type) {
+  case SDL_EVENT_WINDOW_FOCUS_GAINED:
+    window_focused_ = true;
+    update_focus_mute();
+    return;
+  case SDL_EVENT_WINDOW_FOCUS_LOST:
+    window_focused_ = false;
+    update_focus_mute();
+    return;
+  case SDL_EVENT_AUDIO_DEVICE_ADDED:
+  case SDL_EVENT_AUDIO_DEVICE_REMOVED:
+    break;
+  default:
+    return;
+  }
+  if (!audio_enabled_) {
+    return;
+  }
+  int live_devices = 0;
+  SDL_free(SDL_GetAudioPlaybackDevices(&live_devices));
+  switch (device_event_action(event.type, event.adevice.recording,
+                              event.adevice.which, device_id_, live_devices)) {
+  case DeviceAction::NONE:
+    break;
+  case DeviceAction::REOPEN:
+    reopen_device();
+    break;
+  case DeviceAction::CLOSE:
+    Logger::warn("No audio device left; the sound pauses until one is added");
+    close_stream();
+    break;
+  }
+}
+
+void AudioManager::update_focus_mute() {
+  mixer_.output_muted(mute_when_unfocused_ && !window_focused_);
+}
+
+void AudioManager::mute_when_unfocused(bool enabled) {
+  mute_when_unfocused_ = enabled;
+  update_focus_mute();
+}
+
+bool AudioManager::focus_muted() const { return mixer_.output_muted(); }
+
+void AudioManager::master_volume(float volume) { mixer_.master_volume(volume); }
+
+void AudioManager::load_music(MusicId id, std::vector<uint8_t> data) {
+  const auto slot = static_cast<size_t>(id);
+  if (slot < music_data_.size()) {
+    music_data_[slot] = std::move(data);
+  }
+}
+
+double AudioManager::music_position() const {
+#if PLEGACY_ENABLE_MUSIC
+  return music_position_ms_.load(std::memory_order_relaxed) / 1000.0;
+#else
+  return 0.0;
+#endif
 }
 
 void AudioManager::init() {
@@ -303,26 +451,12 @@ void AudioManager::init() {
   adl_setNumChips(midi_player_.get(), 1);
 #endif
 
-  SDL_AudioSpec spec{
-      .format = SDL_AUDIO_S16,
-      .channels = CHANNELS,
-      .freq = SAMPLE_RATE,
-  };
-
-  audio_stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
-                                            &spec, audio_callback, this);
-  if (!audio_stream_) {
-    Logger::warn("Failed to open SDL audio device: {}", SDL_GetError());
+  initialized_ = true;
+  if (!open_stream()) {
     audio_enabled_ = false;
-    initialized_ = true;
     return;
   }
-
   audio_enabled_ = true;
-  initialized_ = true;
-
-  // Device starts paused
-  SDL_ResumeAudioDevice(SDL_GetAudioStreamDevice(audio_stream_));
 
   Logger::info("AudioManager initialized: {}Hz, {} channels", SAMPLE_RATE,
                CHANNELS);
@@ -448,6 +582,7 @@ void AudioManager::play_music(MusicId id, LoopMode loop) {
       adl_openData(midi_player_.get(), music_data_[slot].data(),
                    static_cast<unsigned long>(music_data_[slot].size()));
 
+  music_position_ms_.store(0, std::memory_order_relaxed);
   if (result < 0) {
     Logger::warn("Failed to load music data: {}",
                  adl_errorInfo(midi_player_.get()));
@@ -593,6 +728,14 @@ void AudioManager::render_music(std::span<int16_t> block) {
         adl_reset(player);
       }
     }
+
+    // For music_position(): the song's place after this block.
+    const double at = music_state_.load() == MusicState::STOPPED
+                          ? 0.0
+                          : adl_positionTell(player);
+    music_position_ms_.store(
+        at > 0.0 ? static_cast<uint32_t>(std::min(at * 1000.0, 4.0e9)) : 0u,
+        std::memory_order_relaxed);
   }
 
   const auto written = static_cast<size_t>(std::clamp(generated, 0, count));

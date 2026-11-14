@@ -328,6 +328,22 @@ static const OptionDef option_defs[] = {
          [](GameState& state, GameContext& context) {
            context.audio->music_volume(state.options().music_volume);
          }},
+    {.name = "master_volume",
+     .member = &GameOptions::master_volume,
+     .description = "Music and effects together, 0 to 1",
+     .lowest = 0.0,
+     .highest = 1.0,
+     .apply =
+         [](GameState& state, GameContext& context) {
+           context.audio->master_volume(state.options().master_volume);
+         }},
+    {.name = "mute_unfocused",
+     .member = &GameOptions::mute_unfocused,
+     .description = "Silence the game while its window is in the background",
+     .apply =
+         [](GameState& state, GameContext& context) {
+           context.audio->mute_when_unfocused(state.options().mute_unfocused);
+         }},
     {.name = "crt_aspect_ratio",
      .member = &GameOptions::crt_aspect_ratio,
      .description = "Show 640x480 (4:3) rather than 640x400",

@@ -165,6 +165,19 @@ void MenuOptions::build_audio(GameState& state) {
   add_menu_item(std::make_unique<SliderMenuItem>(
       context_, "Music Volume", state.options().music_volume,
       [this](float v) { context_.audio->music_volume(v); }));
+  add_menu_item(std::make_unique<SliderMenuItem>(
+                    context_, "Master Volume", state.options().master_volume,
+                    [this](float v) { context_.audio->master_volume(v); }))
+      .help_text("Music and sound effects together.");
+  add_menu_item(
+      std::make_unique<ToggleMenuItem>(
+          context_, "Mute in Background", state.options().mute_unfocused,
+          [&state, this] {
+            state.options().mute_unfocused = !state.options().mute_unfocused;
+            context_.audio->mute_when_unfocused(state.options().mute_unfocused);
+            mark_dirty();
+          }))
+      .help_text("Silence the game while another window is in front.");
 }
 
 std::string to_string(HdResolution r) {

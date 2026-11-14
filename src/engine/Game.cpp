@@ -21,6 +21,7 @@
 #include "core/debug/DebugCommands.h"
 #include "core/debug/DebugConsole.h"
 #include "core/restaurant/StaffEventData.h"
+#include "core/save/SaveGameManager.h"
 #include "core/state/GameOptions.h"
 #include "core/state/TurnOrchestrator.h"
 #include "core/state/UIState.h"
@@ -168,6 +169,8 @@ int Game::run() {
   // Use CLI-provided config path, or fall back to platform default
   std::string effective_config =
       config_path_.empty() ? platform_paths::config_file_path() : config_path_;
+  // Temporary files that a crash or a power cut left behind mid-save.
+  save::SaveGameManager::remove_stale_temp_files(effective_config);
   ConfigManager configManager(effective_config);
 
   // Load config if present
@@ -782,6 +785,10 @@ void Game::handle_events(LoopState& loop_state) {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     SDL_ConvertEventToRenderCoordinates(sdl_.renderer.get(), &event);
+    // Window focus and playback device changes.
+    if (audio_manager_) {
+      audio_manager_->handle_event(event);
+    }
 
     if (event.type == SDL_EVENT_QUIT) {
       loop_state.game_state.request_exit();
@@ -941,6 +948,8 @@ bool Game::init(int display_height, const GameOptions& options) {
   audio_manager_->sound_volume(options.sound_volume);
   audio_manager_->music_volume(options.music_volume);
   audio_manager_->music_enabled(options.music);
+  audio_manager_->master_volume(options.master_volume);
+  audio_manager_->mute_when_unfocused(options.mute_unfocused);
 
   auto [win_w, win_h] = window_size_for(options.double_size, display_height);
   SDL_Window* window = nullptr;

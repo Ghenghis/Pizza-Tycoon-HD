@@ -21,6 +21,7 @@ struct ADL_MIDIPlayer;
 #endif
 
 struct SDL_AudioStream;
+union SDL_Event;
 
 /* Threading model
 
@@ -40,6 +41,11 @@ struct SDL_AudioStream;
      wait. stop_music() takes no lock: it posts a request for the callback.
    - Every buffer the callback uses is a fixed-size member, so it does not
      allocate. Larger requests are mixed in several MIX_BLOCK_FRAMES blocks.
+   - Device changes (handle_event(), reopen_device()) run on the game thread.
+     Destroying the old stream waits for a callback that is running, before
+     the new stream opens, so two callbacks never overlap. The music player
+     and the mixer belong to AudioManager, not to the stream, so the song and
+     the effects carry on from where they were.
 */
 
 namespace audio {
@@ -165,6 +171,14 @@ public:
   [[nodiscard]] float sound_volume() const noexcept;
   [[nodiscard]] bool music_enabled() const noexcept;
 
+  // Any thread. The master volume scales music and effects together; muting
+  // the output silences both, and everything keeps playing underneath. Both
+  // ramp over a block like the other volumes.
+  void master_volume(float volume) noexcept;
+  [[nodiscard]] float master_volume() const noexcept;
+  void output_muted(bool muted) noexcept;
+  [[nodiscard]] bool output_muted() const noexcept;
+
   // Audio thread only. Fills out with the effects plus music (empty for
   // none, otherwise the same size as out). Any even size works.
   void render(std::span<int16_t> out, std::span<const int16_t> music = {});
@@ -198,6 +212,8 @@ private:
   std::atomic<float> music_volume_{1.0f};
   std::atomic<float> sound_volume_{0.9f};
   std::atomic<bool> music_enabled_{true};
+  std::atomic<float> master_volume_{1.0f};
+  std::atomic<bool> output_muted_{false};
 
   // Audio thread only: gains reached at the end of the last block, and the
   // float mix of the current one.
@@ -205,6 +221,22 @@ private:
   float sound_gain_ = 0.9f;
   std::array<float, MIX_BLOCK_SAMPLES> acc_{};
 };
+
+// How AudioManager answers an audio device event.
+enum class DeviceAction {
+  NONE,   // nothing to do; SDL follows default device changes itself
+  REOPEN, // close the stream and open the default device again
+  CLOSE,  // no playback device is left: close the stream, hold the music
+};
+
+// The decision behind AudioManager::handle_event() for an SDL audio device
+// event of event_type about device which. open_device is the playback device
+// in use (0 while waiting for one); live_devices is how many playback
+// devices SDL lists now.
+[[nodiscard]] DeviceAction device_event_action(uint32_t event_type,
+                                               bool recording, uint32_t which,
+                                               uint32_t open_device,
+                                               int live_devices) noexcept;
 
 class AudioManager {
 public:
@@ -225,6 +257,28 @@ public:
   void music_volume(float volume);
   void sound_volume(float volume);
   void music_enabled(bool enabled);
+  // Over music and effects together.
+  void master_volume(float volume);
+  // Mute while the game window does not have focus. Off by default.
+  void mute_when_unfocused(bool enabled);
+  [[nodiscard]] bool focus_muted() const;
+
+  // Game thread: call with every SDL event. Window focus drives
+  // mute_when_unfocused(). When the playback device goes away the default
+  // device is opened again, or, with no device left, audio pauses until one
+  // is added; the music and effects carry on from where they were.
+  void handle_event(const SDL_Event& event);
+  // Closes the stream and opens the default playback device again. False
+  // when none opens; audio then waits for a device to be added.
+  bool reopen_device();
+  // The playback device in use (SDL's id for this stream), 0 when none.
+  [[nodiscard]] uint32_t device() const { return device_id_; }
+  [[nodiscard]] bool has_device() const { return audio_stream_ != nullptr; }
+
+  // Stores a song (CMF or standard MIDI data) for a music slot.
+  void load_music(MusicId id, std::vector<uint8_t> data);
+  // Seconds into the current song, as of the last mixed block.
+  [[nodiscard]] double music_position() const;
 
   void init();
   void load_default_assets();
@@ -241,6 +295,12 @@ private:
                              int additional_amount, int total_amount);
   // Audio thread: one block of output, at most MIX_BLOCK_SAMPLES.
   void fill_block(std::span<int16_t> out);
+  // Game thread: opens the default playback device and starts the callback;
+  // false (with the reason logged) when it cannot.
+  bool open_stream();
+  // Game thread: stops the callback and closes the device.
+  void close_stream();
+  void update_focus_mute();
 
   static constexpr int SAMPLE_RATE = 44100;
   static constexpr int CHANNELS = static_cast<int>(MIX_CHANNELS);
@@ -264,6 +324,8 @@ private:
   // Pre-volume boost for OPL output (otherwise was too quiet):
   static constexpr float MUSIC_BOOST = 6.0f;
   std::array<int16_t, MIX_BLOCK_SAMPLES> music_block_{}; // audio thread
+  // Written by the callback after each block.
+  std::atomic<uint32_t> music_position_ms_{0};
   size_t next_music_slot_ = 0;
 #endif
   // Indexed by MusicId:
@@ -274,10 +336,14 @@ private:
   std::optional<SoundId> current_indexed_sound_;
 
   SDL_AudioStream* audio_stream_{nullptr};
+  uint32_t device_id_ = 0;
   std::array<int16_t, MIX_BLOCK_SAMPLES> out_block_{}; // audio thread
 
   bool initialized_ = false;
   bool audio_enabled_ = false;
+  // Game thread.
+  bool window_focused_ = true;
+  bool mute_when_unfocused_ = false;
 };
 
 } // namespace audio

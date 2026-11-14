@@ -159,6 +159,10 @@ struct GameOptions {
   bool music = true;
   float sound_volume = 0.9f;
   float music_volume = 1.0f;
+  // Over music and effects together.
+  float master_volume = 1.0f;
+  // Silence the game while its window is in the background.
+  bool mute_unfocused = false;
   // Show the day's turnover report when the turn ends.
   bool automatic_report = true;
   // Mouse and UI modernizations:
