@@ -40,6 +40,16 @@ A finished document, build or agent run never counts as verified. Nothing in thi
 | `223f5ef` | F7: 1994 look; F8: 1994 and HD side by side | integrator |
 | `9c5b776` | No geometry batching on SDL's software renderer (premultiplied blend bug there) | integrator |
 | `39c56ee` | Contract decisions from the owner; references to the unrelated projects removed | integrator |
+| `dda5539` | F7 test samples inside the letter | integrator |
+| `435be95` | The software cursor follows the real mouse between engine pixels | integrator |
+| `589a436` | HD resolution: Auto by default (ceil(display height / 400), 2–8), chosen in the graphics options | integrator |
+| `b42fedb` | Classic golden fingerprint tests (contract step 0) | core agent |
+| `9da209c` | Content keys, the Classic adapter, per-game roster (contract steps 1–2) | core agent |
+| `17ef82a` | Screen-coverage gate, release check, self-hosted runner workflow | quality agent |
+| `9b1a1fe` | Classic golden values for linux-gcc-x64: 8 of 9 checkpoints | integrator |
+| `30ac96a` | Saves round 2: checked enums, stale temp cleanup, bounded readers | persistence agent |
+| `f134e72` | Audio round 2: device loss and change, master volume, mute in background | platform agent; wiring by integrator |
+| `720020b` | hdpack tools: file names are data, nothing leaves its folder | platform agent |
 
 ### Test and gate results
 
@@ -50,7 +60,9 @@ Clean worktree `integ`; cloud build lane with 2 cores.
 | Round 1: `15c9a2a` plus the audio patch | 60 cases: 58 passed, 2 skipped; [audio] and [budget] 16 of 16; 0 warnings |
 | Round 2: `1fd2a9e` (warnings as errors) | 85 cases: 78 passed, 1 **failed**, 6 skipped. The failure is the tinted-coverage GPU/CPU test (254/255); `9c5b776` fixes it. [audio], [budget] and [save] all passed. The Windows build was stopped, as `39c56ee` replaces it. |
 | Round 3: `39c56ee` | 86 cases: 79 passed, 1 failed (a sampling mistake in the new F7 test; fixed in `dda5539`, where it passes), 6 skipped; [audio], [budget] and [save]: 37 passed, 4 skipped; 0 warnings. Windows exe sha256 `0f2a8022...a757a` staged as `<work>\play-39c56ee` |
-| Round 4: `589a436` | Running (adds cursor glide, Auto HD scale and the test fix) |
+| Round 4: `589a436` | 86 cases: 80 passed, 0 failed, 6 skipped (they need the original game). The Windows build was stopped: round 5 replaces it. |
+| Golden recording at `b42fedb`, with the original game | 3 of 4 golden tests recorded 8 checkpoints (`9b1a1fe`). **Failed: the v1 save fixture crashes on load** (SIGSEGV in `GameState::human_player_count`, an empty player slot, called from `TurnOrchestrator::run_city_start_of_day` inside `SaveGameManager::json_to_state`). The [save] test that loads the same fixture crashes the same way; 23 of 24 [save] cases pass, the round trip included. A hostile save can reach this, so it is a robustness bug, not only a fixture problem. Sent to the persistence lane. |
+| Round 5: `720020b` | Running: all tests; all tests with the original game, except the two v1-fixture cases, which run on their own so their crash is recorded; Windows exe |
 | PC: `PizzaTycoonHD-text-9.exe` (glyph sheets, before the ARGB, base-texture and batching changes) | Steady avg 3.3–4.3 ms, p99 5.0–5.7 ms. First frame **16.8–17.4 ms: FAILS** the 16 ms gate. HD text off: 10.7–11.8 ms. |
 | PC gates for round 3 | **Waiting for a grant.** The broker denied it at rev 16/17 while the freezes were diagnosed. Readiness was sent to codex-einhander-crash-check as `msg_a8c4f3539628225c`, with the one command, all identities and the cleanup bounds (`<work>\logs\readiness-39c56ee.txt`). `bench-gate.ps1` sha256 is `ee527b47...dc97a`, parse-checked on the PC. |
 
@@ -58,12 +70,13 @@ Clean worktree `integ`; cloud build lane with 2 cores.
 
 | Lane | Status | Current task |
 |---|---|---|
-| Integrator (build lane) | active | Round 3 build; PC bench gate when granted; then play folder (with rollback), `main` and a release |
-| Core/catalog (former architect) | assigned | Steps 0–2 of the contract: golden Classic fingerprints, content keys, per-game roster. On the path to Santa's Pizza Village, the first playable slice |
-| Persistence | assigned | `checked_enum` for the 16 enum casts; atomic recipe, fingerprint and mission writers; cleanup of stale temp files; design note for `GameState::adopt_loaded` |
-| Platform/audio | assigned | Audio device loss and change recovery, mute on focus loss, master volume; path containment in the other pack tools; music-library design (R35) |
-| Quality/release | assigned | Screen-coverage gate (N14); release gate (unpack, allowlist, checksums, smoke run); workflow for the owner's self-hosted runner |
-| AMD worker | parent received the `94d616e` baseline | Use `integration/2026-11-14` (`39c56ee`) or the bundle; don't repeat the newer fixes |
+| Integrator (build lane) | active | Round 5 (`720020b`); PC bench gate when granted; then the play folder (with rollback), `main`, coverage budgets and the Windows golden values |
+| Core/catalog | active | Contract steps 3–6: definition-backed city source, goal observer, Santa's Pizza Village definition and the Cozy Village scenario, a headless journey test (day, week, save, restart) |
+| Persistence | active | The v1-fixture load crash: validator requires the full player list; the scratch state is prepared as the real game prepares one; a realistic v1 fixture made by the downgrade transform |
+| Visual | active | H4 HD city far map, M2 hatching, N1 newspaper |
+| Platform/audio | round 2 done (`f134e72`, `720020b`) | Next: R34 game-only recording design and setup (official FFmpeg) |
+| Quality/release | done (`17ef82a`) | Next: record the coverage budgets on the PC run; release check on the next exe |
+| AMD worker | offline (CRD) | Not counted as live. When back: `integration/2026-11-14` or the bundle; don't repeat the newer fixes |
 
 ## Owner decisions (fixed inputs)
 
