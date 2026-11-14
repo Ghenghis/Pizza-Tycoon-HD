@@ -115,7 +115,7 @@ _event(
     "visited",
     TRAFFIC_NOTE,
     [
-        "pc3:Blocks_Urban_Traffic_Day (staged, decoded: 120.8 s stereo, -35.7 LUFS; not in pack-v0)"
+        "pc3:Blocks_Urban_Traffic_Day (pack-v0: 40 s loop window, levelled to the original)"
     ],
 )
 _event(
@@ -128,7 +128,7 @@ _event(
     "visited",
     TRAFFIC_NOTE,
     [
-        "pc3:Blocks_Urban_Traffic_Night (staged, decoded: 155.5 s stereo, -36.9 LUFS; not in pack-v0)"
+        "pc3:Blocks_Urban_Traffic_Night (pack-v0: 40 s loop window, levelled to the original)"
     ],
 )
 for d in range(10):
@@ -286,6 +286,8 @@ PACK_V0 = {
     "RESTAURANT_NOISE_1": RESTORED,
     "RESTAURANT_NOISE_2": RESTORED,
     "RESTAURANT_NOISE_3": RESTORED,
+    "TRAFFIC_1": RESTORED,
+    "TRAFFIC_2": RESTORED,
     **{f"DIAL_TONE_{d}": SYNTH for d in range(10)},
     "PHONE_RINGING": SYNTH,
     "CHOPPER": RESTORED,

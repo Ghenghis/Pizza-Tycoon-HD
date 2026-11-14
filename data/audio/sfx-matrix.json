@@ -1,6 +1,6 @@
 {
   "schema": "plegacy.sfx-matrix/1",
-  "commit": "f3eef9c273709f7123645283a1fed330fb858760",
+  "commit": "1f1326218d38947fc9455564a2f3d31930116b9c",
   "generator": "tools/audio/sfx_matrix.py",
   "game_sound_dir": "SOUND (M0..M11 of the 1994 release; path not recorded)",
   "reachability_terms": {
@@ -24,7 +24,7 @@
       ],
       "call_sites": [
         {
-          "site": "src/views/screens/restaurant/RestaurantView.cpp:225",
+          "site": "src/views/screens/restaurant/RestaurantView.cpp:241",
           "code": "noise = audio::SoundId::RESTAURANT_NOISE_1;"
         }
       ],
@@ -85,7 +85,7 @@
       ],
       "call_sites": [
         {
-          "site": "src/views/screens/restaurant/RestaurantView.cpp:222",
+          "site": "src/views/screens/restaurant/RestaurantView.cpp:238",
           "code": "noise = audio::SoundId::RESTAURANT_NOISE_2;"
         }
       ],
@@ -146,7 +146,7 @@
       ],
       "call_sites": [
         {
-          "site": "src/views/screens/restaurant/RestaurantView.cpp:219",
+          "site": "src/views/screens/restaurant/RestaurantView.cpp:235",
           "code": "noise = audio::SoundId::RESTAURANT_NOISE_3;"
         }
       ],
@@ -203,7 +203,7 @@
       "reachability": "visited",
       "notes": "CityView::update_city_sound; needs options().map_fx; FAR zoom stops it.",
       "candidates": [
-        "pc3:Blocks_Urban_Traffic_Day (staged, decoded: 120.8 s stereo, -35.7 LUFS; not in pack-v0)"
+        "pc3:Blocks_Urban_Traffic_Day (pack-v0: 40 s loop window, levelled to the original)"
       ],
       "call_sites": [
         {
@@ -243,6 +243,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "restored (owned PC3 recording, level-matched/edited)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -260,7 +264,7 @@
       "reachability": "visited",
       "notes": "CityView::update_city_sound; needs options().map_fx; FAR zoom stops it.",
       "candidates": [
-        "pc3:Blocks_Urban_Traffic_Night (staged, decoded: 155.5 s stereo, -36.9 LUFS; not in pack-v0)"
+        "pc3:Blocks_Urban_Traffic_Night (pack-v0: 40 s loop window, levelled to the original)"
       ],
       "call_sites": [
         {
@@ -299,6 +303,10 @@
           "bytes_s16": 1114284,
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
+      },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "restored (owned PC3 recording, level-matched/edited)"
       },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",

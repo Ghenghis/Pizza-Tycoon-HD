@@ -76,26 +76,62 @@ Loudness is integrated LUFS (ffmpeg ebur128). "Seam as is" is the RMS jump acros
 
 Zero-crossing loop search found nothing better than the whole-file wrap: the seam error is about 0.85 on these diffuse crowds, which means no waveform match. So the crowd loops use the whole file joined by a 0.5 s equal-power crossfade of the tail into the head.
 
-### pack-v0 (built by `<cloud-work>/sfx-work/build_pack.py`, numpy, byte-reproducible)
+### pack-v0, revision 2 (built by `<cloud-work>/sfx-work/build_pack.py`, numpy, byte-reproducible)
 
-* **RESTAURANT_NOISE_1/2/3**: restored PC3 recordings.
-  * Gained to -33.1 / -28.7 / -21.5 LUFS, which keeps the originals' ladder.
-  * Level 3 is held 2.7 dB under the original so its peak stays at -1.3 dBFS.
-  * Loop joined as above; the wrap RMS jump is now 0.3 / 1.3 / 2.5 dB.
+The pack carries `manifest.json` in the engine's schema (`docs/studio/notes/sfx-overrides.md`: format `pthd-sfx-overrides`, version 1). Each entry has:
+
+* the kebab-case event and its slot;
+* the file's sha256;
+* `source_sha256`, the original VOC bytes (the matrix's `voc_sha256`);
+* gain, trims and loop start of 0, because all of that is baked into the files;
+* `loop`, `fallback`, `origin`, `provenance` and `license`.
+
+The loader limits shaped the loops. They are 120 s and 16 MiB per file and 64 MiB decoded for the whole pack, and one full crowd recording is 106 s and 18.7 MB. So each ambience loop is a window of its recording, picked for an even level and a small level step at the seam. Its tail is crossfaded into its head over 0.5 s equal-power, and the loop is then set to the original's loudness. The pack decodes to 39.0 MiB of the 64.
+
+| Event | Window | Loudness | Peak |
+|---|---|---|---|
+| RESTAURANT_NOISE_1 | GuestRoom_low 34.5–83.0 s | -33.1 LUFS (original -33.1) | -8.2 dBFS |
+| RESTAURANT_NOISE_2 | GuestRoom_mid 14.5–63.0 s | -28.7 LUFS (original -28.7) | -6.4 dBFS |
+| RESTAURANT_NOISE_3 | GuestRoom_high 10.0–58.5 s | -19.5 LUFS (original -18.8; held 0.7 dB for a -1 dBFS peak) | -1.0 dBFS |
+| TRAFFIC_1 (close zoom) | Urban_Traffic_Day 34.5–75.0 s | -26.4 LUFS (original -26.4) | -8.0 dBFS |
+| TRAFFIC_2 (medium zoom) | Urban_Traffic_Night 45.5–86.0 s | -26.7 LUFS (original -26.7) | -9.0 dBFS |
+
 * **DIAL_TONE_0..9**: authored (synthesized standard signal).
   * ITU-T Q.23 pairs, 120 ms, 5 ms edges, high group +2 dB.
-  * RMS -11.7 dBFS, matching the originals' -11.5 dBFS.
+  * RMS -11.7 dBFS, against the originals' -11.5.
 * **PHONE_RINGING**: authored (synthesized standard signal). North American ringback, 440 + 480 Hz, 2 s on / 4 s off, in a 6 s loop that starts with the tone.
-* **PHONE_PICKUP**: the original is kept. The recorded handset clatter (0.38 s, several transients) was judged better than a two-transient synthetic click. The click is in `variants/` for the audible review and is not attached.
-* **CHOPPER**: the restored PC3 cut, as a 5-hit sequence at 0/130/260/390/520 ms.
+* **PHONE_PICKUP**: no entry, so the original plays. It is a recorded handset clatter (0.38 s, several transients); a two-transient synthetic click is thinner by design. The click is in `variants/` for the audible review and is not attached.
+* **CHOPPER**: the restored PC3 cut as a 5-hit sequence at 0/130/260/390/520 ms.
   * Peak -3 dBFS; the loudest 600 ms is within 0.6 dB of the original's.
-  * Start offset 0 (no m9 skip).
+  * Loop start 0, so the m9 skip does not apply.
 
-Traffic and sirens are staged and measured, but they are not in pack-v0.
+The sirens stay out: the PC3 clips are chirps, not a continuous loop.
+
+### Checking a pack with the real loader
+
+```
+PLEGACY_TEST_GAME_PATH=<folder with PT.EXE> PLEGACY_SFX_PACK=<pack folder> test_plegacy "[sfx-pack]"
+```
+
+`tests/EffectPackCurationTests.cpp` (hidden) does three things:
+
+* hashes the originals the way AudioManager does;
+* calls `audio::load_effect_pack`;
+* prints `replaced` or the loader's reason for every entry.
+
+### Listening copy
+
+On the owner's PC, `<work>/audio-candidates/pack-v0/` holds:
+
+* the pack files and `manifest.json`;
+* `original/`: engine-equivalent renders of slots 0–17;
+* `index.html`: Original vs Enhanced per event.
+
+The output channel added a C2PA chunk to each delivered WAV. The copies on the PC were put back to the built bytes (the fmt and data chunks only), and all manifest hashes match there.
 
 ## Open
 
 * **The sirens:** the PC3 chirps do not fit a 7.5 s looping siren as they are.
-* **Traffic:** level and loop for TRAFFIC_1/2.
-* **Override manifest**: field names follow this matrix until the platform lane's `docs/studio/notes/sfx-overrides.md` exists.
+* **The real-loader result** for pack-v0: run the hidden test above.
+* **"Needs new trigger" rows:** doors, service and kitchen, plus North Pole ambience once the village has events.
 * **All engine trigger checks and listening.**
