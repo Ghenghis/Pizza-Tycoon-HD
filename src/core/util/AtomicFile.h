@@ -9,6 +9,8 @@
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -16,6 +18,63 @@
 #include <vector>
 
 namespace util {
+
+namespace testing {
+
+// A fault a test can give chosen AtomicFile writes, to show on real files
+// what each kind of failure leaves behind. The game never sets one.
+struct AtomicFault {
+  enum class Kind {
+    // The write that would take the new file past `bytes` writes up to there
+    // and fails, as it does when the disk fills up.
+    DiskFull,
+    // Everything reports success, but the file keeps only its first `bytes`
+    // bytes: a write whose end the disk lost.
+    LostTail,
+    // The rename at the end fails, after the new bytes are flushed.
+    RenameFails,
+    // Stops just before the rename, as if the game were killed there:
+    // commit() throws AtomicFileInterrupted and leaves the temporary file.
+    Interrupted,
+  };
+  Kind kind = Kind::DiskFull;
+  std::size_t bytes = 0;
+};
+
+// What an Interrupted fault throws. It is no std::exception, so no handler
+// for ordinary failures takes it for one.
+struct AtomicFileInterrupted {
+  std::filesystem::path destination;
+};
+
+// While alive, the next `times` AtomicFile writes whose destination passes
+// `matches` get the fault. One at a time, from one thread.
+class ScopedAtomicFault {
+public:
+  using Matcher = std::function<bool(const std::filesystem::path&)>;
+
+  ScopedAtomicFault(Matcher matches, AtomicFault fault, int times = 1);
+  ~ScopedAtomicFault();
+
+  ScopedAtomicFault(const ScopedAtomicFault&) = delete;
+  ScopedAtomicFault& operator=(const ScopedAtomicFault&) = delete;
+
+  // How many writes have had the fault so far.
+  [[nodiscard]] int hits() const { return hits_; }
+
+  // The fault for a write to destination, if one is set and it is due.
+  [[nodiscard]] static std::optional<AtomicFault>
+  take(const std::filesystem::path& destination);
+
+private:
+  Matcher matches_;
+  AtomicFault fault_;
+  int remaining_;
+  int hits_ = 0;
+  ScopedAtomicFault* previous_;
+};
+
+} // namespace testing
 
 // Replaces a file so that whoever reads it next, including the game after a
 // crash or a power cut, finds either the old contents or the new ones, never
@@ -80,6 +139,10 @@ private:
             std::error_code code, std::string_view reason);
   void close_temp();
   void remove_temp();
+  bool write_to_temp(const unsigned char* bytes, std::size_t size);
+  // A test's fault, applied just before the rename. Returns false, or
+  // throws, if it stops the commit.
+  bool apply_commit_fault();
 
   std::filesystem::path destination_;
   // What the rename replaces: the destination, or its target if it is a link.
@@ -88,6 +151,9 @@ private:
   std::string error_;
   std::error_code error_code_;
   bool committed_ = false;
+  std::optional<testing::AtomicFault> fault_; // set by a test only
+  std::size_t written_ = 0;
+  bool keep_temp_ = false; // an interrupted commit leaves it, as a crash does
 #ifdef _WIN32
   void* handle_ = nullptr; // a Windows HANDLE while the temporary file is open
 #else

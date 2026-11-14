@@ -36,6 +36,7 @@
 #include "core/city/City.h"
 #include "core/city/MayorOffice.h"
 #include "core/city/Property.h"
+#include "core/content/ScenarioSave.h"
 #include "core/economy/WeaponMarket.h"
 #include "core/events/CareerLog.h"
 #include "core/events/MilestoneId.h"
@@ -113,6 +114,24 @@ constexpr std::string_view load_newer_message =
     "This save was made by a newer version of the game and cannot be loaded.";
 // Only if building the game fails after the same build passed on a scratch
 // state, which the checks make next to impossible.
+constexpr std::string_view save_unverified_message =
+    "The game could not be saved: the new save did not pass its checks. "
+    "Your earlier saves are kept.";
+constexpr std::string_view checkpoint_failed_notice =
+    "The game in progress could not be kept as a checkpoint.";
+constexpr std::string_view other_version_status =
+    "Save damaged: an earlier verified version was loaded";
+constexpr std::string_view restore_nothing_message =
+    "This save keeps no versions to restore.";
+constexpr std::string_view restore_not_working_message =
+    "That version of the save is not a verified working version.";
+constexpr std::string_view restore_failed_message =
+    "That version of the save failed its check, so nothing was restored.";
+constexpr std::string_view restore_unwritable_message =
+    "The version could not be restored, because the save folder cannot be "
+    "written to. Nothing was changed.";
+constexpr std::string_view delete_failed_message =
+    "The save could not be deleted.";
 constexpr std::string_view load_failed_message =
     "The save could not be loaded, and the game in progress could not be "
     "kept. Please restart the game.";
@@ -286,37 +305,27 @@ std::string encode_save(const json& j) {
   return out;
 }
 
-// Reads a save file: checks the header and every size in it before
-// allocating for them, then inflates and parses the game data.
-std::optional<json> decode_save_file(const fs::path& path,
-                                     LoadProblem& problem) {
-  const std::string name = display(path);
-  std::ifstream file(path, std::ios::binary);
-  if (!file.is_open()) {
-    problem = {"cannot open " + name, load_unreadable_message};
-    return std::nullopt;
-  }
+// Where a save's parts are, from its header.
+struct SaveFrame {
+  std::uint64_t json_size = 0;      // the game data, inflated
+  std::uint64_t payload_offset = 0; // where the zlib stream starts
+};
 
-  file.seekg(0, std::ios::end);
-  const std::streamoff end = file.tellg();
-  file.seekg(0, std::ios::beg);
-  if (!file.good() || end < 0) {
-    problem = {"cannot read " + name, load_unreadable_message};
-    return std::nullopt;
-  }
-  const auto file_size = static_cast<std::uint64_t>(end);
-  if (file_size > MAX_SAVE_FILE_SIZE) {
-    problem.detail = name + " is " + std::to_string(file_size) +
+// Checks a save's header and every size in it against the bytes there are.
+std::optional<SaveFrame> read_save_frame(std::string_view bytes,
+                                         const std::string& name,
+                                         LoadProblem& problem) {
+  if (bytes.size() > MAX_SAVE_FILE_SIZE) {
+    problem.detail = name + " is " + std::to_string(bytes.size()) +
                      " bytes, more than a save can be";
     return std::nullopt;
   }
-
   SaveHeader hdr;
-  if (file_size < sizeof(hdr) ||
-      !file.read(reinterpret_cast<char*>(&hdr), sizeof(hdr))) {
+  if (bytes.size() < sizeof(hdr)) {
     problem.detail = name + " is too short to be a save";
     return std::nullopt;
   }
+  std::memcpy(&hdr, bytes.data(), sizeof(hdr));
   if (std::memcmp(hdr.magic, "PLSAVE", 6) != 0) {
     problem.detail = name + " is not a save file";
     return std::nullopt;
@@ -334,59 +343,65 @@ std::optional<json> decode_save_file(const fs::path& path,
     return std::nullopt;
   }
 
-  const uint64_t json_size = endian::from_le64(hdr.size);
-  if (json_size == 0 || json_size > MAX_SAVE_JSON_SIZE) {
-    problem.detail =
-        name + " claims " + std::to_string(json_size) + " bytes of game data";
+  SaveFrame frame;
+  frame.json_size = endian::from_le64(hdr.size);
+  if (frame.json_size == 0 || frame.json_size > MAX_SAVE_JSON_SIZE) {
+    problem.detail = name + " claims " + std::to_string(frame.json_size) +
+                     " bytes of game data";
     return std::nullopt;
   }
 
-  std::uint64_t payload_offset = sizeof(SaveHeader);
+  frame.payload_offset = sizeof(SaveHeader);
   if (header_version >= 2) {
     uint32_t meta_len = 0;
-    if (!file.read(reinterpret_cast<char*>(&meta_len), sizeof(meta_len))) {
+    if (bytes.size() < sizeof(SaveHeader) + sizeof(meta_len)) {
       problem.detail = name + " ends inside its header";
       return std::nullopt;
     }
+    std::memcpy(&meta_len, bytes.data() + sizeof(SaveHeader), sizeof(meta_len));
     meta_len = endian::from_le32(meta_len);
     if (meta_len > MAX_METADATA_SIZE) {
       problem.detail =
           name + " has a " + std::to_string(meta_len) + " byte metadata block";
       return std::nullopt;
     }
-    payload_offset += sizeof(meta_len) + meta_len;
+    frame.payload_offset += sizeof(meta_len) + meta_len;
   }
-  if (payload_offset >= file_size) {
+  if (frame.payload_offset >= bytes.size()) {
     problem.detail = name + " has no game data after its header";
     return std::nullopt;
   }
+  return frame;
+}
 
-  std::vector<unsigned char> compressed(
-      static_cast<std::size_t>(file_size - payload_offset));
-  file.seekg(static_cast<std::streamoff>(payload_offset), std::ios::beg);
-  if (!file.read(reinterpret_cast<char*>(compressed.data()),
-                 static_cast<std::streamsize>(compressed.size()))) {
-    problem = {"cannot read the game data in " + name, load_unreadable_message};
+// Decodes a save's bytes: checks the header and every size in it before
+// allocating for them, then inflates and parses the game data.
+std::optional<json> decode_save_bytes(std::string_view bytes,
+                                      const std::string& name,
+                                      LoadProblem& problem) {
+  const std::optional<SaveFrame> frame = read_save_frame(bytes, name, problem);
+  if (!frame) {
     return std::nullopt;
   }
+  const std::string_view compressed =
+      bytes.substr(static_cast<std::size_t>(frame->payload_offset));
 
-  std::string json_str(static_cast<size_t>(json_size), '\0');
-  auto dest_len = static_cast<uLongf>(json_size);
-  int zret =
-      uncompress(reinterpret_cast<Bytef*>(json_str.data()), &dest_len,
-                 compressed.data(), static_cast<uLong>(compressed.size()));
+  std::string json_str(static_cast<size_t>(frame->json_size), '\0');
+  auto dest_len = static_cast<uLongf>(frame->json_size);
+  int zret = uncompress(reinterpret_cast<Bytef*>(json_str.data()), &dest_len,
+                        reinterpret_cast<const Bytef*>(compressed.data()),
+                        static_cast<uLong>(compressed.size()));
   if (zret != Z_OK) {
     problem.detail = name + ": the game data does not inflate (zlib error " +
                      std::to_string(zret) + ")";
     return std::nullopt;
   }
-  if (dest_len != static_cast<uLongf>(json_size)) {
+  if (dest_len != static_cast<uLongf>(frame->json_size)) {
     problem.detail = name + ": the game data inflates to " +
                      std::to_string(dest_len) + " bytes, not the " +
-                     std::to_string(json_size) + " its header claims";
+                     std::to_string(frame->json_size) + " its header claims";
     return std::nullopt;
   }
-  std::vector<unsigned char>().swap(compressed);
 
   try {
     return parse_bounded(json_str, MAX_SAVE_JSON_DEPTH, MAX_SAVE_JSON_VALUES);
@@ -395,6 +410,26 @@ std::optional<json> decode_save_file(const fs::path& path,
     problem.detail = name + ": the game data is not valid JSON: " + e.what();
     return std::nullopt;
   }
+}
+
+// Reads a whole save file, refusing one larger than any save before reading.
+std::optional<std::string> read_save_bytes(const fs::path& path,
+                                           LoadProblem& problem) {
+  FileRead read = read_whole_file(path, MAX_SAVE_FILE_SIZE);
+  if (!read.bytes) {
+    problem = {display(path) + ": " + read.problem,
+               read.too_large ? load_damaged_message : load_unreadable_message};
+  }
+  return std::move(read.bytes);
+}
+
+std::optional<json> decode_save_file(const fs::path& path,
+                                     LoadProblem& problem) {
+  const std::optional<std::string> bytes = read_save_bytes(path, problem);
+  if (!bytes) {
+    return std::nullopt;
+  }
+  return decode_save_bytes(*bytes, display(path), problem);
 }
 
 // Read the uncompressed metadata block of a version >= 2 save.
@@ -460,7 +495,11 @@ void migrate_save(json& j, int version) {
   if (version < 2) {
     migrate_premise_status(j);
   }
-  j["version"] = SAVE_FORMAT_VERSION;
+  // A version 4 save is newer than a Classic one, not older: it keeps its
+  // number, and with it its scenario block.
+  if (version < SAVE_FORMAT_VERSION) {
+    j["version"] = SAVE_FORMAT_VERSION;
+  }
 }
 
 // The save format version a document gives, if it gives one.
@@ -988,6 +1027,57 @@ void check_scalars(const json& j) {
   }
 }
 
+// A game outside the original ten is a version 4 save with its scenario
+// block; a Classic one is version 3 or older and has none. What the block
+// holds is checked when it is read, while building.
+void check_scenario(const json& j) {
+  const bool expanded =
+      require_member(j, "version") == core::content::expanded_save_version;
+  const json* block = find_member(j, "scenario");
+  if (expanded && block == nullptr) {
+    reject("a version " + std::to_string(core::content::expanded_save_version) +
+           " save has no scenario");
+  }
+  if (!expanded && block != nullptr) {
+    reject("a Classic save has a scenario");
+  }
+  if (block == nullptr) {
+    return;
+  }
+  check_object(*block, "scenario");
+
+  // CityId i is roster entry i, so every city the save names has to be one
+  // of the roster's. Building checks it again against the roster it reads.
+  const json* roster = find_member(*block, "roster");
+  if (roster == nullptr || !roster->is_array()) {
+    reject("the scenario has no roster");
+  }
+  const auto places = static_cast<std::int64_t>(roster->size());
+  const auto check_place = [places](const json& value,
+                                    const std::string& what) {
+    if (value.is_number_integer() && value.get<std::int64_t>() >= places) {
+      reject(what + " is a city this game is not played in");
+    }
+  };
+  if (const json* cities = find_member(j, "cities")) {
+    for (std::size_t i = 0; i < cities->size(); ++i) {
+      check_place(require_member((*cities)[i], "id"), item("cities", i));
+    }
+  }
+  if (const json* restaurants = find_member(j, "restaurants")) {
+    for (std::size_t i = 0; i < restaurants->size(); ++i) {
+      check_place(require_member((*restaurants)[i], "property_city_id"),
+                  item("restaurants", i));
+    }
+  }
+  if (const json* cities = find_member(j, "player_cities")) {
+    for (std::size_t i = 0; i < cities->size(); ++i) {
+      check_place((*cities)[i], item("player_cities", i));
+    }
+  }
+  check_place(require_member(j, "active_city"), "active_city");
+}
+
 // Throws InvalidSave if the document is not a save the loader can build a
 // game from.
 void validate_save_document(const json& j) {
@@ -1002,32 +1092,34 @@ void validate_save_document(const json& j) {
   check_mission(j);
   check_career_logs(j);
   check_scalars(j);
+  check_scenario(j);
 }
 
 // Reads, upgrades and checks a save. Returns the document ready for
 // json_to_state, or nullopt with the problem filled in.
-std::optional<json> read_save_document(const fs::path& path,
+std::optional<json> read_save_document(std::string_view bytes,
+                                       const std::string& name,
                                        LoadProblem& problem) {
   try {
-    std::optional<json> document = decode_save_file(path, problem);
+    std::optional<json> document = decode_save_bytes(bytes, name, problem);
     if (!document) {
       return std::nullopt;
     }
     const std::optional<int> version = document_version(*document);
     if (!version) {
-      problem.detail = display(path) + " has no save format version";
+      problem.detail = name + " has no save format version";
       return std::nullopt;
     }
-    if (*version > SAVE_FORMAT_VERSION) {
-      problem = {display(path) + " is save format " + std::to_string(*version) +
+    if (*version > core::content::expanded_save_version) {
+      problem = {name + " is save format " + std::to_string(*version) +
                      "; this build reads up to " +
-                     std::to_string(SAVE_FORMAT_VERSION),
+                     std::to_string(core::content::expanded_save_version),
                  load_newer_message};
       return std::nullopt;
     }
     if (*version < OLDEST_LOADABLE_SAVE_VERSION) {
-      problem.detail = display(path) + " is save format " +
-                       std::to_string(*version) + ", which no build reads";
+      problem.detail = name + " is save format " + std::to_string(*version) +
+                       ", which no build reads";
       return std::nullopt;
     }
     migrate_save(*document, *version);
@@ -1035,9 +1127,205 @@ std::optional<json> read_save_document(const fs::path& path,
     return document;
   }
   catch (const std::exception& e) {
-    problem = {display(path) + ": " + e.what(), load_damaged_message};
+    problem = {name + ": " + e.what(), load_damaged_message};
     return std::nullopt;
   }
+}
+
+std::optional<json> read_save_document(const fs::path& path,
+                                       LoadProblem& problem) {
+  const std::optional<std::string> bytes = read_save_bytes(path, problem);
+  if (!bytes) {
+    return std::nullopt;
+  }
+  return read_save_document(*bytes, display(path), problem);
+}
+
+// FNV-1a over the bytes, as 16 hex digits.
+std::string fingerprint_hash(std::string_view bytes) {
+  constexpr uint64_t fnv_offset_basis = 14695981039346656037ULL;
+  constexpr uint64_t fnv_prime = 1099511628211ULL;
+  uint64_t hash = fnv_offset_basis;
+  for (const unsigned char byte : bytes) {
+    hash ^= byte;
+    hash *= fnv_prime;
+  }
+  return compat::format("{:016x}", hash);
+}
+
+// The integrity check of a version just written: the file holds exactly the
+// bytes written and its header holds up. Returns the bytes, or nothing with
+// the reason.
+std::optional<std::string> check_integrity(const fs::path& file,
+                                           const FileDigest& written,
+                                           std::string& reason) {
+  FileRead read = read_whole_file(file, MAX_SAVE_FILE_SIZE);
+  if (!read.bytes) {
+    reason = "it can't be read back: " + read.problem;
+    return std::nullopt;
+  }
+  if (read.bytes->size() != written.size) {
+    reason = "it is " + std::to_string(read.bytes->size()) +
+             " bytes on disk, not the " + std::to_string(written.size) +
+             " written";
+    return std::nullopt;
+  }
+  if (checksum_of(*read.bytes) != written.checksum) {
+    reason = "its bytes on disk are not the ones written";
+    return std::nullopt;
+  }
+  LoadProblem problem;
+  if (!read_save_frame(*read.bytes, display(file), problem)) {
+    reason = problem.detail;
+    return std::nullopt;
+  }
+  return std::move(read.bytes);
+}
+
+// Finishes retiring: removes the files of the versions the manifest dropped.
+// One that can't go yet stays listed for the next save to try again.
+void remove_retired(const SaveSlot& slot, SlotManifest& manifest) {
+  std::erase_if(manifest.retired, [&slot](std::uint64_t sequence) {
+    const fs::path file = slot.version_path(sequence);
+    std::error_code ec;
+    fs::remove(file, ec);
+    if (ec) {
+      Logger::warn("Could not remove {}: {}", display(file), ec.message());
+      return false;
+    }
+    return true;
+  });
+}
+
+// One copy of a save that loading may try, with what it must hold if that
+// is known.
+struct LoadCopy {
+  fs::path file;
+  std::optional<FileDigest> expected;
+  std::optional<SaveVersion> version;
+};
+
+// The copies to try, in order. A slot without versions has its file. A slot
+// with versions has its working versions, the active one first and then the
+// newest; each from its own file, then from the slot's file when that holds
+// the same bytes. A slot's file that matches no version was written outside
+// them (by hand, by save() or by an older build), so it goes first. Version
+// files the manifest does not list come last.
+std::vector<LoadCopy> plan_load(const fs::path& path) {
+  const SaveSlot slot(path);
+  std::vector<LoadCopy> copies;
+  if (!slot.has_versions()) {
+    copies.push_back(
+        {.file = path, .expected = std::nullopt, .version = std::nullopt});
+    return copies;
+  }
+
+  const SaveSlot::ManifestRead read = slot.read_manifest();
+  std::error_code ec;
+  const bool slot_file_there = fs::exists(path, ec);
+  if (!read.manifest) {
+    if (!read.problem.empty()) {
+      Logger::warn("The versions of {} can't be used: {}", display(path),
+                   read.problem);
+    }
+    if (slot_file_there) {
+      copies.push_back(
+          {.file = path, .expected = std::nullopt, .version = std::nullopt});
+    }
+    for (const std::uint64_t sequence : slot.version_files()) {
+      copies.push_back({.file = slot.version_path(sequence),
+                        .expected = std::nullopt,
+                        .version = std::nullopt});
+    }
+    return copies;
+  }
+
+  const SlotManifest& manifest = *read.manifest;
+  std::optional<FileDigest> slot_digest;
+  if (slot_file_there) {
+    const FileRead bytes = read_whole_file(path, MAX_SAVE_FILE_SIZE);
+    if (bytes.bytes) {
+      slot_digest = digest_of(*bytes.bytes);
+    }
+  }
+  const auto digest = [](const SaveVersion& v) {
+    return FileDigest{.size = v.size, .checksum = v.checksum};
+  };
+  const bool slot_listed =
+      slot_digest &&
+      std::ranges::any_of(manifest.versions, [&](const SaveVersion& v) {
+        return digest(v) == *slot_digest;
+      });
+  if (slot_file_there && !slot_listed) {
+    copies.push_back(
+        {.file = path, .expected = std::nullopt, .version = std::nullopt});
+  }
+
+  std::vector<const SaveVersion*> working;
+  for (const SaveVersion& v : manifest.versions) {
+    if (v.status == VersionStatus::Working) {
+      working.push_back(&v);
+    }
+  }
+  std::ranges::stable_partition(working, [&](const SaveVersion* v) {
+    return manifest.active && *manifest.active == v->sequence;
+  });
+  for (const SaveVersion* v : working) {
+    copies.push_back({.file = slot.version_path(v->sequence),
+                      .expected = digest(*v),
+                      .version = *v});
+    if (slot_digest == digest(*v)) {
+      copies.push_back({.file = path, .expected = digest(*v), .version = *v});
+    }
+  }
+
+  for (const std::uint64_t sequence : slot.version_files()) {
+    if (manifest.find(sequence) == nullptr &&
+        std::ranges::find(manifest.retired, sequence) ==
+            manifest.retired.end()) {
+      copies.push_back({.file = slot.version_path(sequence),
+                        .expected = std::nullopt,
+                        .version = std::nullopt});
+    }
+  }
+  return copies;
+}
+
+// "2026-11-14 09:30 UTC (Mar 4, 1995)", for the player.
+std::string when_saved(const SaveVersion& v) {
+  std::string when = v.written_at;
+  if (when.size() >= 16) {
+    when = when.substr(0, 10) + " " + when.substr(11, 5) + " UTC";
+  }
+  if (!v.game_date.empty()) {
+    when += " (" + v.game_date + ")";
+  }
+  return when;
+}
+
+// What the player is told when loading took another copy than the first.
+// Nothing when it was the same version from its other copy.
+std::string other_copy_notice(const LoadCopy& first, const LoadCopy& loaded) {
+  if (first.version && loaded.version &&
+      first.version->sequence == loaded.version->sequence) {
+    return {};
+  }
+  if (loaded.version) {
+    return "The save could not be loaded as it was, so the game loaded the "
+           "verified version of it saved " +
+           when_saved(*loaded.version) + ".";
+  }
+  return "The save could not be loaded as it was, so the game loaded an "
+         "older copy of it.";
+}
+
+// Whether a game is in progress: every player there, a person first. The
+// menus' stand-in players are all computer players.
+bool game_in_progress(const GameState& state) {
+  const auto players = state.players();
+  return std::ranges::all_of(players,
+                             [](const Player* p) { return p != nullptr; }) &&
+         players[0]->is_human_controlled();
 }
 
 } // namespace
@@ -1132,7 +1420,8 @@ bool SaveGameManager::autosave(const GameState& state,
                                     GameOptions::AUTOSAVE_COUNT_MAX);
   std::string filename = next_autosave_filename(slot_count);
   Logger::info("Autosaving to {}", filename);
-  bool ok = save(state, context, filename, error);
+  bool ok =
+      save_version(state, context, get_full_path(filename), "autosave", error);
   if (!ok) {
     Logger::warn("Autosave failed");
   }
@@ -1188,70 +1477,474 @@ SaveGameManager::read_save_metadata(const std::string& filename) {
 }
 
 bool SaveGameManager::load(GameState& state, GameContext& context,
-                           const std::string& filename, std::string* error) {
+                           const std::string& filename, std::string* error,
+                           std::string* notice) {
+  return load_slot(state, context, filename, error, notice, {});
+}
+
+bool SaveGameManager::load_over_current(GameState& state, GameContext& context,
+                                        const std::string& filename,
+                                        std::string* error, std::string* notice,
+                                        const fs::path& checkpoint_slot) {
+  bool kept = true;
+  const bool loaded = load_slot(state, context, filename, error, notice, [&] {
+    kept = checkpoint(state, context, CheckpointReason::BeforeLoad,
+                      checkpoint_slot) != CheckpointResult::Failed;
+  });
+  if (!kept && notice != nullptr) {
+    *notice = notice->empty()
+                  ? std::string(checkpoint_failed_notice)
+                  : std::string(checkpoint_failed_notice) + " " + *notice;
+  }
+  return loaded;
+}
+
+bool SaveGameManager::load_slot(GameState& state, GameContext& context,
+                                const std::string& filename, std::string* error,
+                                std::string* notice,
+                                const std::function<void()>& before_replacing) {
   Logger::info("Loading game from {}", filename);
   const fs::path path = get_full_path(filename);
+  const std::vector<LoadCopy> copies = plan_load(path);
 
-  LoadProblem problem;
-  std::optional<json> document = read_save_document(path, problem);
-  if (!document) {
+  enum class Built { Loaded, Rejected, Lost };
+  // Builds the game from the save in a scratch state first. Damage the
+  // checks can't see, such as a field missing deep inside a restaurant,
+  // shows up there while the running game is still untouched. Building draws
+  // from the shared random generator, so that is put back afterwards.
+  const auto build = [&](const json& document, const fs::path& file,
+                         LoadProblem& problem) {
+    Logger::info(
+        "Checking the save by building it apart from the running game");
+    const uint32_t random_state = engine::random::get_state();
+    bool built = false;
+    std::string build_error;
+    try {
+      // Set up as the live state is, as far as anything set up survives:
+      // json_to_state starts with reset(), which keeps the options (and the
+      // presenters and status hub, which the scratch state has none of) and
+      // empties the rest. What the game's startup adds on top, a player in
+      // every slot (create_placeholder_players), json_to_state requires of
+      // the save itself.
+      auto scratch = std::make_unique<GameState>();
+      scratch->options() = state.options();
+      json_to_state(document, *scratch, context);
+      built = true;
+    }
+    catch (const std::exception& e) {
+      build_error = e.what();
+    }
+    catch (...) {
+      build_error = "unknown error";
+    }
+    engine::random::set_state(random_state);
+    if (!built) {
+      problem = {display(file) + ": " + build_error, load_damaged_message};
+      return Built::Rejected;
+    }
+
+    if (before_replacing) {
+      before_replacing();
+    }
+
+    // Every check passed, so load for real. It is the same build from the
+    // same document and the same random state, so it goes as the scratch
+    // one did.
+    Logger::info("Save checked; loading it into the game");
+    try {
+      json_to_state(document, state, context);
+      state.finalize_initialization(context);
+
+      // Land in the city view for the loaded city
+      state.ui().pop_to_root();
+      state.ui().replace_top<CityViewState>(state.active_city_id());
+    }
+    catch (const std::exception& e) {
+      Logger::warn("Load of {} failed after its checks passed: {}",
+                   display(file), e.what());
+      return Built::Lost;
+    }
+    return Built::Loaded;
+  };
+
+  std::string_view message = load_unreadable_message;
+  for (std::size_t i = 0; i < copies.size(); ++i) {
+    const LoadCopy& copy = copies[i];
+    LoadProblem problem;
+    std::optional<json> document;
+    if (const std::optional<std::string> bytes =
+            read_save_bytes(copy.file, problem)) {
+      if (copy.expected && digest_of(*bytes) != *copy.expected) {
+        problem = {display(copy.file) +
+                       " does not match the checksum its versions list",
+                   load_damaged_message};
+      }
+      else {
+        document = read_save_document(*bytes, display(copy.file), problem);
+      }
+    }
+
+    const Built built =
+        document ? build(*document, copy.file, problem) : Built::Rejected;
+    if (built == Built::Lost) {
+      set_message(error, load_failed_message);
+      return false;
+    }
+    if (built == Built::Loaded) {
+      if (i > 0) {
+        const std::string told = other_copy_notice(copies.front(), copy);
+        Logger::warn("Loaded {} instead of {}", display(copy.file),
+                     display(copies.front().file));
+        if (!told.empty()) {
+          state.status().post(StatusMsg{
+              .payload = std::string(other_version_status),
+              .severity = StatusSeverity::Warning,
+          });
+          if (notice != nullptr) {
+            *notice = told;
+          }
+        }
+      }
+      Logger::info("Load completed successfully");
+      return true;
+    }
     Logger::warn("Save rejected: {}", problem.detail);
-    set_message(error, problem.message);
-    return false;
+    if (i == 0) {
+      message = problem.message;
+    }
   }
+  set_message(error, message);
+  return false;
+}
 
-  // Build the game from the save in a scratch state first. Damage the checks
-  // above can't see, such as a field missing deep inside a restaurant, shows
-  // up here while the running game is still untouched. Building draws from the
-  // shared random generator, so that is put back afterwards.
-  Logger::info("Checking the save by building it apart from the running game");
+bool SaveGameManager::save_to_slot(const GameState& state,
+                                   const GameContext& context,
+                                   const std::string& filename,
+                                   std::string* error) {
+  return save_version(state, context, get_full_path(filename), "save", error);
+}
+
+std::optional<std::string>
+SaveGameManager::verify_build(std::string_view bytes, const std::string& name,
+                              const std::string& expected_fingerprint,
+                              const GameState& like,
+                              const GameContext& context) {
+  LoadProblem problem;
+  const std::optional<json> document = read_save_document(bytes, name, problem);
+  if (!document) {
+    return problem.detail;
+  }
+  // As load's scratch build; the random generator is put back after.
   const uint32_t random_state = engine::random::get_state();
-  bool built = false;
-  std::string build_error;
+  std::optional<std::string> why;
   try {
-    // Set up as the live state is, as far as anything set up survives:
-    // json_to_state starts with reset(), which keeps the options (and the
-    // presenters and status hub, which the scratch state has none of) and
-    // empties the rest. What the game's startup adds on top, a player in
-    // every slot (create_placeholder_players), json_to_state requires of the
-    // save itself.
     auto scratch = std::make_unique<GameState>();
-    scratch->options() = state.options();
+    scratch->options() = like.options();
     json_to_state(*document, *scratch, context);
-    built = true;
+    const std::string built = fingerprint(*scratch, context).hash;
+    if (built != expected_fingerprint) {
+      why = "it loads as another game: fingerprint " + built + ", not " +
+            expected_fingerprint;
+    }
   }
   catch (const std::exception& e) {
-    build_error = e.what();
+    why = std::string("it does not load: ") + e.what();
   }
   catch (...) {
-    build_error = "unknown error";
+    why = "it does not load";
   }
   engine::random::set_state(random_state);
-  if (!built) {
-    Logger::warn("Save rejected: {}: {}", display(path), build_error);
-    set_message(error, load_damaged_message);
-    return false;
-  }
+  return why;
+}
 
-  // Every check passed, so load for real. It is the same build from the same
-  // document and the same random state, so it goes as the scratch one did.
-  Logger::info("Save checked; loading it into the game");
+bool SaveGameManager::save_version(const GameState& state,
+                                   const GameContext& context,
+                                   const fs::path& path,
+                                   std::string_view made_for,
+                                   std::string* error) {
+  Logger::info("Saving game to {}, keeping its versions", display(path));
+  std::string bytes;
+  std::string expected;
+  std::string game_date;
   try {
-    json_to_state(*document, state, context);
-    state.finalize_initialization(context);
-
-    // Land in the city view for the loaded city
-    state.ui().pop_to_root();
-    state.ui().replace_top<CityViewState>(state.active_city_id());
+    json document = state_to_json(state, context);
+    bytes = encode_save(document);
+    game_date = metadata_from_save_json(document).value("game_date", "");
+    document.erase("saved_at");
+    expected = fingerprint_hash(document.dump());
   }
   catch (const std::exception& e) {
-    Logger::warn("Load of {} failed after its checks passed: {}", display(path),
-                 e.what());
-    set_message(error, load_failed_message);
+    Logger::warn("Save failed: {}: {}", display(path), e.what());
+    set_message(error, save_failed_message);
     return false;
   }
 
-  Logger::info("Load completed successfully");
+  const SaveSlot slot(path);
+  std::error_code ec = create_parent_folder(path);
+  if (!ec) {
+    fs::create_directories(slot.folder(), ec);
+  }
+  if (ec) {
+    Logger::warn("Save failed: cannot create the folder for {}: {}",
+                 display(slot.folder()), ec.message());
+    set_message(error, save_failure_message(ec));
+    return false;
+  }
+
+  const SaveSlot::ManifestRead read = slot.read_manifest();
+  if (read.newer) {
+    // Its versions belong to a newer build; leave them be and write the
+    // file alone, as builds before versions did.
+    Logger::warn("A newer build keeps the versions of {} ({}); saving the "
+                 "file alone",
+                 display(path), read.problem);
+    const util::AtomicWriteResult written =
+        util::write_file_atomically(path, bytes);
+    if (!written) {
+      Logger::warn("Save failed: {}", written.error);
+      set_message(error, save_failure_message(written.code));
+      return false;
+    }
+    return true;
+  }
+  if (!read.problem.empty()) {
+    Logger::warn("The versions of {} start afresh, keeping the files there: "
+                 "{}",
+                 display(path), read.problem);
+  }
+  SlotManifest manifest = read.manifest.value_or(SlotManifest{});
+  remove_retired(slot, manifest);
+
+  // Past every version file there, listed or not.
+  std::uint64_t sequence = manifest.next_sequence;
+  for (const std::uint64_t on_disk : slot.version_files()) {
+    sequence = std::max(sequence, on_disk + 1);
+  }
+  manifest.next_sequence = sequence + 1;
+  const FileDigest digest = digest_of(bytes);
+  manifest.versions.insert(manifest.versions.begin(),
+                           SaveVersion{
+                               .sequence = sequence,
+                               .status = VersionStatus::Candidate,
+                               .level = VersionLevel::Written,
+                               .reason = "being written",
+                               .made_for = std::string(made_for),
+                               .written_at = utc_now(),
+                               .size = digest.size,
+                               .checksum = digest.checksum,
+                               .fingerprint = expected,
+                               .game_date = game_date,
+                           });
+
+  // 1. List the candidate before writing it, so a save cut short anywhere
+  // leaves nothing the manifest does not account for.
+  if (const util::AtomicWriteResult listed = slot.write_manifest(manifest);
+      !listed) {
+    Logger::warn("Save failed: {}", listed.error);
+    set_message(error, save_failure_message(listed.code));
+    return false;
+  }
+
+  // 2. Write it under a name of its own: no working version is touched.
+  const fs::path candidate = slot.version_path(sequence);
+  if (const util::AtomicWriteResult written =
+          util::write_file_atomically(candidate, bytes);
+      !written) {
+    manifest.find(sequence)->reason =
+        "it could not be written: " + written.error;
+    static_cast<void>(slot.write_manifest(manifest));
+    Logger::warn("Save failed: {}", written.error);
+    set_message(error, save_failure_message(written.code));
+    return false;
+  }
+
+  // 3. The integrity check, then 4. the load check.
+  std::string reason;
+  VersionLevel level = VersionLevel::Written;
+  if (const std::optional<std::string> on_disk =
+          check_integrity(candidate, digest, reason)) {
+    level = VersionLevel::IntegrityChecked;
+    Logger::info("Checking the new save by building it apart from the game");
+    if (std::optional<std::string> why = verify_build(
+            *on_disk, display(candidate), expected, state, context)) {
+      reason = std::move(*why);
+    }
+    else {
+      level = VersionLevel::LoadVerified;
+    }
+  }
+  const bool working = level == VersionLevel::LoadVerified;
+  SaveVersion& version = *manifest.find(sequence);
+  version.level = level;
+  version.status = working ? VersionStatus::Working : VersionStatus::Candidate;
+  version.reason = reason;
+  if (working) {
+    manifest.active = sequence;
+  }
+  apply_retention(manifest);
+
+  // 5. Commit: from here the new version is the one the slot loads.
+  if (const util::AtomicWriteResult committed = slot.write_manifest(manifest);
+      !committed) {
+    Logger::warn("Save failed: {}", committed.error);
+    set_message(error, save_failure_message(committed.code));
+    return false;
+  }
+  if (!working) {
+    Logger::warn("Save failed: version {} of {} did not pass its checks: {}",
+                 sequence, display(path), reason);
+    set_message(error, save_unverified_message);
+    return false;
+  }
+
+  // 6. The slot's file becomes the new version too, for the load menu and
+  // for older builds. If it can't, loading still takes the new version.
+  if (const util::AtomicWriteResult refreshed =
+          util::write_file_atomically(path, bytes);
+      !refreshed) {
+    Logger::warn("{} still holds an earlier version ({}); loading it takes "
+                 "the new one from its versions",
+                 display(path), refreshed.error);
+  }
+
+  // 7. The versions retention dropped go.
+  remove_retired(slot, manifest);
+  Logger::info("Save completed: version {} of {}, load-verified", sequence,
+               display(path));
+  return true;
+}
+
+CheckpointResult SaveGameManager::checkpoint(const GameState& state,
+                                             const GameContext& context,
+                                             CheckpointReason reason,
+                                             const fs::path& slot_file) {
+  if (!game_in_progress(state)) {
+    return CheckpointResult::NoGame;
+  }
+  const fs::path path =
+      slot_file.empty()
+          ? fs::path(get_full_path(std::string(checkpoint_filename)))
+          : slot_file;
+  try {
+    const std::string now = fingerprint(state, context).hash;
+    const SaveSlot::ManifestRead read = SaveSlot(path).read_manifest();
+    if (read.manifest) {
+      const SaveVersion* newest = read.manifest->newest_working();
+      if (newest != nullptr && newest->fingerprint == now) {
+        Logger::info("The newest checkpoint already holds this game");
+        return CheckpointResult::Unchanged;
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    Logger::warn("Checkpoint failed: {}", e.what());
+    return CheckpointResult::Failed;
+  }
+  const std::string_view made_for = reason == CheckpointReason::BeforeNewGame
+                                        ? "checkpoint before a new game"
+                                        : "checkpoint before loading a save";
+  Logger::info("Keeping the game in progress: {}", made_for);
+  return save_version(state, context, path, made_for, nullptr)
+             ? CheckpointResult::Written
+             : CheckpointResult::Failed;
+}
+
+std::optional<SlotManifest>
+SaveGameManager::versions(const std::string& filename, std::string* problem) {
+  SaveSlot::ManifestRead read =
+      SaveSlot(get_full_path(filename)).read_manifest();
+  if (problem != nullptr) {
+    *problem = read.problem;
+  }
+  return std::move(read.manifest);
+}
+
+bool SaveGameManager::restore_version(const GameState& state,
+                                      const GameContext& context,
+                                      const std::string& filename,
+                                      std::uint64_t sequence,
+                                      std::string* error) {
+  const fs::path path = get_full_path(filename);
+  const SaveSlot slot(path);
+  SaveSlot::ManifestRead read = slot.read_manifest();
+  if (!read.manifest) {
+    Logger::warn("Nothing to restore in {}: {}", display(path),
+                 read.problem.empty() ? "it keeps no versions" : read.problem);
+    set_message(error, restore_nothing_message);
+    return false;
+  }
+  SlotManifest manifest = std::move(*read.manifest);
+  SaveVersion* version = manifest.find(sequence);
+  if (version == nullptr || version->status != VersionStatus::Working) {
+    Logger::warn("Version {} of {} is not a working version", sequence,
+                 display(path));
+    set_message(error, restore_not_working_message);
+    return false;
+  }
+
+  // Check it again, apart from the game, before anything changes.
+  const fs::path file = slot.version_path(sequence);
+  std::string reason;
+  const std::optional<std::string> bytes = check_integrity(
+      file, FileDigest{.size = version->size, .checksum = version->checksum},
+      reason);
+  if (bytes) {
+    if (std::optional<std::string> why = verify_build(
+            *bytes, display(file), version->fingerprint, state, context)) {
+      reason = std::move(*why);
+    }
+  }
+  if (!reason.empty()) {
+    Logger::warn("Version {} of {} failed its check: {}", sequence,
+                 display(path), reason);
+    version->status = VersionStatus::Candidate;
+    version->level =
+        bytes ? VersionLevel::IntegrityChecked : VersionLevel::Written;
+    version->reason = "it failed its check before a restore: " + reason;
+    if (manifest.active == sequence) {
+      const SaveVersion* other = manifest.newest_working();
+      manifest.active =
+          other ? std::optional<std::uint64_t>(other->sequence) : std::nullopt;
+    }
+    static_cast<void>(slot.write_manifest(manifest));
+    set_message(error, restore_failed_message);
+    return false;
+  }
+
+  // Activate: the manifest first, then the slot's file. Cut short between
+  // the two, loading already takes the restored version.
+  manifest.active = sequence;
+  if (const util::AtomicWriteResult written = slot.write_manifest(manifest);
+      !written) {
+    Logger::warn("Restore failed: {}", written.error);
+    set_message(error, restore_unwritable_message);
+    return false;
+  }
+  if (const util::AtomicWriteResult refreshed =
+          util::write_file_atomically(path, *bytes);
+      !refreshed) {
+    Logger::warn("{} still holds the version it had ({}); loading it takes "
+                 "the restored one",
+                 display(path), refreshed.error);
+  }
+  Logger::info("Restored version {} of {}", sequence, display(path));
+  return true;
+}
+
+bool SaveGameManager::delete_save(const std::string& filename,
+                                  std::string* error) {
+  const fs::path path = get_full_path(filename);
+  std::error_code file_ec;
+  fs::remove(path, file_ec);
+  std::error_code folder_ec;
+  fs::remove_all(SaveSlot(path).folder(), folder_ec);
+  if (file_ec || folder_ec) {
+    Logger::warn("Could not delete {}: {}", display(path),
+                 (file_ec ? file_ec : folder_ec).message());
+    set_message(error, delete_failed_message);
+    return false;
+  }
+  Logger::info("Deleted {} and its versions", display(path));
   return true;
 }
 
@@ -1363,8 +2056,15 @@ json SaveGameManager::state_to_json(const GameState& state,
                                     const GameContext& /*context*/) {
   json j;
 
-  // Save format version
+  // Save format version. A game outside the original ten also needs its
+  // places and scenario, which only version 4 carries; a Classic game stays
+  // version 3, byte for byte as before.
   j["version"] = SAVE_FORMAT_VERSION;
+  if (!state.roster().is_classic()) {
+    j["version"] = core::content::expanded_save_version;
+    j["scenario"] = core::content::save_scenario_block(
+        state.roster(), state.scenario_document());
+  }
 
   // Save RNG state so a loaded game resumes with the same random sequence
   j["rng_state"] = engine::random::get_state();
@@ -1589,9 +2289,32 @@ json SaveGameManager::state_to_json(const GameState& state,
 }
 
 void SaveGameManager::json_to_state(const json& j, GameState& state,
-                                    GameContext& context) {
+                                    const GameContext& context) {
   // Clear all existing restaurants and reset property states before loading
   state.reset();
+
+  // The places and scenario of a game outside the original ten, before any
+  // city is built from them. A damaged block, or more places than this build
+  // plays (std::length_error), refuses the save.
+  if (const auto it = j.find("scenario"); it != j.end()) {
+    std::string problem;
+    std::optional<core::content::SavedScenario> saved =
+        core::content::read_scenario_block(*it, problem);
+    if (!saved) {
+      throw std::runtime_error("the scenario is damaged: " + problem);
+    }
+    state.restore_scenario(std::move(saved->roster),
+                           std::move(saved->scenario));
+  }
+  // A place the game is not played in can't hold anything.
+  const auto require_in_roster = [&state](core::CityId city_id,
+                                          std::string_view what) {
+    if (!is_valid_city_id(city_id) || !state.in_roster(city_id)) {
+      throw std::out_of_range(std::string(what) + " is in city " +
+                              std::to_string(city_id.value) +
+                              ", which this game is not played in");
+    }
+  };
 
   // Load game time
   if (j.contains("time")) {
@@ -1706,10 +2429,7 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
     Logger::info("Loading {} cities from save file", cities_json.size());
     for (const auto& city_json : cities_json) {
       core::CityId city_id{city_json.at("id").get<int>()};
-      if (!is_valid_city_id(city_id)) {
-        throw std::out_of_range("the save has a city with id " +
-                                std::to_string(city_id.value));
-      }
+      require_in_roster(city_id, "a city of the save");
       Logger::info("Loading city {}", city_id.value);
 
       // Ensure city exists WITHOUT changing active_city
@@ -1733,6 +2453,9 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
       // Get the property reference
       core::CityId city_id{rest_json.at("property_city_id").get<int>()};
       int property_index = rest_json.at("property_index").get<int>();
+      if (is_valid_city_id(city_id)) {
+        require_in_roster(city_id, "a restaurant");
+      }
 
       City* city = is_valid_city_id(city_id) ? state.city(city_id) : nullptr;
       if (!city) {
@@ -1776,7 +2499,10 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
     // A game is always in a city. If somehow there is no valid active city,
     // just pick one.
     core::CityId cid{j.value("active_city", -1)};
-    if (!is_valid_city_id(cid)) {
+    if (is_valid_city_id(cid)) {
+      require_in_roster(cid, "the active player");
+    }
+    else {
       cid = state.default_city_id();
       Logger::warn("Save has no active city; falling back to city {}",
                    cid.value);
@@ -1920,11 +2646,7 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
       }
       else {
         const core::CityId city_id{city.get<int>()};
-        if (!is_valid_city_id(city_id)) {
-          throw std::out_of_range("player " + std::to_string(i) +
-                                  " is in city " +
-                                  std::to_string(city_id.value));
-        }
+        require_in_roster(city_id, "player " + std::to_string(i));
         state.player_city(core::PlayerId{i}, city_id);
       }
     }
@@ -2075,11 +2797,23 @@ bool SaveGameManager::add_high_score(HighScoreEntry entry) {
 }
 
 int SaveGameManager::remove_stale_temp_files(const std::string& settings_file) {
-  return remove_stale_temp_files(
-      {fs::path(platform_paths::saves_dir()),
-       fs::path(settings_file).parent_path(),
-       fs::path(platform_paths::bindings_file_path()).parent_path()},
-      STALE_TEMP_FILE_AGE);
+  const fs::path saves = platform_paths::saves_dir();
+  std::vector<fs::path> folders = {
+      saves, fs::path(settings_file).parent_path(),
+      fs::path(platform_paths::bindings_file_path()).parent_path()};
+  // Each slot's versions are written in a folder of their own.
+  std::error_code ec;
+  fs::directory_iterator it(saves, ec);
+  for (const fs::directory_iterator end; !ec && it != end; it.increment(ec)) {
+    std::error_code entry_ec;
+    const std::u8string name = it->path().filename().u8string();
+    if (it->is_directory(entry_ec) && !entry_ec &&
+        is_versions_folder_name(std::string_view(
+            reinterpret_cast<const char*>(name.data()), name.size()))) {
+      folders.push_back(it->path());
+    }
+  }
+  return remove_stale_temp_files(folders, STALE_TEMP_FILE_AGE);
 }
 
 int SaveGameManager::remove_stale_temp_files(
@@ -2121,19 +2855,7 @@ StateFingerprint SaveGameManager::fingerprint(const GameState& state,
 
   // nlohmann::json orders objects by key, so the same state always dumps to the
   // same bytes.
-  const std::string bytes = document.dump();
-
-  // FNV-1a
-  constexpr uint64_t fnv_offset_basis = 14695981039346656037ULL;
-  constexpr uint64_t fnv_prime = 1099511628211ULL;
-
-  uint64_t hash = fnv_offset_basis;
-  for (unsigned char byte : bytes) {
-    hash ^= byte;
-    hash *= fnv_prime;
-  }
-
-  return StateFingerprint{.hash = compat::format("{:016x}", hash),
+  return StateFingerprint{.hash = fingerprint_hash(document.dump()),
                           .document = std::move(document)};
 }
 

@@ -379,7 +379,7 @@ json player_to_json(const Player& player) {
 }
 
 std::unique_ptr<Player>
-json_to_player(const json& j, GameContext& /*context*/,
+json_to_player(const json& j, const GameContext& /*context*/,
                const core::food::CustomerTasteProfiles& taste_profiles) {
   core::PlayerId pid{j.at("id").get<int>()};
   bool human{j.at("human_controlled").get<bool>()};

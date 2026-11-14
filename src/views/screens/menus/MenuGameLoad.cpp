@@ -176,10 +176,15 @@ void MenuGameLoad::load_selected_file() {
       [this] {
         Logger::info("Loading save file: {}", selected_file_);
 
+        // Keeps the game in progress as a checkpoint before it is replaced.
         std::string error;
-        if (save::SaveGameManager::load(state_, context_, selected_file_,
-                                        &error)) {
+        std::string notice;
+        if (save::SaveGameManager::load_over_current(
+                state_, context_, selected_file_, &error, &notice)) {
           Logger::info("Successfully loaded: {}", selected_file_);
+          if (!notice.empty()) {
+            context_.popup->create<AlertPopup>(notice);
+          }
         }
         else {
           Logger::warn("Failed to load: {}", selected_file_);
@@ -207,19 +212,10 @@ void MenuGameLoad::delete_selected_file() {
           return;
         }
 
-        namespace fs = std::filesystem;
-        auto full_path = fs::path(platform_paths::saves_dir()) / file_to_delete;
-
-        try {
-          if (fs::remove(full_path)) {
-            Logger::info("Deleted save file: {}", file_to_delete);
-          }
-          else {
-            Logger::warn("File not found: {}", file_to_delete);
-          }
-        }
-        catch (const std::exception& e) {
-          Logger::warn("Failed to delete: {}", e.what());
+        // The file and every version of it the slot keeps.
+        std::string error;
+        if (!save::SaveGameManager::delete_save(file_to_delete, &error)) {
+          context_.popup->create<AlertPopup>(error);
         }
 
         reload_file_list();

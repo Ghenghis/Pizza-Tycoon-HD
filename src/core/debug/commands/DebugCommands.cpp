@@ -465,12 +465,14 @@ CommandDef make_help_command() {
       .help_text = R"(Usage: help [command]
 
 Lists every registered command. Name a command for its
-arguments and subcommands, or "all" for the whole tree at once.
+arguments and subcommands, "all" for the whole tree at once, or
+"schema" for every command with the type and limits of each argument.
 
 Examples:
   help
   help player
   help all
+  help schema
 )",
       .args =
           {
@@ -478,7 +480,7 @@ Examples:
                   .name = "command",
                   .type = ArgType::String,
                   .optional = true,
-                  .description = R"(Command to describe, or "all")",
+                  .description = R"(Command to describe, "all" or "schema")",
               },
           },
       .handler = [](const CommandContext& ctx) -> CommandResult {

@@ -33,6 +33,7 @@
 #include "resources/util/FileUtils.h"
 
 #include <charconv>
+#include <cstdint>
 #include <cstdio>
 #include <optional>
 #include <stdexcept>
@@ -50,7 +51,8 @@ static CommandDef make_game_save() {
       .description = "Save the game to a file",
       .help_text = R"(Usage: game save <filename>
 
-Saves the current game state to a compressed .plsave file.
+Saves the current game state to a compressed .plsave file, keeping the
+save's last three verified versions (see 'game versions').
 The .plsave extension is added automatically if not provided.
 
 Examples:
@@ -77,17 +79,14 @@ Examples:
           filename += ".plsave";
         }
 
-        bool success =
-            save::SaveGameManager::save(ctx.state, ctx.context, filename);
-
-        if (success) {
+        std::string error;
+        if (save::SaveGameManager::save_to_slot(ctx.state, ctx.context,
+                                                filename, &error)) {
           return CommandResult::success().add_message(
               compat::format("Game saved to: {}", filename));
         }
-        else {
-          return CommandResult::error(
-              compat::format("Failed to save game to: {}", filename));
-        }
+        return CommandResult::error(
+            compat::format("Failed to save game to: {}", filename), error);
       },
   };
 }
@@ -98,7 +97,9 @@ static CommandDef make_game_load() {
       .description = "Load a game from a file",
       .help_text = R"(Usage: game load <filename>
 
-Loads a saved game from a compressed .plsave file.
+Loads a saved game from a compressed .plsave file, keeping the game in
+progress as a checkpoint first (CHECKPNT.plsave). A save whose newest
+version is damaged loads its next verified one, and says so.
 The .plsave extension is added automatically if not provided.
 
 Examples:
@@ -125,30 +126,123 @@ Examples:
           filename += ".plsave";
         }
 
-        // Check if file is valid first
-        if (!save::SaveGameManager::is_valid_save(filename)) {
+        // No check of the file first: load checks everything, and falls back
+        // to the save's other versions if the file is damaged.
+        std::string error;
+        std::string notice;
+        if (!save::SaveGameManager::load_over_current(
+                ctx.state, ctx.context, filename, &error, &notice)) {
           return CommandResult::error(
-              compat::format("Invalid save file: {}", filename),
-              "File does not exist or is not a valid save");
+              compat::format("Failed to load game from: {}", filename), error);
         }
-
-        int version = save::SaveGameManager::get_save_version(filename);
         CommandResult result = CommandResult::success();
-        result.add_message(
-            compat::format("Loading save file (version {})...", version));
-
-        bool success =
-            save::SaveGameManager::load(ctx.state, ctx.context, filename);
-
-        if (success) {
-          result.add_message(compat::format("Game loaded from: {}", filename));
+        result.add_message(compat::format("Game loaded from: {}", filename));
+        if (!notice.empty()) {
+          result.add_message(notice);
         }
-        else {
-          return CommandResult::error(
-              compat::format("Failed to load game from: {}", filename));
-        }
-
         return result;
+      },
+  };
+}
+
+static std::string with_extension(std::string filename) {
+  if (!filename.ends_with(".plsave")) {
+    filename += ".plsave";
+  }
+  return filename;
+}
+
+static CommandDef make_game_versions() {
+  return CommandDef{
+      .name = "versions",
+      .description = "List the versions a save keeps",
+      .help_text = R"(Usage: game versions <filename>
+
+Lists the versions of a save, newest first: its last three verified
+working versions and the newest candidate, with how far each got through
+the checks and, for a candidate, why it is not working. The one marked *
+is what loading the save gives.
+
+Examples:
+  game versions mygame
+  game versions CHECKPNT
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "filename",
+                  .type = ArgType::String,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Save to list (.plsave added if needed)",
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        const std::string filename = with_extension(ctx.string_arg(0));
+        std::string problem;
+        const auto manifest =
+            save::SaveGameManager::versions(filename, &problem);
+        if (!manifest) {
+          return CommandResult::error(
+              compat::format("{} keeps no versions", filename), problem);
+        }
+        CommandResult result = CommandResult::success();
+        for (const save::SaveVersion& v : manifest->versions) {
+          result.add_message(compat::format(
+              "{}{} {} {}, {}: {} ({}){}",
+              manifest->active == v.sequence ? "*" : " ", v.sequence,
+              save::to_string(v.status), save::to_string(v.level), v.made_for,
+              v.written_at, v.game_date,
+              v.reason.empty() ? std::string() : " - " + v.reason));
+        }
+        return result;
+      },
+  };
+}
+
+static CommandDef make_game_restore() {
+  return CommandDef{
+      .name = "restore",
+      .description = "Make an earlier version of a save the one it loads",
+      .help_text = R"(Usage: game restore <filename> <version>
+
+Checks the version again apart from the game, then makes it the one the
+save loads. The running game is not touched: load the save after. The
+other versions stay, so restoring the previous one undoes it.
+
+Example:
+  game restore mygame 12
+)",
+      .args =
+          {
+              ArgSpec{
+                  .name = "filename",
+                  .type = ArgType::String,
+                  .optional = false,
+                  .default_provider = DefaultProvider::None,
+                  .description = "Save to restore (.plsave added if needed)",
+              },
+              ArgSpec{
+                  .name = "version",
+                  .type = ArgType::Int,
+                  .optional = false,
+                  .description = "Version number, from 'game versions'",
+                  .min_value = 1,
+              },
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        const std::string filename = with_extension(ctx.string_arg(0));
+        const auto sequence = static_cast<std::uint64_t>(ctx.int_arg(1));
+        std::string error;
+        if (!save::SaveGameManager::restore_version(
+                ctx.state, ctx.context, filename, sequence, &error)) {
+          return CommandResult::error(
+              compat::format("Version {} of {} was not restored", sequence,
+                             filename),
+              error);
+        }
+        return CommandResult::success().add_message(
+            compat::format("{} now loads version {}", filename, sequence));
       },
   };
 }
@@ -1208,6 +1302,15 @@ Examples:
         if (ctx.has_arg(1)) {
           seed = static_cast<std::uint32_t>(ctx.int_arg(1));
         }
+        // A new game throws away the one in progress; keep it first.
+        if (save::SaveGameManager::checkpoint(
+                ctx.state, ctx.context,
+                save::CheckpointReason::BeforeNewGame) ==
+            save::CheckpointResult::Failed) {
+          return CommandResult::error(
+              "The game in progress could not be kept as a checkpoint",
+              "Save it by hand, then start the scenario");
+        }
         core::content::Findings findings;
         if (!core::content::start_shipped_scenario(ctx.state, ctx.context, name,
                                                    seed, findings)) {
@@ -1230,6 +1333,8 @@ CommandDef make_game_commands() {
   }
       .add_subcommand(make_game_save())
       .add_subcommand(make_game_load())
+      .add_subcommand(make_game_versions())
+      .add_subcommand(make_game_restore())
       .add_subcommand(make_game_exit())
       .add_subcommand(make_game_date())
       .add_subcommand(make_game_options())

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "CommandContext.h"
 #include "core/debug/command/CommandTokenizer.h"
@@ -21,8 +22,172 @@ namespace debug::command {
 // Argument to 'help' that dumps every command and subcommand.
 constexpr std::string_view all_keyword = "all";
 
+// Argument to 'help' that lists every command with its arguments.
+constexpr std::string_view schema_keyword = "schema";
+
 static void sort_by_name(std::vector<const CommandDef*>& cmds) {
   std::ranges::sort(cmds, {}, &CommandDef::name);
+}
+
+static std::vector<const CommandDef*>
+sorted_subcommands(const CommandDef& cmd) {
+  std::vector<const CommandDef*> subs;
+  subs.reserve(cmd.subcommands.size());
+  for (const auto& [name, subcmd] : cmd.subcommands) {
+    subs.push_back(&subcmd);
+  }
+  sort_by_name(subs);
+  return subs;
+}
+
+// The words a command answers to: its name, then its aliases.
+static std::vector<std::string_view> words_of(const CommandDef& cmd) {
+  std::vector<std::string_view> words;
+  words.reserve(cmd.aliases.size() + 1);
+  words.emplace_back(cmd.name);
+  for (const auto& alias : cmd.aliases) {
+    words.emplace_back(alias);
+  }
+  return words;
+}
+
+// The same word twice in one command's own name and aliases.
+static std::optional<std::string> repeated_word(const CommandDef& cmd,
+                                                const std::string& path) {
+  const auto words = words_of(cmd);
+  for (std::size_t i = 0; i < words.size(); ++i) {
+    if (words[i].empty()) {
+      return compat::format("'{}' has an empty name or alias", path);
+    }
+    for (std::size_t j = 0; j < i; ++j) {
+      if (words[i] == words[j]) {
+        return compat::format("'{}' lists '{}' twice", path, words[i]);
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+// The first word in a command's tree that would answer for two subcommands
+// of one command, described by its path; nothing when the tree is clean.
+static std::optional<std::string> find_clash(const CommandDef& cmd,
+                                             const std::string& path) {
+  if (!cmd.duplicate_subcommands.empty()) {
+    return compat::format("'{}' has two subcommands called '{}'", path,
+                          cmd.duplicate_subcommands.front());
+  }
+
+  const auto subs = sorted_subcommands(cmd);
+  std::unordered_map<std::string_view, std::string_view> owner;
+  for (const auto* sub : subs) {
+    const std::string sub_path = compat::format("{} {}", path, sub->name);
+    if (auto repeated = repeated_word(*sub, sub_path)) {
+      return repeated;
+    }
+    for (const auto word : words_of(*sub)) {
+      const auto [it, added] = owner.try_emplace(word, sub->name);
+      if (!added) {
+        return compat::format("in '{}', '{}' would mean both '{}' and '{}'",
+                              path, word, it->second, sub->name);
+      }
+    }
+  }
+
+  for (const auto* sub : subs) {
+    if (auto clash =
+            find_clash(*sub, compat::format("{} {}", path, sub->name))) {
+      return clash;
+    }
+  }
+  return std::nullopt;
+}
+
+// Where an omitted argument's value comes from, in words.
+static std::string_view default_source(DefaultProvider provider) {
+  switch (provider) {
+  case DefaultProvider::None:
+    return "";
+  case DefaultProvider::ActivePlayer:
+    return "active player";
+  case DefaultProvider::ActiveRestaurant:
+    return "active restaurant";
+  case DefaultProvider::ActiveCity:
+    return "active city";
+  case DefaultProvider::CurrentDate:
+    return "current date";
+  }
+  return "";
+}
+
+static ArgSchema describe_arg(const ArgSpec& spec) {
+  return ArgSchema{
+      .name = spec.name,
+      .type = std::string(type_name(spec.type)),
+      .optional = spec.optional,
+      .default_from = std::string(default_source(spec.default_provider)),
+      .min_value = spec.min_value,
+      .max_value = spec.max_value,
+      .allowed_values =
+          spec.allowed_values.value_or(std::vector<std::string>{}),
+      .custom_check = spec.custom_validator.has_value(),
+      .description = spec.description,
+  };
+}
+
+static void collect_schemas(const CommandDef& cmd, const std::string& path,
+                            std::vector<CommandSchema>& out) {
+  CommandSchema schema{
+      .path = path,
+      .aliases = cmd.aliases,
+      .description = cmd.description,
+      .runnable = cmd.is_leaf(),
+      .args = {},
+  };
+  schema.args.reserve(cmd.args.size());
+  for (const auto& arg : cmd.args) {
+    schema.args.push_back(describe_arg(arg));
+  }
+  out.push_back(std::move(schema));
+
+  for (const auto* sub : sorted_subcommands(cmd)) {
+    collect_schemas(*sub, compat::format("{} {}", path, sub->name), out);
+  }
+}
+
+// "player: player ID, optional, default active player", then any limits:
+// ", 0..100", ", one of a|b", ", checked by the command".
+static std::string format_arg_schema(const ArgSchema& arg) {
+  std::string text = compat::format("{}: {}", arg.name, arg.type);
+  if (arg.optional) {
+    text += ", optional";
+  }
+  if (!arg.default_from.empty()) {
+    text += compat::format(", default {}", arg.default_from);
+  }
+  if (arg.min_value || arg.max_value) {
+    text += ", ";
+    if (arg.min_value) {
+      text += compat::format("{}", *arg.min_value);
+    }
+    text += "..";
+    if (arg.max_value) {
+      text += compat::format("{}", *arg.max_value);
+    }
+  }
+  if (!arg.allowed_values.empty()) {
+    std::string joined;
+    for (const auto& value : arg.allowed_values) {
+      if (!joined.empty()) {
+        joined += '|';
+      }
+      joined += value;
+    }
+    text += compat::format(", one of {}", joined);
+  }
+  if (arg.custom_check) {
+    text += ", checked by the command";
+  }
+  return text;
 }
 
 // "restaurant (r, rest)", or just the name when there are no aliases.
@@ -61,16 +226,55 @@ static void log_output(const std::vector<std::string>& tokens,
   Logger::info("{}", text);
 }
 
-void CommandRegistry::register_command(CommandDef cmd) {
-  std::string name = cmd.name;
-
-  // Register all aliases
-  for (const auto& alias : cmd.aliases) {
-    aliases_[alias] = name;
+std::optional<std::string> CommandRegistry::register_command(CommandDef cmd) {
+  std::optional<std::string> problem = repeated_word(cmd, cmd.name);
+  if (!problem) {
+    for (const auto word : words_of(cmd)) {
+      const std::string key(word);
+      if (commands_.contains(key)) {
+        problem = compat::format("'{}' is already a command", word);
+        break;
+      }
+      if (const auto it = aliases_.find(key); it != aliases_.end()) {
+        problem = compat::format("'{}' is already an alias of '{}'", word,
+                                 it->second);
+        break;
+      }
+    }
+  }
+  if (!problem) {
+    problem = find_clash(cmd, cmd.name);
   }
 
-  // Store command by primary name
-  commands_[name] = std::move(cmd);
+  if (problem) {
+    std::string error = compat::format("Command '{}' was not registered: {}",
+                                       cmd.name, *problem);
+    Logger::warn("{}", error);
+    registration_errors_.push_back(error);
+    return error;
+  }
+
+  const std::string name = cmd.name;
+  for (const auto& alias : cmd.aliases) {
+    aliases_.emplace(alias, name);
+  }
+  commands_.emplace(name, std::move(cmd));
+  return std::nullopt;
+}
+
+std::vector<CommandSchema> CommandRegistry::list_commands() const {
+  std::vector<const CommandDef*> roots;
+  roots.reserve(commands_.size());
+  for (const auto& [name, cmd] : commands_) {
+    roots.push_back(&cmd);
+  }
+  sort_by_name(roots);
+
+  std::vector<CommandSchema> result;
+  for (const auto* root : roots) {
+    collect_schemas(*root, root->name, result);
+  }
+  return result;
 }
 
 std::optional<std::reference_wrapper<const CommandDef>>
@@ -107,6 +311,29 @@ std::vector<std::string>
 CommandRegistry::get_help(const std::string& command_path) const {
   std::vector<std::string> result;
 
+  if (command_path == schema_keyword) {
+    for (const auto& cmd : list_commands()) {
+      std::string line = cmd.path;
+      if (!cmd.aliases.empty()) {
+        std::string joined;
+        for (const auto& alias : cmd.aliases) {
+          if (!joined.empty()) {
+            joined += ", ";
+          }
+          joined += alias;
+        }
+        line += compat::format(" ({})", joined);
+      }
+      line += cmd.runnable ? " - " : " [group] - ";
+      line += cmd.description;
+      result.push_back(std::move(line));
+      for (const auto& arg : cmd.args) {
+        result.push_back("    " + format_arg_schema(arg));
+      }
+    }
+    return result;
+  }
+
   if (command_path.empty() || command_path == all_keyword) {
     const bool full_tree = (command_path == all_keyword);
 
@@ -136,9 +363,9 @@ CommandRegistry::get_help(const std::string& command_path) const {
 
     if (!full_tree) {
       result.push_back(
-          compat::format("Use 'help <command>', or 'help {}' for every "
-                         "subcommand",
-                         all_keyword));
+          compat::format("Use 'help <command>', 'help {}' for every "
+                         "subcommand, or 'help {}' for every argument",
+                         all_keyword, schema_keyword));
     }
   }
   else {
@@ -266,14 +493,7 @@ CommandRegistry::format_command_help(const CommandDef& cmd) const {
 void CommandRegistry::collect_subcommand_help(
     const CommandDef& cmd, const std::string& prefix,
     std::vector<std::string>& output) const {
-  std::vector<const CommandDef*> subs;
-  subs.reserve(cmd.subcommands.size());
-  for (const auto& [name, subcmd] : cmd.subcommands) {
-    subs.push_back(&subcmd);
-  }
-  sort_by_name(subs);
-
-  for (const auto* subcmd : subs) {
+  for (const auto* subcmd : sorted_subcommands(cmd)) {
     std::string full_name = prefix.empty()
                                 ? subcmd->name
                                 : compat::format("{} {}", prefix, subcmd->name);

@@ -110,6 +110,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/save/SaveGameFood.cpp
     src/core/save/SaveGameManager.cpp
     src/core/save/SaveGameRestaurant.cpp
+    src/core/save/SaveVersions.cpp
     src/core/state/CompetitionCoordinator.cpp
     src/core/state/GameRules.cpp
     src/core/state/GameState.cpp
@@ -529,6 +530,7 @@ set(PLEGACY_HEADERS
     src/core/save/SaveGameFood.h
     src/core/save/SaveGameManager.h
     src/core/save/SaveGameRestaurant.h
+    src/core/save/SaveVersions.h
     src/core/settings/BankSettings.h
     src/core/settings/InsuranceSettings.h
     src/core/settings/MafiaSettings.h

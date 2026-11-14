@@ -45,6 +45,9 @@
 #include "core/character/Character.h"
 #include "core/character/Player.h"
 #include "core/city/City.h"
+#include "core/content/LocationValidator.h"
+#include "core/content/Roster.h"
+#include "core/content/ScenarioSave.h"
 #include "core/init/NewGameConfig.h"
 #include "core/save/SaveGameManager.h"
 #include "core/state/GameState.h"
@@ -960,7 +963,7 @@ TEST_CASE("A save from a newer build is turned away as such", "[save][load]") {
   LiveGame game;
 
   json document = game.document();
-  document["version"] = save::SAVE_FORMAT_VERSION + 1;
+  document["version"] = core::content::expanded_save_version + 1;
   require_document_rejected(game, dir, document, newer);
 
   const fs::path file = dir.path() / "new-header.plsave";
@@ -985,6 +988,111 @@ TEST_CASE("Damage found only while building leaves the game as it was",
   engine::random::set_state(0xC0FFEE);
   require_rejected(game, file, damaged);
   CHECK(engine::random::get_state() == 0xC0FFEE);
+}
+
+// Games outside the original ten
+
+namespace {
+
+// Santa's Pizza Village, read from the repository's data folder.
+std::shared_ptr<const core::content::LocationDefinition> village() {
+  const fs::path file = fs::path(__FILE__).parent_path().parent_path() /
+                        "data" / "locations" / "north-pole" /
+                        "santas-pizza-village.json";
+  auto report = core::content::load_location(file);
+  INFO(core::content::describe(report.findings));
+  REQUIRE(report.ok());
+  return report.definition;
+}
+
+core::content::RosterEntry
+entry_for(std::shared_ptr<const core::content::LocationDefinition> definition) {
+  const core::content::ContentKey key = definition->key;
+  return {.key = key,
+          .source = core::content::RosterSource::Definition,
+          .classic_number = std::nullopt,
+          .definition = std::move(definition)};
+}
+
+// The game's document as a version 4 save with this roster. The scenario
+// block is read before anything else is built, so every one of these that is
+// damaged is turned away without the original game's files.
+json expanded_document(const LiveGame& game,
+                       std::vector<core::content::RosterEntry> entries) {
+  auto roster = core::content::Roster::from_entries(std::move(entries));
+  REQUIRE(roster);
+  json document = game.document();
+  document["version"] = core::content::expanded_save_version;
+  document["scenario"] = core::content::save_scenario_block(*roster, nullptr);
+  return document;
+}
+
+} // namespace
+
+TEST_CASE("A Classic game is still saved as version 3", "[save][content]") {
+  TempDir dir;
+  LiveGame game;
+  REQUIRE(game.state.roster().is_classic());
+  const fs::path file = dir.path() / "classic.plsave";
+  REQUIRE(SaveGameManager::save(game.state, game.context, file.string()));
+  CHECK(SaveGameManager::get_save_version(file.string()) ==
+        save::SAVE_FORMAT_VERSION);
+  CHECK_FALSE(game.document().contains("scenario"));
+}
+
+TEST_CASE("A damaged scenario block is turned away", "[save][load][content]") {
+  TempDir dir;
+  LiveGame game;
+  const auto definition = village();
+
+  SECTION("a version 4 save without its scenario") {
+    json document = expanded_document(game, {entry_for(definition)});
+    document.erase("scenario");
+    require_document_rejected(game, dir, document);
+  }
+  SECTION("a Classic save with a scenario") {
+    json document = expanded_document(game, {entry_for(definition)});
+    document["version"] = save::SAVE_FORMAT_VERSION;
+    require_document_rejected(game, dir, document);
+  }
+  SECTION("a definition that does not match its hash") {
+    json document = expanded_document(game, {entry_for(definition)});
+    std::string& hash = document["scenario"]["roster"][0]["definition_sha256"]
+                            .get_ref<std::string&>();
+    REQUIRE_FALSE(hash.empty());
+    hash[0] = hash[0] == '0' ? '1' : '0';
+    require_document_rejected(game, dir, document);
+  }
+  SECTION("a definition with a key no definition has") {
+    json document = expanded_document(game, {entry_for(definition)});
+    document["scenario"]["roster"][0]["definition"]["no_such_key"] = 1;
+    require_document_rejected(game, dir, document);
+  }
+  SECTION("an original city that does not exist") {
+    json document = expanded_document(game, {entry_for(definition)});
+    json classic = {{"index", 1},
+                    {"location_key", "classic:no-such-city"},
+                    {"source", "classic"},
+                    {"classic_number", 3},
+                    {"classic_source_sha256", nullptr}};
+    document["scenario"]["roster"].push_back(classic);
+    require_document_rejected(game, dir, document);
+  }
+  SECTION("more places than the game plays") {
+    // The ten original cities and one more: the roster rules allow it, the
+    // per-city arrays do not.
+    std::vector<core::content::RosterEntry> entries =
+        core::content::Roster::classic().entries();
+    entries.push_back(entry_for(definition));
+    REQUIRE(entries.size() > static_cast<std::size_t>(NUMBER_OF_CITIES));
+    require_document_rejected(game, dir, expanded_document(game, entries));
+  }
+  SECTION("a city the game is not played in") {
+    // The village is the game's only place, CityId 0; city 4 is not one.
+    json document = expanded_document(game, {entry_for(definition)});
+    document["cities"] = {{{"id", 4}, {"properties", json::array()}}};
+    require_document_rejected(game, dir, document);
+  }
 }
 
 // Older saves

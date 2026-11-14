@@ -21,10 +21,7 @@
 #include "core/debug/commands/TutorialCommands.h"
 #include "core/util/GameContext.h"
 
-void register_debug_commands(DebugConsole& console, GameState& state,
-                             GameContext& context) {
-  static debug::command::CommandRegistry registry;
-
+void register_core_commands(debug::command::CommandRegistry& registry) {
   // Register main command trees
   registry.register_command(debug::commands::make_player_commands());
   registry.register_command(debug::commands::make_restaurant_commands());
@@ -45,6 +42,16 @@ void register_debug_commands(DebugConsole& console, GameState& state,
   // Register top-level convenience commands
   registry.register_command(debug::commands::make_dump_command());
   registry.register_command(debug::commands::make_help_command());
+}
+
+void register_debug_commands(DebugConsole& console, GameState& state,
+                             GameContext& context) {
+  static debug::command::CommandRegistry registry;
+
+  // Start empty, so a second game in one process registers afresh instead of
+  // being refused as duplicates of commands bound to the first one.
+  registry = debug::command::CommandRegistry{};
+  register_core_commands(registry);
 
   // Initialize console with registry - all command execution delegates to
   // registry

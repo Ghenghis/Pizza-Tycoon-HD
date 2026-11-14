@@ -7,19 +7,48 @@
 #include "views/screens/menus/MenuNewGame.h"
 
 #include <cassert>
+#include <functional>
+#include <utility>
 #include "core/content/Findings.h"
 #include "core/content/ShippedScenarios.h"
+#include "core/save/SaveGameManager.h"
 #include "core/state/GameState.h"
 #include "core/tutorial/TutorialGame.h"
 #include "engine/Logger.h"
 #include "views/screens/menus/MenuTheme.h"
 #include "views/ui/PopupManager.h"
 #include "views/ui/popups/AlertPopup.h"
+#include "views/ui/popups/ConfirmPopup.h"
 #include "views/ui/widgets/PositionMarkerMenuItem.h"
 #include "views/ui/widgets/SpacerMenuItem.h"
 #include "views/ui/widgets/TextMenuItem.h"
 
 using namespace views::ui::menu;
+
+namespace {
+
+// Starting a new game throws away the one in progress, so it is kept as a
+// checkpoint first. If that fails, the player decides whether to go on.
+void after_checkpoint(GameContext& context, GameState& state,
+                      std::function<void()> start) {
+  if (save::SaveGameManager::checkpoint(
+          state, context, save::CheckpointReason::BeforeNewGame) !=
+      save::CheckpointResult::Failed) {
+    start();
+    return;
+  }
+  context.popup->origin(ViewPoint{26, 40});
+  context.popup->create<ConfirmPopup>(
+      "The game in progress could not be kept as a checkpoint. Start a new "
+      "game anyway?",
+      [start = std::move(start)](bool agree) {
+        if (agree) {
+          start();
+        }
+      });
+}
+
+} // namespace
 
 #define DIFF_INIT_POS_X 0
 #define DIFF_INIT_POS_Y 130
@@ -32,33 +61,39 @@ MenuNewGame::MenuNewGame(GameContext& context, GameState& state)
 
   add_menu_item(std::make_unique<TextMenuItem>(
       context, "Freemode",
-      [&state] {
-        Logger::debug("Set game mode to Freemode");
-        state.begin_initialization();
-        state.initializer().mode = GameMode::FREEMODE;
-        state.ui().push<ScreenTag>(ScreenTag::Kind::DifficultySelection);
+      [&context, &state] {
+        after_checkpoint(context, state, [&state] {
+          Logger::debug("Set game mode to Freemode");
+          state.begin_initialization();
+          state.initializer().mode = GameMode::FREEMODE;
+          state.ui().push<ScreenTag>(ScreenTag::Kind::DifficultySelection);
+        });
       },
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));
 
   add_menu_item(std::make_unique<TextMenuItem>(
       context, "Mission Mode",
-      [&state] {
-        Logger::debug("Set game mode to Mission Mode");
-        state.begin_initialization();
-        state.initializer().mode = GameMode::MISSION_MODE;
-        state.ui().push<ScreenTag>(ScreenTag::Kind::MissionSelect);
+      [&context, &state] {
+        after_checkpoint(context, state, [&state] {
+          Logger::debug("Set game mode to Mission Mode");
+          state.begin_initialization();
+          state.initializer().mode = GameMode::MISSION_MODE;
+          state.ui().push<ScreenTag>(ScreenTag::Kind::MissionSelect);
+        });
       },
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));
 
   add_menu_item(std::make_unique<TextMenuItem>(
       context, "Quickstart",
-      [&state] {
-        Logger::debug("Set game mode to Quickstart");
-        state.begin_initialization();
-        state.initializer().mode = GameMode::QUICKSTART;
-        state.ui().push<ScreenTag>(ScreenTag::Kind::MenuQuickstart);
+      [&context, &state] {
+        after_checkpoint(context, state, [&state] {
+          Logger::debug("Set game mode to Quickstart");
+          state.begin_initialization();
+          state.initializer().mode = GameMode::QUICKSTART;
+          state.ui().push<ScreenTag>(ScreenTag::Kind::MenuQuickstart);
+        });
       },
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));
@@ -69,21 +104,24 @@ MenuNewGame::MenuNewGame(GameContext& context, GameState& state)
   add_menu_item(std::make_unique<TextMenuItem>(
       context, std::string(core::content::cozy_village.menu_label),
       [this] {
-        Logger::debug("New game of {}", core::content::cozy_village.file);
-        state_.begin_initialization();
-        core::content::Findings findings;
-        if (!core::content::prepare_shipped_scenario(
-                core::content::cozy_village.file, state_.initializer(),
-                state_.options().rules, findings)) {
-          Logger::warn("Cannot start {}:\n{}", core::content::cozy_village.file,
-                       core::content::describe(findings));
-          context_.popup->origin(ViewPoint{26, 40});
-          context_.popup->create<AlertPopup>(
-              "Santa's Pizza Village is missing or damaged in the data "
-              "folder.");
-          return;
-        }
-        state_.ui().push<ScreenTag>(ScreenTag::Kind::CharacterSelection);
+        after_checkpoint(context_, state_, [this] {
+          Logger::debug("New game of {}", core::content::cozy_village.file);
+          state_.begin_initialization();
+          core::content::Findings findings;
+          if (!core::content::prepare_shipped_scenario(
+                  core::content::cozy_village.file, state_.initializer(),
+                  state_.options().rules, findings)) {
+            Logger::warn("Cannot start {}:\n{}",
+                         core::content::cozy_village.file,
+                         core::content::describe(findings));
+            context_.popup->origin(ViewPoint{26, 40});
+            context_.popup->create<AlertPopup>(
+                "Santa's Pizza Village is missing or damaged in the data "
+                "folder.");
+            return;
+          }
+          state_.ui().push<ScreenTag>(ScreenTag::Kind::CharacterSelection);
+        });
       },
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<SpacerMenuItem>(context, space_between_lines));
@@ -91,8 +129,10 @@ MenuNewGame::MenuNewGame(GameContext& context, GameState& state)
   add_menu_item(std::make_unique<TextMenuItem>(
       context, "Tutorial",
       [this] {
-        Logger::debug("Starting the tutorial");
-        core::tutorial::start_tutorial_game(state_, context_);
+        after_checkpoint(context_, state_, [this] {
+          Logger::debug("Starting the tutorial");
+          core::tutorial::start_tutorial_game(state_, context_);
+        });
       },
       face, style, sel_style, item_align));
 

@@ -29,6 +29,9 @@ struct CommandDef {
   std::vector<ArgSpec> args;        // Positional arguments
   std::unordered_map<std::string, CommandDef> subcommands; // Nested commands
   CommandHandler handler; // The actual implementation (leaf nodes only)
+  // Subcommand names added more than once. The first one is kept, and the
+  // registry refuses the whole tree, so the clash is never silent.
+  std::vector<std::string> duplicate_subcommands = {};
 
   // Is this a leaf command (has handler) or just a namespace?
   bool is_leaf() const { return handler != nullptr; }
@@ -36,7 +39,9 @@ struct CommandDef {
   // Fluent builder methods for constructing command trees
   CommandDef& add_subcommand(CommandDef subcmd) {
     std::string key = subcmd.name;
-    subcommands[key] = std::move(subcmd);
+    if (!subcommands.try_emplace(key, std::move(subcmd)).second) {
+      duplicate_subcommands.push_back(std::move(key));
+    }
     return *this;
   }
 

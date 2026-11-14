@@ -228,11 +228,47 @@ void sync_directory(const fs::path& dir) {
 
 } // namespace
 
+namespace testing {
+
+namespace {
+ScopedAtomicFault*& installed_fault() {
+  static ScopedAtomicFault* installed = nullptr;
+  return installed;
+}
+} // namespace
+
+ScopedAtomicFault::ScopedAtomicFault(Matcher matches, AtomicFault fault,
+                                     int times)
+    : matches_(std::move(matches)), fault_(fault), remaining_(times),
+      previous_(installed_fault()) {
+  installed_fault() = this;
+}
+
+ScopedAtomicFault::~ScopedAtomicFault() { installed_fault() = previous_; }
+
+std::optional<AtomicFault>
+ScopedAtomicFault::take(const fs::path& destination) {
+  ScopedAtomicFault* fault = installed_fault();
+  if (fault == nullptr || fault->remaining_ <= 0 ||
+      !fault->matches_(destination)) {
+    return std::nullopt;
+  }
+  --fault->remaining_;
+  ++fault->hits_;
+  return fault->fault_;
+}
+
+} // namespace testing
+
 AtomicFile::AtomicFile(fs::path destination)
-    : destination_(std::move(destination)) {}
+    : destination_(std::move(destination)),
+      fault_(testing::ScopedAtomicFault::take(destination_)) {}
 
 AtomicFile::~AtomicFile() {
-  if (!committed_) {
+  if (keep_temp_) {
+    close_temp();
+  }
+  else if (!committed_) {
     discard();
   }
 }
@@ -316,6 +352,24 @@ bool AtomicFile::write(const void* data, std::size_t size) {
   }
 
   const auto* bytes = static_cast<const unsigned char*>(data);
+  if (fault_ && fault_->kind == testing::AtomicFault::Kind::DiskFull &&
+      written_ + size > fault_->bytes) {
+    const std::size_t room = fault_->bytes - std::min(fault_->bytes, written_);
+    if (room > 0 && !write_to_temp(bytes, room)) {
+      return false;
+    }
+    return fail("could not write", temp_path_,
+                std::make_error_code(std::errc::no_space_on_device),
+                "no space left on the device (a test's fault)");
+  }
+  if (!write_to_temp(bytes, size)) {
+    return false;
+  }
+  written_ += size;
+  return true;
+}
+
+bool AtomicFile::write_to_temp(const unsigned char* bytes, std::size_t size) {
   while (size > 0) {
     const std::size_t chunk = std::min(size, max_write_chunk);
 #ifdef _WIN32
@@ -383,6 +437,9 @@ bool AtomicFile::commit() {
     return fail("could not close", temp_path_, windows_code(error),
                 windows_message(error));
   }
+  if (!apply_commit_fault()) {
+    return false;
+  }
   const DWORD error = replace_file(temp_path_, target_);
   if (error != ERROR_SUCCESS) {
     return fail("could not replace", target_, windows_code(error),
@@ -400,6 +457,9 @@ bool AtomicFile::commit() {
     return fail("could not close", temp_path_, errno_code(error),
                 errno_message(error));
   }
+  if (!apply_commit_fault()) {
+    return false;
+  }
   std::error_code ec;
   fs::rename(temp_path_, target_, ec);
   if (ec) {
@@ -412,6 +472,33 @@ bool AtomicFile::commit() {
 #ifndef _WIN32
   sync_directory(target_.parent_path());
 #endif
+  return true;
+}
+
+bool AtomicFile::apply_commit_fault() {
+  if (!fault_) {
+    return true;
+  }
+  using Kind = testing::AtomicFault::Kind;
+  switch (fault_->kind) {
+  case Kind::DiskFull:
+    return true;
+  case Kind::LostTail: {
+    std::error_code ec;
+    fs::resize_file(temp_path_, std::min(fault_->bytes, written_), ec);
+    if (ec) {
+      return fail("could not cut short", temp_path_, ec, ec.message());
+    }
+    return true;
+  }
+  case Kind::RenameFails:
+    return fail("could not replace", target_,
+                std::make_error_code(std::errc::device_or_resource_busy),
+                "the rename failed (a test's fault)");
+  case Kind::Interrupted:
+    keep_temp_ = true;
+    throw testing::AtomicFileInterrupted{destination_};
+  }
   return true;
 }
 

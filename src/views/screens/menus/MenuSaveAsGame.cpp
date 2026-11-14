@@ -116,7 +116,8 @@ void MenuSaveAsGame::perform_save(const std::string& filename) {
   busy_cursor_.run(
       [this, filename] {
         std::string error;
-        if (save::SaveGameManager::save(state_, context_, filename, &error)) {
+        if (save::SaveGameManager::save_to_slot(state_, context_, filename,
+                                                &error)) {
           Logger::info("Successfully saved: {}", filename);
           // Pop twice to get back to DiskMenu (not just to the save menu)
           state_.ui().pop();

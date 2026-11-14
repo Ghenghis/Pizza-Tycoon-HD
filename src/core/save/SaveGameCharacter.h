@@ -24,7 +24,7 @@ core::character::Character json_to_character(const json& j);
 
 json player_to_json(const Player& player);
 std::unique_ptr<Player>
-json_to_player(const json& j, GameContext& context,
+json_to_player(const json& j, const GameContext& context,
                const core::food::CustomerTasteProfiles& taste_profiles);
 // Everything json_to_player restores but the player's id, control and
 // character: what can be read into a Player that already exists.
