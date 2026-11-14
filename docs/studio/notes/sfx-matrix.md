@@ -51,28 +51,51 @@ Call sites come from `git grep` at HEAD; no line number is typed by hand.
 * **Rates.** 11,111 Hz for most effects, 22,222 Hz for the chopper and WEAPON_2, and 5,524 Hz for the flame and the siren.
 * **WEAPON_2 is not a copy of the chopper.** It has nearly the same length (1.627 s at 22,222 Hz), but the waveforms are uncorrelated (peak correlation 0.07).
 
-## Replacement candidates (first set)
+## Replacement candidates and pack-v0
 
-The candidates are staged outside the repo in `/home/claude/w/sfx-candidates/<family>/`. Each has a `.meta.json` holding:
+The candidates are staged outside the repo in `<cloud-work>/sfx-candidates/<family>/`. Each has a `.meta.json` with its sha256, source, licence and edit notes.
 
-* its sha256 and source path;
-* its licence and provenance;
-* edit notes for trim, loop, gain and start offset.
+* Decoded WAV masters, never edited, are in `<cloud-work>/sfx-masters/`.
+* The private pack is `<cloud-work>/sfx-candidates/pack-v0/`, with `pack.json` using these matrix field names.
+* No audio is in the repo.
 
-No third-party audio is in the repo.
+PC3 clips are single byte ranges of the installed `resources.resource` (sha256 `ff2841ea…5e02`). They were decoded with vgmstream-cli, built from source at 24ffd6ce.
 
-* **Restaurant crowd 1/2/3: PC3 `GuestRoom_low/mid/highactivity`.** These are three byte ranges from the installed PC3 `resources.resource`. The installed `resources.assets` hash matches the parsed AudioClip metadata, so the offsets apply.
-  * Format: FSB5 Vorbis, 44.1 kHz stereo, 90.5 / 67.3 / 106.6 s.
-  * Same three-level meaning as m0.
-  * Not decoded yet: no FSB5 decoder is installed here.
-* **CHOPPER: PC3 `StreamingAssets/Sounds/PizzaCreator/Ingredients/cut.ogg`.** Vorbis, 44.1 kHz mono, 0.20 s, peak -8.1 dBFS. The plan is a 4–5 hit sequence to cover the 600 ms chop animation, with its own start offset, not the m9 250-frame skip.
-* **Phone: nothing fitting and approved.** See `phone/README.md` in the staging folder. Lead: R6 data `ringing.wav`, which needs owner approval.
+### Measurements
 
-The leads in the matrix (traffic, siren, door bell, kitchen) are not staged.
+Loudness is integrated LUFS (ffmpeg ebur128). "Seam as is" is the RMS jump across the end→start wrap, over 2048-frame windows.
+
+| Event | Original LUFS | Candidate | Candidate LUFS / peak | Seam as is |
+|---|---|---|---|---|
+| RESTAURANT_NOISE_1 | -33.1 | GuestRoom_lowactivity, 90.5 s | -38.2 / -13.9 dBFS | 1.3 dB |
+| RESTAURANT_NOISE_2 | -28.7 | GuestRoom_midactivity, 67.3 s | -36.0 / -13.4 dBFS | 2.4 dB |
+| RESTAURANT_NOISE_3 | -18.8 | GuestRoom_highactivity, 106.6 s | -28.4 / -8.2 dBFS | 1.7 dB |
+| TRAFFIC_1 | -26.4 | Blocks_Urban_Traffic_Day, 120.8 s | -35.7 / -16.9 dBFS | 3.4 dB |
+| TRAFFIC_2 | -26.7 | Blocks_Urban_Traffic_Night, 155.5 s | -36.9 / -18.8 dBFS | 7.8 dB |
+| POLICE_SIREN | -34.9 | Policecar_Siren_1 / _2, 1.05 / 0.69 s | -12.2 / -11.4 LUFS | chirps, no loop |
+
+Zero-crossing loop search found nothing better than the whole-file wrap: the seam error is about 0.85 on these diffuse crowds, which means no waveform match. So the crowd loops use the whole file joined by a 0.5 s equal-power crossfade of the tail into the head.
+
+### pack-v0 (built by `<cloud-work>/sfx-work/build_pack.py`, numpy, byte-reproducible)
+
+* **RESTAURANT_NOISE_1/2/3**: restored PC3 recordings.
+  * Gained to -33.1 / -28.7 / -21.5 LUFS, which keeps the originals' ladder.
+  * Level 3 is held 2.7 dB under the original so its peak stays at -1.3 dBFS.
+  * Loop joined as above; the wrap RMS jump is now 0.3 / 1.3 / 2.5 dB.
+* **DIAL_TONE_0..9**: authored (synthesized standard signal).
+  * ITU-T Q.23 pairs, 120 ms, 5 ms edges, high group +2 dB.
+  * RMS -11.7 dBFS, matching the originals' -11.5 dBFS.
+* **PHONE_RINGING**: authored (synthesized standard signal). North American ringback, 440 + 480 Hz, 2 s on / 4 s off, in a 6 s loop that starts with the tone.
+* **PHONE_PICKUP**: the original is kept. The recorded handset clatter (0.38 s, several transients) was judged better than a two-transient synthetic click. The click is in `variants/` for the audible review and is not attached.
+* **CHOPPER**: the restored PC3 cut, as a 5-hit sequence at 0/130/260/390/520 ms.
+  * Peak -3 dBFS; the loudest 600 ms is within 0.6 dB of the original's.
+  * Start offset 0 (no m9 skip).
+
+Traffic and sirens are staged and measured, but they are not in pack-v0.
 
 ## Open
 
-* **Decode the crowd loops.** This needs vgmstream or an FSB5 Vorbis header rebuild. Then measure loudness and find loop seams.
-* **Phone family**: a source, or a decision on synthesized standard DTMF and ring tones.
+* **The sirens:** the PC3 chirps do not fit a 7.5 s looping siren as they are.
+* **Traffic:** level and loop for TRAFFIC_1/2.
 * **Override manifest**: field names follow this matrix until the platform lane's `docs/studio/notes/sfx-overrides.md` exists.
 * **All engine trigger checks and listening.**

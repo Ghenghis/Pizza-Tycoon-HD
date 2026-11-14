@@ -1,6 +1,6 @@
 {
   "schema": "plegacy.sfx-matrix/1",
-  "commit": "34d895182092f59a30365dc97e5e44d43652c9dc",
+  "commit": "f3eef9c273709f7123645283a1fed330fb858760",
   "generator": "tools/audio/sfx_matrix.py",
   "game_sound_dir": "SOUND (M0..M11 of the 1994 release; path not recorded)",
   "reachability_terms": {
@@ -60,6 +60,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "restored (owned PC3 recording, level-matched/edited)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -116,6 +120,10 @@
           "bytes_s16": 1032408,
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
+      },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "restored (owned PC3 recording, level-matched/edited)"
       },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
@@ -174,6 +182,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "restored (owned PC3 recording, level-matched/edited)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -191,7 +203,7 @@
       "reachability": "visited",
       "notes": "CityView::update_city_sound; needs options().map_fx; FAR zoom stops it.",
       "candidates": [
-        "pc3:Blocks_Urban_Traffic_Day (lead, not staged)"
+        "pc3:Blocks_Urban_Traffic_Day (staged, decoded: 120.8 s stereo, -35.7 LUFS; not in pack-v0)"
       ],
       "call_sites": [
         {
@@ -248,7 +260,7 @@
       "reachability": "visited",
       "notes": "CityView::update_city_sound; needs options().map_fx; FAR zoom stops it.",
       "candidates": [
-        "pc3:Blocks_Urban_Traffic_Night or a distance-filtered Day (lead, not staged)"
+        "pc3:Blocks_Urban_Traffic_Night (staged, decoded: 155.5 s stereo, -36.9 LUFS; not in pack-v0)"
       ],
       "call_sites": [
         {
@@ -305,7 +317,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -343,6 +355,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -360,7 +376,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -399,6 +415,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -416,7 +436,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -455,6 +475,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -472,7 +496,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -511,6 +535,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -528,7 +556,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -567,6 +595,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -584,7 +616,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -623,6 +655,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -640,7 +676,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -679,6 +715,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -696,7 +736,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -735,6 +775,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -752,7 +796,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -791,6 +835,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -808,7 +856,7 @@
       "reachability": "visited",
       "notes": "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -847,6 +895,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -864,7 +916,7 @@
       "reachability": "visited",
       "notes": "Looped in WAITING_FOR_CONNECTION and ERROR; stopped in IDLE, PHONE_PICKUP and the destructor.",
       "candidates": [
-        "lead only: R6 Black Ops data sound/ringing.wav (not on the approved list; not staged)"
+        "pack-v0: North American ringback 440+480 Hz, 2 s on / 4 s off, authored (synthesized standard signal)"
       ],
       "call_sites": [
         {
@@ -920,6 +972,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         }
       },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "authored (synthesized standard signal)"
+      },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
       "asset_check": "open",
@@ -937,7 +993,7 @@
       "reachability": "visited",
       "notes": "Played after PHONE_RINGING is stopped.",
       "candidates": [
-        "none approved yet (see gaps)"
+        "original kept in pack-v0; an authored click is a variant for the audible review only"
       ],
       "call_sites": [
         {
@@ -1029,6 +1085,10 @@
           "note": "linear resample, mono duplicated; VOC repeat blocks are not honoured"
         },
         "engine_start_offset_frames": 250
+      },
+      "replacement": {
+        "pack": "pack-v0",
+        "origin": "restored (owned PC3 recording, level-matched/edited)"
       },
       "fallback": "original",
       "selector": "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)",
@@ -1254,7 +1314,7 @@
       "reachability": "visited",
       "notes": "AttackScene priority chain: highest.",
       "candidates": [
-        "pc3:Policecar_Siren_1 / Policecar_Siren_2 (lead, not staged; 1.05 s / 0.69 s)"
+        "pc3:Policecar_Siren_1 / Policecar_Siren_2 (staged, decoded: 1.05 s / 0.69 s chirps, not a continuous siren loop; not in pack-v0)"
       ],
       "call_sites": [
         {

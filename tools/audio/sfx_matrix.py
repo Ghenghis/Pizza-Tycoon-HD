@@ -18,8 +18,8 @@ src/engine/audio/VocDecoder.cpp, AudioManager::load_m_container):
     rate byte (rate = 1e6 / (256 - code)) and a codec byte (0 = PCM). The
     engine ignores every other block type; repeat blocks (6/7) are reported.
 
-Call sites are found in the source at the current commit (git HEAD), not
-copied by hand. Everything else per row (trigger, scene, loop, priority,
+Call sites are found in the committed source (git HEAD, not the working
+tree), not copied by hand. Everything else per row (trigger, scene, loop, priority,
 reachability, candidates) is curated in EVENTS below.
 
 Status columns (asset_check, engine_trigger_check, audible_review) are
@@ -114,7 +114,9 @@ _event(
     "ambience",
     "visited",
     TRAFFIC_NOTE,
-    ["pc3:Blocks_Urban_Traffic_Day (lead, not staged)"],
+    [
+        "pc3:Blocks_Urban_Traffic_Day (staged, decoded: 120.8 s stereo, -35.7 LUFS; not in pack-v0)"
+    ],
 )
 _event(
     "TRAFFIC_2",
@@ -125,7 +127,9 @@ _event(
     "ambience",
     "visited",
     TRAFFIC_NOTE,
-    ["pc3:Blocks_Urban_Traffic_Night or a distance-filtered Day (lead, not staged)"],
+    [
+        "pc3:Blocks_Urban_Traffic_Night (staged, decoded: 155.5 s stereo, -36.9 LUFS; not in pack-v0)"
+    ],
 )
 for d in range(10):
     _event(
@@ -137,7 +141,7 @@ for d in range(10):
         "ui",
         "visited",
         "Terminal: SoundId::DIAL_TONE_0 + digit; one voice per key press.",
-        ["none approved yet (see gaps)"],
+        ["pack-v0: ITU-T Q.23 DTMF, authored (synthesized standard signal)"],
     )
 _event(
     "PHONE_RINGING",
@@ -149,7 +153,7 @@ _event(
     "visited",
     "Looped in WAITING_FOR_CONNECTION and ERROR; stopped in IDLE, PHONE_PICKUP and the destructor.",
     [
-        "lead only: R6 Black Ops data sound/ringing.wav (not on the approved list; not staged)"
+        "pack-v0: North American ringback 440+480 Hz, 2 s on / 4 s off, authored (synthesized standard signal)"
     ],
 )
 _event(
@@ -161,7 +165,9 @@ _event(
     "alert",
     "visited",
     "Played after PHONE_RINGING is stopped.",
-    ["none approved yet (see gaps)"],
+    [
+        "original kept in pack-v0; an authored click is a variant for the audible review only"
+    ],
 )
 _event(
     "CHOPPER",
@@ -225,7 +231,9 @@ _event(
     "alert",
     "visited",
     "AttackScene priority chain: highest.",
-    ["pc3:Policecar_Siren_1 / Policecar_Siren_2 (lead, not staged; 1.05 s / 0.69 s)"],
+    [
+        "pc3:Policecar_Siren_1 / Policecar_Siren_2 (staged, decoded: 1.05 s / 0.69 s chirps, not a continuous siren loop; not in pack-v0)"
+    ],
 )
 
 # Things the game really does that make no sound now. Not coverage.
@@ -270,6 +278,19 @@ NEW_EVENTS = [
         "candidates": ["pc3:Kitchen_activity / Kitchen_noactivity (lead)"],
     },
 ]
+# What the private pack pack-v0 (outside the repo) puts in place of the
+# original. Synthesized files are never called restored.
+RESTORED = "restored (owned PC3 recording, level-matched/edited)"
+SYNTH = "authored (synthesized standard signal)"
+PACK_V0 = {
+    "RESTAURANT_NOISE_1": RESTORED,
+    "RESTAURANT_NOISE_2": RESTORED,
+    "RESTAURANT_NOISE_3": RESTORED,
+    **{f"DIAL_TONE_{d}": SYNTH for d in range(10)},
+    "PHONE_RINGING": SYNTH,
+    "CHOPPER": RESTORED,
+}
+
 NOT_FOUND_FAMILIES = {
     "ovens": "no discrete oven event in the views (ovens are bought/listed only)",
     "payment": "no per-guest payment event; takings are shown as reports",
@@ -285,7 +306,7 @@ def git(*args: str) -> str:
 def call_sites(sound_id: str) -> list[dict]:
     """Every use of SoundId::<id> in src, outside the audio engine itself."""
     out = subprocess.run(
-        ["git", "grep", "-n", "-w", f"SoundId::{sound_id}", "--", "src"],
+        ["git", "grep", "-n", "-w", f"SoundId::{sound_id}", "HEAD", "--", "src"],
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -293,7 +314,9 @@ def call_sites(sound_id: str) -> list[dict]:
     ).stdout
     sites = []
     for line in out.splitlines():
-        path, lineno, text = line.split(":", 2)
+        # HEAD:path:line:code (the commit, not the working tree, so the
+        # lines match the commit stamped in the matrix)
+        _rev, path, lineno, text = line.split(":", 3)
         if path.startswith("src/engine/audio/"):
             continue
         sites.append({"site": f"{path}:{lineno}", "code": text.strip()})
@@ -413,6 +436,8 @@ def build(game: Path) -> dict:
             )
         if not row["call_sites"] and event["reachability"] == "visited":
             raise SystemExit(f"{event['id']}: marked visited but no call site at HEAD")
+        if event["id"] in PACK_V0:
+            row["replacement"] = {"pack": "pack-v0", "origin": PACK_V0[event["id"]]}
         row["fallback"] = "original"
         row["selector"] = (
             "effects: Original / Enhanced; no selector in the engine yet (see docs/studio/notes/sfx-matrix.md)"
