@@ -279,6 +279,33 @@ double ms_between(uint64_t a, uint64_t b) {
 void Renderer::render_gpu() {
   times_ = {};
   SDL_Renderer* r = sdl_.renderer.get();
+  // Where the software cursor goes, in frame texels: the game sees the
+  // pointer in whole engine pixels, but the picture follows the real mouse
+  // between them, so the cursor glides at HD instead of jumping k texels.
+  // (Asked before any render target is set: the conversion uses the
+  // window's logical presentation.)
+  const ScreenPoint game_pos =
+      cursor_ ? cursor_->cursor_position() : ScreenPoint{};
+  const float y_scale = static_cast<float>(DisplayConstants::SCREEN_HEIGHT) /
+                        static_cast<float>(display_height_) *
+                        static_cast<float>(scale_);
+  float cursor_x = static_cast<float>(game_pos.x * scale_);
+  float cursor_y = static_cast<float>(game_pos.y) * y_scale;
+  {
+    float wx = 0;
+    float wy = 0;
+    float lx = 0;
+    float ly = 0;
+    SDL_GetMouseState(&wx, &wy);
+    // Only while it agrees with the game's pointer (not when a pad or the
+    // keyboard moved that).
+    if (SDL_RenderCoordinatesFromWindow(r, wx, wy, &lx, &ly) &&
+        std::abs(lx - static_cast<float>(game_pos.x)) < 1.0f &&
+        std::abs(ly - static_cast<float>(game_pos.y)) < 1.0f) {
+      cursor_x = lx * static_cast<float>(scale_);
+      cursor_y = ly * y_scale;
+    }
+  }
   if (!gpu_) {
     gpu_ = std::make_unique<HdCompositor>(r);
   }
@@ -376,12 +403,9 @@ void Renderer::render_gpu() {
 
   const Surface* cursor_sprite =
       cursor_ ? cursor_->software_cursor_sprite() : nullptr;
-  const ScreenPoint cursor_pos =
-      cursor_ ? cursor_->cursor_position() : ScreenPoint{};
-  const bool cursor_changed =
-      (cursor_sprite != last_cursor_sprite_) ||
-      (cursor_sprite && (cursor_pos.x != last_cursor_pos_.x ||
-                         cursor_pos.y != last_cursor_pos_.y));
+  const bool cursor_changed = (cursor_sprite != last_cursor_sprite_) ||
+                              (cursor_sprite && (cursor_x != last_cursor_x_ ||
+                                                 cursor_y != last_cursor_y_));
   if (!frame_changed && !cursor_changed) {
     SDL_SetRenderTarget(r, nullptr);
     stream_ahead(stream_budget_ms);
@@ -389,7 +413,9 @@ void Renderer::render_gpu() {
     return;
   }
   last_cursor_sprite_ = cursor_sprite;
-  last_cursor_pos_ = cursor_pos;
+  last_cursor_pos_ = game_pos;
+  last_cursor_x_ = cursor_x;
+  last_cursor_y_ = cursor_y;
 
   // The frame plus the cursor, in the display texture the GPU stretches to
   // the window.
@@ -416,10 +442,8 @@ void Renderer::render_gpu() {
     if (cursor_tex_) {
       const float w = static_cast<float>(cursor_tex_->w);
       const float h = static_cast<float>(cursor_tex_->h);
-      float x = static_cast<float>(cursor_pos.x * scale_);
-      float y =
-          static_cast<float>(cursor_pos.y * DisplayConstants::SCREEN_HEIGHT /
-                             display_height_ * scale_);
+      float x = std::round(cursor_x);
+      float y = std::round(cursor_y);
       if (cursor_->software_cursor_centered()) {
         x -= std::floor(w / 2);
         y -= std::floor(h / 2);

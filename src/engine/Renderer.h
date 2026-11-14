@@ -124,6 +124,10 @@ private:
   // This allows us to re-present when only the cursor changed.
   const gfx::Surface* last_cursor_sprite_{nullptr};
   ScreenPoint last_cursor_pos_{};
+  // The software cursor's last position in frame texels (HD, see
+  // render_gpu).
+  float last_cursor_x_ = -1.0f;
+  float last_cursor_y_ = -1.0f;
   SDL_Rect last_cursor_rect_{};
   bool force_recompose_ = false;
   std::unordered_map<Renderable*, std::unique_ptr<Surface>> layer_surfaces_;
