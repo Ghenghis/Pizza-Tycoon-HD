@@ -81,42 +81,42 @@
  },
  {
   "file": "bob/moebel/0004.png",
-  "description": "dining chair, 'Napoleon' style restaurant seating",
+  "description": "dark wooden dining chair with a blue and white striped seat cushion, 'Napoleon' style",
   "seed": 28925
  },
  {
   "file": "bob/moebel/0005.png",
-  "description": "dining chair, 'Napoleon' style restaurant seating",
+  "description": "dark wooden dining chair with a blue and white striped seat cushion, 'Napoleon' style",
   "seed": 28925
  },
  {
   "file": "bob/moebel/0006.png",
-  "description": "dining chair, 'Napoleon' style restaurant seating",
+  "description": "dark wooden dining chair with a blue and white striped seat cushion, 'Napoleon' style",
   "seed": 28925
  },
  {
   "file": "bob/moebel/0007.png",
-  "description": "dining chair, 'Napoleon' style restaurant seating",
+  "description": "dark wooden dining chair with a blue and white striped seat cushion, 'Napoleon' style",
   "seed": 28925
  },
  {
   "file": "bob/moebel/0008.png",
-  "description": "dining chair, 'Tsar' style restaurant seating",
+  "description": "dark wooden dining chair with a red and white striped seat cushion, 'Tsar' style",
   "seed": 70710
  },
  {
   "file": "bob/moebel/0009.png",
-  "description": "dining chair, 'Tsar' style restaurant seating",
+  "description": "dark wooden dining chair with a red and white striped seat cushion, 'Tsar' style",
   "seed": 70710
  },
  {
   "file": "bob/moebel/0010.png",
-  "description": "dining chair, 'Tsar' style restaurant seating",
+  "description": "dark wooden dining chair with a red and white striped seat cushion, 'Tsar' style",
   "seed": 70710
  },
  {
   "file": "bob/moebel/0011.png",
-  "description": "dining chair, 'Tsar' style restaurant seating",
+  "description": "dark wooden dining chair with a red and white striped seat cushion, 'Tsar' style",
   "seed": 70710
  },
  {
@@ -381,12 +381,12 @@
  },
  {
   "file": "bob/moebel/0067.png",
-  "description": "restaurant table, 'Four Place Setting' style",
+  "description": "square restaurant table with a cream octagonal tabletop and wooden corners, bare tabletop",
   "seed": 41005
  },
  {
   "file": "bob/moebel/0068.png",
-  "description": "restaurant table, 'Four Place Setting' style",
+  "description": "square restaurant table with a cream octagonal tabletop and wooden corners, bare tabletop",
   "seed": 41005
  },
  {
@@ -786,17 +786,17 @@
  },
  {
   "file": "bob/moebel/0148.png",
-  "description": "green restaurant table, 'Small Check Green' style",
+  "description": "small round restaurant table with a green and white checkered gingham tablecloth, bare tabletop",
   "seed": 80628
  },
  {
   "file": "bob/moebel/0149.png",
-  "description": "red restaurant table, 'Small Check Red' style",
+  "description": "small round restaurant table with a red and white checkered gingham tablecloth, bare tabletop",
   "seed": 68646
  },
  {
   "file": "bob/moebel/0150.png",
-  "description": "blue restaurant table, 'Small Check Blue' style",
+  "description": "small round restaurant table with a blue and white checkered gingham tablecloth, bare tabletop",
   "seed": 40251
  },
  {
@@ -851,22 +851,22 @@
  },
  {
   "file": "bob/moebel/0161.png",
-  "description": "red restaurant table, 'Large Check Red' style",
+  "description": "large rectangular restaurant table with a red and white checkered gingham tablecloth, bare tabletop",
   "seed": 15270
  },
  {
   "file": "bob/moebel/0162.png",
-  "description": "red restaurant table, 'Large Check Red' style",
+  "description": "large rectangular restaurant table with a red and white checkered gingham tablecloth, bare tabletop",
   "seed": 15270
  },
  {
   "file": "bob/moebel/0163.png",
-  "description": "blue restaurant table, 'Large Check Blue' style",
+  "description": "large rectangular restaurant table with a blue and white checkered gingham tablecloth, bare tabletop",
   "seed": 69054
  },
  {
   "file": "bob/moebel/0164.png",
-  "description": "blue restaurant table, 'Large Check Blue' style",
+  "description": "large rectangular restaurant table with a blue and white checkered gingham tablecloth, bare tabletop",
   "seed": 69054
  },
  {
@@ -1521,12 +1521,12 @@
  },
  {
   "file": "bob/moebel/0295.png",
-  "description": "restaurant table, 'Athens' style",
+  "description": "rectangular grey granite stone restaurant table, bare tabletop",
   "seed": 33549
  },
  {
   "file": "bob/moebel/0296.png",
-  "description": "restaurant table, 'Athens' style",
+  "description": "rectangular grey granite stone restaurant table, bare tabletop",
   "seed": 33549
  },
  {

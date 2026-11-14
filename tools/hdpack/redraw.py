@@ -44,7 +44,7 @@ STYLE = (
 NEGATIVE = (
     "photo, photorealistic, text, letters, watermark, signature, frame, border, "
     "blurry, noisy, jpeg artifacts, deformed, extra objects, people, cropped, "
-    "pixel art, pixelated, blocky, mosaic, grid, food, pizza, plates, face, eyes"
+    "pixel art, pixelated, blocky, mosaic, grid, food, pizza, plates, cutlery, cups, face, eyes"
 )
 
 
