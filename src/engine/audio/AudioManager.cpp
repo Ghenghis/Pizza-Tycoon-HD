@@ -27,6 +27,7 @@ static_assert(std::atomic<bool>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
 static_assert(std::atomic<std::size_t>::is_always_lock_free);
 static_assert(std::atomic<MusicState>::is_always_lock_free);
+static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
 namespace {
 
@@ -41,6 +42,57 @@ constexpr float INT16_TO_FLOAT = 1.0f / 32768.0f;
 // Clamps to 0..1; NaN becomes 0.
 float unit_range(float v) noexcept {
   return v >= 0.0f ? std::min(v, 1.0f) : 0.0f;
+}
+
+constexpr uint64_t route_word(music::Source source, uint32_t generation) {
+  return (uint64_t{generation} << 32) | static_cast<uint64_t>(source);
+}
+
+constexpr music::Source route_source(uint64_t route) {
+  return static_cast<music::Source>(route & 0xFF);
+}
+
+constexpr uint32_t route_generation(uint64_t route) {
+  return static_cast<uint32_t>(route >> 32);
+}
+
+int16_t to_s16(float v) {
+  return static_cast<int16_t>(std::lrint(std::clamp(v, -32768.0f, 32767.0f)));
+}
+
+// Scales block by a gain that moves in a straight line from gain_from to
+// gain_to across its frames, reaching gain_to on the last one.
+void scale_block(std::span<int16_t> block, float gain_from, float gain_to) {
+  const std::size_t frames = block.size() / MIX_CHANNELS;
+  if (frames == 0) {
+    return;
+  }
+  const float step = (gain_to - gain_from) / static_cast<float>(frames);
+  for (std::size_t f = 0; f < frames; ++f) {
+    const float g = f + 1 == frames
+                        ? gain_to
+                        : gain_from + step * static_cast<float>(f + 1);
+    for (std::size_t c = 0; c < MIX_CHANNELS; ++c) {
+      int16_t& s = block[f * MIX_CHANNELS + c];
+      s = to_s16(static_cast<float>(s) * g);
+    }
+  }
+}
+
+// The cut of a route change: the last music frame heard fades to zero over
+// the first frames of block; the rest is silence.
+void declick_block(std::span<int16_t> block,
+                   const std::array<int16_t, MIX_CHANNELS>& last,
+                   std::size_t fade_frames) {
+  std::fill(block.begin(), block.end(), int16_t{0});
+  const std::size_t frames = std::min(block.size() / MIX_CHANNELS, fade_frames);
+  for (std::size_t f = 0; f < frames; ++f) {
+    const float g = static_cast<float>(fade_frames - f - 1) /
+                    static_cast<float>(fade_frames);
+    for (std::size_t c = 0; c < MIX_CHANNELS; ++c) {
+      block[f * MIX_CHANNELS + c] = to_s16(static_cast<float>(last[c]) * g);
+    }
+  }
 }
 
 } // namespace
@@ -657,14 +709,75 @@ void AudioManager::audio_callback(void* userdata, SDL_AudioStream* stream,
   }
 }
 
-void AudioManager::fill_block(std::span<int16_t> out) {
+void AudioManager::music_route(music::Source source, uint32_t generation) {
+  music_route_.store(route_word(source, generation), std::memory_order_release);
+}
+
+music::Source AudioManager::music_source() const {
+  return route_source(music_route_.load(std::memory_order_acquire));
+}
+
+uint32_t AudioManager::music_generation() const {
+  return route_generation(music_route_.load(std::memory_order_acquire));
+}
+
+bool AudioManager::render_source(music::Source source, uint32_t generation,
+                                 std::span<int16_t> block) {
+  switch (source) {
+  case music::Source::ORIGINAL:
+    music_ring_.drop_stale(generation + 1);
 #if PLEGACY_ENABLE_MUSIC
-  const std::span<int16_t> music(music_block_.data(), out.size());
-  render_music(music);
-  mixer_.render(out, music);
+    render_music(block);
+    return true;
 #else
-  mixer_.render(out);
+    return false;
 #endif
+  case music::Source::MY_MUSIC:
+    music_ring_.read(block, generation);
+    return true;
+  case music::Source::OFF:
+    music_ring_.drop_stale(generation + 1);
+    return false;
+  }
+  return false;
+}
+
+void AudioManager::fill_block(std::span<int16_t> out) {
+  const std::span<int16_t> music(music_block_.data(), out.size());
+  const uint64_t route = music_route_.load(std::memory_order_acquire);
+  const music::Source source = route_source(route);
+  const uint32_t generation = route_generation(route);
+
+  if (route != playing_route_) {
+    // The old source stops here: none of its audio is played from now on.
+    // Its last frame fades out so the cut does not click, and the new source
+    // fades in from the next block. Stale ring audio is dropped meanwhile.
+    playing_route_ = route;
+    fade_in_ = true;
+    music_ring_.drop_stale(generation);
+    declick_block(music, last_music_, DECLICK_FRAMES);
+    last_music_.fill(0);
+    mixer_.render(out, music);
+    return;
+  }
+
+  if (!render_source(source, generation, music)) {
+    fade_in_ = false;
+    last_music_.fill(0);
+    mixer_.render(out);
+    return;
+  }
+  if (source == music::Source::MY_MUSIC) {
+    scale_block(music, fade_in_ ? 0.0f : MY_MUSIC_GAIN, MY_MUSIC_GAIN);
+  }
+  else if (fade_in_) {
+    scale_block(music, 0.0f, 1.0f);
+  }
+  fade_in_ = false;
+  if (music.size() >= MIX_CHANNELS) {
+    std::copy(music.end() - MIX_CHANNELS, music.end(), last_music_.begin());
+  }
+  mixer_.render(out, music);
 }
 
 #if PLEGACY_ENABLE_MUSIC

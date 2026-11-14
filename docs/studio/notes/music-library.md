@@ -393,6 +393,38 @@ pin and fuzz.
 6. Shuffle, repeat, crossfade and the event policy.
 7. Drive metadata intake, in the connector outside the game.
 
+## 11a. As built, 2026-11-14 (steps 1 to 3, revised)
+
+The owner's R35 update (`NORTH-POLE-MUSIC-LIBRARY.md`) changed the plan before step 3; the code
+follows it where it differs from the sections above:
+
+- **One owner, four modes.** `music::MusicPlayback` owns the music: Original, Christmas
+  background, Jukebox, Off. The two Christmas modes are one backend. Every change of what plays
+  takes a new playback generation; `AudioManager::music_route(source, generation)` switches at
+  the next block, cuts the old source (its last sample fades to zero in 64 frames, no crossfade)
+  and the new one fades in over the next block. Effects are never touched.
+- **Generation-tagged ring.** `music::PcmRing` holds 256-frame blocks tagged with generation,
+  track and frame. The callback plays only the generation the route asks for and drops older
+  blocks unplayed, so late decoder output never leaks. Pause and stop halt the producer under a
+  new generation, so their silence is not counted as underruns.
+- **Folders, not copies.** The songs stay where they are and are only read. A root is the game's
+  `Xmas` folder or a chosen folder (a chosen one takes precedence; combining is the player's
+  choice). Each subfolder is a collection; a lone album folder gets a breadcrumb. Ids are the
+  SHA-256 of the bytes (`trk:<32 hex>`), hashed once and cached by size and time in
+  `music-library.json`; equal bytes are one track with several sources. Scans are bounded,
+  cancellable steps on the music worker and never follow links or junctions.
+- **Decoders.** dr_mp3 0.7.4 and dr_wav 0.14.6 behind `music::TrackDecoder`, after our own
+  bounded header and tag readers (WAV RIFF/INFO; MP3 ID3v2.2 to 2.4, ID3v1, Xing/Info/VBRI). An
+  installed libVLC 3 is a second adapter, loaded at runtime, its audio routed through our ring
+  by `libvlc_audio_set_callbacks`; `Backend::AUTO` prefers it when it loads.
+- **Settings.** `music-settings.json` (mode, folders, collection names and hiding, playlists with
+  revisions, queue place, repeat, shuffle, collapsed, North Pole policy, backend) is a
+  `music::RevisionedDocument`: candidate first, read back and checked, then three working copies
+  kept, each with the SHA-256 of its data. The music volume stays in the game's config.
+- **Restaurants.** `on_restaurant_enter`, `on_restaurant_jukebox`, `on_restaurant_leave` and
+  `ambience_suppressed` replace the views' direct FM calls, so a restaurant never stops or
+  replaces the Christmas music; the saved `jukebox_music` and its appeal stay as they are.
+
 ## 12. Unrelated projects
 
 Nothing here comes from the Barro's Pizza project or the Pizza Connection 3 tools: no code,

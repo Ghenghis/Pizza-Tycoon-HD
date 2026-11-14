@@ -81,6 +81,29 @@ Usage: Drawing the HD typefaces (text at HD resolution)
     Copyright: Copyright (c) 2017 Sean Barrett
     License:   MIT or public domain (see LICENSES/MIT-stb.txt)
 
+#### dr\_wav and dr\_mp3
+
+Usage: Decoding the player's own WAV and MP3 files for their music
+
+    Versions:  dr_wav 0.14.6 (tag wav-0.14.6, commit 35b5c392cc15456736c440a68dbe073178bbffe0)
+               dr_mp3 0.7.4 (tag mp3-0.7.4, commit aec2dd20667f54acfdb66031217df6d240f56c52)
+               of github.com/mackron/dr_libs; hashes in third_party/dr_libs/SHA256SUMS
+    Copyright: Copyright 2020 David Reid
+    License:   Public domain (Unlicense) or MIT No Attribution
+               (see LICENSES/Unlicense-dr-libs.txt)
+
+#### libVLC headers
+
+Usage: Declarations for playing the player's music through an installed
+libVLC, which the game loads at runtime when it is present. No libVLC code
+is bundled.
+
+    Version:   VLC 3.0.24 (tag 3.0.24, github.com/videolan/vlc), include/vlc:
+               libvlc.h, libvlc_media.h, libvlc_media_player.h and
+               libvlc_renderer_discoverer.h; hashes in third_party/vlc/SHA256SUMS
+    Copyright: Copyright (C) 1998-2015 VLC authors and VideoLAN
+    License:   LGPL-2.1-or-later (see LICENSES/LGPL-2.1-or-later.txt)
+
 ### Bundled fonts
 
 The HD text uses these typefaces from `data/fonts/`, each under the SIL Open

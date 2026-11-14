@@ -1,0 +1,20 @@
+Test tones made for these tests: sine waves from ffmpeg's own generator,
+no third-party audio. Generated 2026-11-14 with ffmpeg 6.1.1 (Ubuntu
+6.1.1-3ubuntu5, libmp3lame); hashes in SHA256SUMS.
+
+tone-440-stereo-44k.mp3: 1 s of 440 Hz, stereo, 44100 Hz, 96 kbit/s CBR with
+a LAME Info header, ID3v2.3 tags (the title in UTF-16):
+
+  ffmpeg -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=1" \
+    -ac 2 -c:a libmp3lame -b:a 96k -fflags +bitexact -flags:a +bitexact \
+    -map_metadata -1 -id3v2_version 3 -metadata "title=Café ♪ 01" \
+    -metadata "artist=Pizza Tycoon HD tests" -metadata "album=Tones" \
+    -write_xing 1 tone-440-stereo-44k.mp3
+
+tone-660-mono-22k.mp3: 1.5 s of 660 Hz, mono, 22050 Hz (MPEG-2 Layer III),
+48 kbit/s CBR without a Xing/Info header, ID3v2.4 tags (UTF-8):
+
+  ffmpeg -f lavfi -i "sine=frequency=660:sample_rate=22050:duration=1.5" \
+    -ac 1 -c:a libmp3lame -b:a 48k -fflags +bitexact -flags:a +bitexact \
+    -map_metadata -1 -id3v2_version 4 -metadata "title=Tone 660" \
+    -write_xing 0 tone-660-mono-22k.mp3

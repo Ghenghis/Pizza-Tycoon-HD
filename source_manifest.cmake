@@ -27,6 +27,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/content/ScenarioGoals.cpp
     src/core/content/ScenarioSave.cpp
     src/core/content/Sha256.cpp
+    src/core/content/ShippedScenarios.cpp
     src/core/conversations/ArmsDealerConversation.cpp
     src/core/conversations/BankConversation.cpp
     src/core/conversations/InsuranceConversation.cpp
@@ -340,6 +341,17 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/input/TextSession.cpp
     src/engine/input/backend/SDLGamepad.cpp
     src/engine/input/backend/SDLKeymap.cpp
+    src/engine/music/AudioHeaders.cpp
+    src/engine/music/CommandQueue.cpp
+    src/engine/music/DrLibs.cpp
+    src/engine/music/JsonStore.cpp
+    src/engine/music/MusicLibrary.cpp
+    src/engine/music/MusicPlayback.cpp
+    src/engine/music/MusicSettings.cpp
+    src/engine/music/MusicTypes.cpp
+    src/engine/music/PcmRing.cpp
+    src/engine/music/TrackDecoder.cpp
+    src/engine/music/VlcDecoder.cpp
     src/engine/ui/CursorManager.cpp
     src/engine/ui/InteractionManager.cpp
     src/engine/ui/PointerTracker.cpp
@@ -389,6 +401,7 @@ set(PLEGACY_HEADERS
     src/core/content/ScenarioGoals.h
     src/core/content/ScenarioSave.h
     src/core/content/Sha256.h
+    src/core/content/ShippedScenarios.h
     src/core/conversations/ArmsDealerConversation.h
     src/core/conversations/ArmsDealerLine.h
     src/core/conversations/BankConversation.h
@@ -636,6 +649,17 @@ set(PLEGACY_HEADERS
     src/engine/input/TextSession.h
     src/engine/input/backend/SDLGamepad.h
     src/engine/input/backend/SDLKeymap.h
+    src/engine/music/AudioHeaders.h
+    src/engine/music/CommandQueue.h
+    src/engine/music/DrLibs.h
+    src/engine/music/JsonStore.h
+    src/engine/music/MusicLibrary.h
+    src/engine/music/MusicPlayback.h
+    src/engine/music/MusicSettings.h
+    src/engine/music/MusicTypes.h
+    src/engine/music/PcmRing.h
+    src/engine/music/TrackDecoder.h
+    src/engine/music/VlcDecoder.h
     src/engine/ui/CursorManager.h
     src/engine/ui/ICursorManager.h
     src/engine/ui/InteractionEvent.h
@@ -860,6 +884,8 @@ set(PLEGACY_HEADERS
     src/views/viewers/PaletteView.h
     src/views/viewers/SoundViewer.h
     src/views/viewers/VgaViewer.h
+    third_party/dr_libs/dr_mp3.h
+    third_party/dr_libs/dr_wav.h
     third_party/magic_enum/magic_enum.hpp
     third_party/nlohmann/json.hpp
     third_party/stb/stb_truetype.h
@@ -870,6 +896,10 @@ set(PLEGACY_HEADERS
     third_party/utfcpp/utf8/cpp17.h
     third_party/utfcpp/utf8/cpp20.h
     third_party/utfcpp/utf8/unchecked.h
+    third_party/vlc/libvlc.h
+    third_party/vlc/libvlc_media.h
+    third_party/vlc/libvlc_media_player.h
+    third_party/vlc/libvlc_renderer_discoverer.h
 )
 
 set(PLEGACY_DIST_EXTRA

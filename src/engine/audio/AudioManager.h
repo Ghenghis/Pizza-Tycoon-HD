@@ -16,6 +16,9 @@
 #include <string>
 #include <vector>
 
+#include "engine/music/MusicTypes.h"
+#include "engine/music/PcmRing.h"
+
 #if PLEGACY_ENABLE_MUSIC
 struct ADL_MIDIPlayer;
 #endif
@@ -46,6 +49,14 @@ union SDL_Event;
      the new stream opens, so two callbacks never overlap. The music player
      and the mixer belong to AudioManager, not to the stream, so the song and
      the effects carry on from where they were.
+   - The music route (which source makes the music block, and the playback
+     generation) is one atomic word, set by the music owner
+     (music::MusicPlayback). The FM player runs only while the route is
+     ORIGINAL. The player's own music comes from music_ring_, a lock-free
+     single-producer single-consumer ring that the music worker fills; the
+     callback only reads it, never waits for it, and plays a shortfall as
+     silence. Audio of an older generation is dropped unplayed. The callback
+     never opens files, decodes or signals the worker.
 */
 
 namespace audio {
@@ -275,6 +286,33 @@ public:
   [[nodiscard]] uint32_t device() const { return device_id_; }
   [[nodiscard]] bool has_device() const { return audio_stream_ != nullptr; }
 
+  // Where the music block comes from, and the playback generation the ring
+  // must match: set together, from any thread, by the music owner only.
+  // ORIGINAL with generation 0 is the default, which is the game as it
+  // always was. A change of either cuts the old music at once: no audio of
+  // it is played after the block that sees the change, whose last music
+  // sample fades to zero within DECLICK_FRAMES so the cut does not click.
+  // The new source fades in over the next block. Effects carry on as they
+  // were.
+  void music_route(music::Source source, uint32_t generation);
+  [[nodiscard]] music::Source music_source() const;
+  [[nodiscard]] uint32_t music_generation() const;
+  // The ring the player's music plays from. The music worker is its only
+  // producer.
+  [[nodiscard]] music::PcmRing& music_ring() { return music_ring_; }
+  [[nodiscard]] const music::PcmRing& music_ring() const { return music_ring_; }
+  // The player's music sits this much under the FM songs (-3 dB): mastered
+  // tracks are close to full scale, and the FM songs get MUSIC_BOOST.
+  static constexpr float MY_MUSIC_GAIN = 0.70794578f;
+  static constexpr std::size_t DECLICK_FRAMES = 64;
+
+  // Mixes the next block of output (at most MIX_BLOCK_SAMPLES) into out.
+  // The audio callback calls it. Another thread may call it only while the
+  // callback cannot run: before init(), or while the device is paused
+  // (SDL_PauseAudioDevice(device()) holds the device's lock until a running
+  // callback is done).
+  void fill_block(std::span<int16_t> out);
+
   // Stores a song (CMF or standard MIDI data) for a music slot.
   void load_music(MusicId id, std::vector<uint8_t> data);
   // Seconds into the current song, as of the last mixed block.
@@ -293,8 +331,10 @@ public:
 private:
   static void audio_callback(void* userdata, SDL_AudioStream* stream,
                              int additional_amount, int total_amount);
-  // Audio thread: one block of output, at most MIX_BLOCK_SAMPLES.
-  void fill_block(std::span<int16_t> out);
+  // Audio thread: the next block of source into block; false when the
+  // source gives no music.
+  bool render_source(music::Source source, uint32_t generation,
+                     std::span<int16_t> block);
   // Game thread: opens the default playback device and starts the callback;
   // false (with the reason logged) when it cannot.
   bool open_stream();
@@ -323,7 +363,6 @@ private:
   static constexpr int MAX_DRAIN_SAMPLES = SAMPLE_RATE * 2; // 2 seconds max
   // Pre-volume boost for OPL output (otherwise was too quiet):
   static constexpr float MUSIC_BOOST = 6.0f;
-  std::array<int16_t, MIX_BLOCK_SAMPLES> music_block_{}; // audio thread
   // Written by the callback after each block.
   std::atomic<uint32_t> music_position_ms_{0};
   size_t next_music_slot_ = 0;
@@ -334,6 +373,16 @@ private:
   Mixer mixer_;
   // Selection for play_sound_if_changed.
   std::optional<SoundId> current_indexed_sound_;
+
+  // The route: the generation in the high 32 bits, the source in the low.
+  std::atomic<uint64_t> music_route_{0};
+  music::PcmRing music_ring_;
+  // Audio thread only: the route of the last block, whether the next block
+  // fades in, and the last music frame handed to the mixer.
+  uint64_t playing_route_ = 0;
+  bool fade_in_ = false;
+  std::array<int16_t, MIX_CHANNELS> last_music_{};
+  std::array<int16_t, MIX_BLOCK_SAMPLES> music_block_{};
 
   SDL_AudioStream* audio_stream_{nullptr};
   uint32_t device_id_ = 0;

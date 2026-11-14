@@ -14,6 +14,7 @@ namespace platform_paths {
 namespace {
 std::string base_dir_;
 std::string data_dir_;
+std::string game_dir_;
 } // anonymous namespace
 
 void init() {
@@ -30,10 +31,12 @@ void init() {
 
   const char* base = SDL_GetBasePath();
   if (base) {
-    data_dir_ = std::string(base) + "data/";
+    game_dir_ = base;
+    data_dir_ = game_dir_ + "data/";
   }
   else {
     std::cerr << "Warning: SDL_GetBasePath failed, using current directory\n";
+    game_dir_ = "./";
     data_dir_ = "./data/";
   }
 }
@@ -41,6 +44,8 @@ void init() {
 const std::string& base_dir() { return base_dir_; }
 
 const std::string& data_dir() { return data_dir_; }
+
+const std::string& game_dir() { return game_dir_; }
 
 std::string config_file_path() { return base_dir_ + "settings.conf"; }
 
@@ -53,5 +58,7 @@ std::string screenshots_dir() { return base_dir_ + "screenshots/"; }
 std::string recipes_dir() { return base_dir_ + "recipes/"; }
 
 std::string missions_dir() { return base_dir_ + "missions/"; }
+
+std::string music_dir() { return base_dir_ + "music/"; }
 
 } // namespace platform_paths
