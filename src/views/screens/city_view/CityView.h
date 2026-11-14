@@ -28,7 +28,9 @@
 #include "views/hd/CityMapHd.h"
 #include "views/hd/MediumMapHd.h"
 #include "views/hd/WaterCycleHd.h"
+#include "views/helpers/ZoomTransition.h"
 #include "views/helpers/camera/CameraController.h"
+#include "views/helpers/camera/CameraSmoother.h"
 #include "views/helpers/camera/RmbDragScroller.h"
 #include "views/helpers/camera/ScrollEdges.h"
 #include "views/screens/city_view/CityViewTab.h"
@@ -43,6 +45,9 @@ public:
   CityView(GameContext& context, GameState& state, core::CityId id);
   ~CityView();
   void tick() override;
+  // Smooth motion: the eased zoom and the drawn camera follow the frame
+  // clock; the view is drawn every frame while anything glides.
+  void advance(uint32_t dt_ms) override;
   void render(const RenderContext& ctx) override;
   InterruptionRate interruption_rate() const override {
     return InterruptionRate::Full;
@@ -144,6 +149,12 @@ private:
   void move_cars();
   void place_cars();
 
+  // Smooth motion (drawing only; see CameraSmoother and ZoomTransition)
+  [[nodiscard]] bool smooth_motion() const;
+  [[nodiscard]] views::helpers::MapFrame map_frame() const;
+  void remember_map_frame(const gfx::Surface& surface);
+  void begin_zoom_transition(WorldPoint anchor_world);
+
   // Restaurant cycling
   void glide_to_restaurant(const Restaurant& rest);
 
@@ -213,4 +224,16 @@ private:
   // The HD water cycle at CLOSE zoom, once built.
   std::shared_ptr<const views::hd::WaterFrames> water_frames_;
   bool water_hd_requested_ = false;
+
+  // Smooth motion, drawing only: none of it is read by input, hit-testing,
+  // the saved map position or the game.
+  CameraSmoother scroll_smoother_;
+  views::helpers::ZoomTransition zoom_transition_;
+  // The map as last drawn, for the next zoom transition to start from.
+  std::optional<views::helpers::MapFrame> last_map_frame_;
+  std::vector<uint8_t> last_map_pixels_;
+  // Ticks seen, and the last one in which the cars moved: they are drawn on
+  // the way only right after a tick that moved them.
+  uint64_t tick_serial_{0};
+  uint64_t cars_moved_tick_{0};
 };

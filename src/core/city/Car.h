@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <magic_enum/magic_enum.hpp>
 #include <ostream>
+#include "core/util/Tween.h"
 #include "engine/geom/Spaces.h"
 
 class City;
@@ -50,6 +51,22 @@ public:
   int tile_y() const { return tile_y_; }
   Dir dir() const { return dir_; }
   WorldPoint position() const { return position_; }
+  // Where the car was before its last update (smooth motion).
+  WorldPoint previous_position() const { return previous_position_; }
+  // Where to draw the car alpha (0..1) of the way from its last update to
+  // its next: previous_position() at 0, position() at 1. A turn, a lane
+  // change or a jump further than an update can drive is drawn at once.
+  // Drawing only: the cars' movement, culling and collisions use position().
+  [[nodiscard]] WorldPoint drawn_position(float alpha) const {
+    if (dir_ != previous_dir_) {
+      return position_;
+    }
+    return tween::drawn(previous_position_, position_, alpha,
+                        max_drawn_step_pixels);
+  }
+  // The most an update moves a car straight on: pixels_per_frame, with room
+  // for the step onto the next tile.
+  static constexpr int max_drawn_step_pixels = 2 * pixels_per_frame;
   int remaining_cooldown() const { return remaining_cooldown_; }
   int type() const { return car_type_; }
   void remaining_cooldown(int frames) { remaining_cooldown_ = frames; }
@@ -75,6 +92,9 @@ private:
   uint8_t step_timer_ = INITIAL_STEP_TIMER;
 
   WorldPoint position_;
+  // Before the last update; drawing only (see drawn_position).
+  WorldPoint previous_position_;
+  Dir previous_dir_;
 
   int remaining_cooldown_{0};
   bool last_turn_left_{false}; // prevent double left turns

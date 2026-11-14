@@ -87,7 +87,8 @@ void CarManager::update(const WorldRect& view, int ticks) {
   prev_viewport_ = view;
 }
 
-void CarManager::render(const RenderContext& ctx, const Camera& camera) const {
+void CarManager::render(const RenderContext& ctx, const Camera& camera,
+                        float alpha) const {
   const WorldRect visible = camera.visible_world_rect();
 
   std::vector<const Car*> list;
@@ -115,7 +116,8 @@ void CarManager::render(const RenderContext& ctx, const Camera& camera) const {
   for (const Car* c : list) {
     int frame = (c->type() * 4) + static_cast<int>(c->dir());
 
-    const ViewPoint dest_pos = camera.world_to_view(c->position());
+    // Culled and sorted by where the car is; only drawn on the way.
+    const ViewPoint dest_pos = camera.world_to_view(c->drawn_position(alpha));
 
     ctx.surface->blit_masked(car_surfaces_[frame], dest_pos);
   }

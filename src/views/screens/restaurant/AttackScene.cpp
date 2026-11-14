@@ -30,6 +30,7 @@
 #include "core/state/GameOptions.h"
 #include "core/state/GameState.h"
 #include "core/util/LegacyConstants.h"
+#include "core/util/Tween.h"
 #include "engine/FormatCompat.h"
 #include "engine/Random.h"
 #include "engine/Size.h"
@@ -355,6 +356,33 @@ void AttackScene::advance(uint32_t dt_ms) {
       return;
     }
   }
+  // Smooth motion: draw every frame while a fighter is on the way.
+  if (state_.options().smooth_motion && !camera_moved_) {
+    const auto on_the_way = [](const std::optional<AttackSprite>& s) {
+      return s && s->previous != s->position;
+    };
+    if (on_the_way(attacker_) || on_the_way(defender_)) {
+      view_.mark_dirty();
+    }
+  }
+}
+
+float AttackScene::update_alpha() const {
+  const uint32_t update_us =
+      MICROSECONDS_PER_SECOND /
+      static_cast<uint32_t>(state_.options().attack_scene_hz);
+  return std::clamp(static_cast<float>(update_accumulator_us_) /
+                        static_cast<float>(update_us),
+                    0.0f, 1.0f);
+}
+
+PxOffset AttackScene::drawn_offset(const AttackSprite& s) const {
+  if (!state_.options().smooth_motion || camera_moved_ || s.death_ctr != 0) {
+    return PxOffset{0, 0};
+  }
+  const WorldPoint at =
+      tween::drawn(s.previous, s.position, update_alpha(), s.move_speed);
+  return PxOffset{at.x - s.position.x, at.y - s.position.y};
 }
 
 bool AttackScene::update() {
@@ -362,6 +390,11 @@ bool AttackScene::update() {
     return false;
   }
   ++update_count_;
+  attacker_->previous = attacker_->position;
+  if (defender_) {
+    defender_->previous = defender_->position;
+  }
+  const WorldPoint camera_before = view_.camera_.scroll();
 
   const auto walk = [](AttackSprite& s, Orientation dir) {
     step_walker(s.position, s.walk_cycle, dir, s.move_speed);
@@ -491,6 +524,7 @@ bool AttackScene::update() {
   }
 
   update_attack_sound();
+  camera_moved_ = view_.camera_.scroll() != camera_before;
   view_.mark_dirty();
   return true;
 }
@@ -536,7 +570,7 @@ void AttackScene::render() {
   }
 
   for_each_fighter([&](const AttackSprite& s) {
-    const WorldPoint tl = body_top_left(s);
+    const WorldPoint tl = body_top_left(s) + drawn_offset(s);
     view_.background_.blit_masked(
         body.frame(static_cast<std::size_t>(body_frame(s))),
         ViewPoint{tl.x, tl.y});
@@ -553,7 +587,7 @@ void AttackScene::render() {
       const int dir = static_cast<int>(s.direction);
       const auto& off_x = held_weapon::OFF_X[s.is_defender ? 1 : 0][widx];
       const auto& off_y = held_weapon::OFF_Y[s.is_defender ? 1 : 0][widx];
-      const WorldPoint tl = body_top_left(s);
+      const WorldPoint tl = body_top_left(s) + drawn_offset(s);
       view_.background_.blit_masked(
           weapon_bob.frame(static_cast<std::size_t>(dir)),
           ViewPoint{tl.x + off_x[dir], tl.y + off_y[dir]});
@@ -575,7 +609,7 @@ void AttackScene::render() {
                                        : sprite::ATTACKER_HEAD_DX)[dir];
     const int head_dy = (s.is_defender ? sprite::DEFENDER_HEAD_DY
                                        : sprite::ATTACKER_HEAD_DY)[dir];
-    const WorldPoint tl = body_top_left(s);
+    const WorldPoint tl = body_top_left(s) + drawn_offset(s);
     view_.background_.blit_masked(
         body.frame(static_cast<std::size_t>(head_base + dir)),
         ViewPoint{tl.x + head_dx, tl.y + head_dy});

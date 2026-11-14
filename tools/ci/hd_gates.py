@@ -200,6 +200,9 @@ def gate_fingerprint(args: argparse.Namespace, work: Path) -> str:
         script = (
             f"game options set smooth_motion {value}\nrestaurant qs 0 0\n"
             f"nav restaurant 0\nbench 120\ngame tick 2000\n"
+            # The city map too: its cars, drawn camera and zoom are drawing
+            # only as well.
+            f"nav cityview @\nbench 120\n"
             f"dump fingerprint {out.as_posix()}\n"
         )
         run_game(args, work, script, f"fp_{value}", [])

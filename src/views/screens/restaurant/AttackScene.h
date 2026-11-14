@@ -27,6 +27,9 @@ namespace views::screens::restaurant {
 
 struct AttackSprite {
   WorldPoint position;
+  // Where the fighter stood before the last update: drawing only (smooth
+  // motion). Movement, blocking, weapon reach and hits use position.
+  WorldPoint previous;
   Orientation direction{Orientation::N};
   // Direction they're facing at the moment of firing
   Orientation fire_dir{Orientation::N};
@@ -119,6 +122,13 @@ private:
   // are drawn relative to its top-left corner.
   WorldPoint body_top_left(const AttackSprite& s) const;
   WorldPoint body_top_left(const AttackSprite& s, int frame) const;
+  // Smooth motion: how far from its position a fighter is drawn this frame,
+  // on the way from its previous position. Zero when smooth motion is off,
+  // after a teleport, or when the camera followed the attacker in the last
+  // update (the room then moves in steps, so the fighters do too).
+  [[nodiscard]] PxOffset drawn_offset(const AttackSprite& s) const;
+  // How far the next update is along, 0..1.
+  [[nodiscard]] float update_alpha() const;
 
   RestaurantView& view_;
   GameContext& context_;
@@ -137,6 +147,8 @@ private:
   // The original stops the break-in music as soon as a weapon first fires.
   bool break_in_music_stopped_{false};
   uint32_t update_accumulator_us_{0};
+  // The last update moved the camera (drawing only, see drawn_offset).
+  bool camera_moved_{false};
   core::item::Item attack_weapon_{};
   Money destroyed_furniture_value_;
 };

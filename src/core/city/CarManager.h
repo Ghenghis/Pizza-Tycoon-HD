@@ -25,7 +25,10 @@ public:
   CarManager(BobManager* bob, const City& city);
 
   void update(const WorldRect& view, int ticks = 1);
-  void render(const RenderContext& ctx, const Camera& camera) const;
+  // Draws the cars alpha (0..1) of the way from their last update to their
+  // next (smooth motion); 1 draws them where they are, as the original does.
+  void render(const RenderContext& ctx, const Camera& camera,
+              float alpha = 1.0f) const;
 
   Car& inject_car(const Car& c);
   std::size_t active_count() const { return cars_.size(); }

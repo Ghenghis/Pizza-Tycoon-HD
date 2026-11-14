@@ -7,6 +7,7 @@
 #include "views/screens/city_view/CityView.h"
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
@@ -392,6 +393,7 @@ void CityView::zoom_in(ViewPoint p_view_local) {
 
   camera_.scroll(anchor_world);
   camctrl_.reset();
+  begin_zoom_transition(anchor_world);
 
   mark_dirty();
 }
@@ -500,6 +502,7 @@ void CityView::zoom_out(ViewPoint p_view_local) {
   // Set scroll (camera will clamp based on zoom and world_size)
   camera_.scroll(WorldPoint{new_x, new_y});
   camctrl_.reset();
+  begin_zoom_transition(anchor_world);
 
   mark_dirty();
 }
@@ -533,6 +536,7 @@ void CityView::zoom_scroll(int direction, ViewPoint cursor) {
       WorldPoint{anchor_world.x - ((cursor.x - o.x) * to.zoom_multiplier),
                  anchor_world.y - ((cursor.y - o.y) * to.zoom_multiplier)});
   camctrl_.reset();
+  begin_zoom_transition(anchor_world);
 
   mark_dirty();
 }
@@ -681,8 +685,11 @@ void CityView::handle_mouse_click_zoom_close(WorldPoint p) {
 }
 
 void CityView::tick() {
+  ++tick_serial_;
   poll_hd_jobs();
-  if (camctrl_.tick()) {
+  const bool scrolled = camctrl_.tick();
+  scroll_smoother_.on_tick(camera_);
+  if (scrolled) {
     // During scrolling, we just stop everything:
     mark_dirty();
     return;
@@ -691,6 +698,7 @@ void CityView::tick() {
   if (zoom_ == ZoomLevel::CLOSE) {
     WorldRect view = camera_.visible_world_rect();
     car_mgr_->update(view);
+    cars_moved_tick_ = tick_serial_;
     mark_dirty();
   }
   else {
@@ -753,8 +761,18 @@ void CityView::render(const RenderContext& ctx) {
   // Let all dropdowns register their interactions
   interactions_.begin_frame();
 
+  // Interactions are placed with the camera itself, never the drawn one.
   register_map_interactions_viewport();
   register_tutorial_tile();
+
+  // Smooth motion: draw with the camera where it is drawn this frame, and put
+  // it back before anything else can read it.
+  const bool smooth = smooth_motion();
+  const float alpha = context_.clock.tick_alpha;
+  const WorldPoint camera_scroll = camera_.scroll();
+  if (smooth) {
+    camera_.scroll(scroll_smoother_.drawn(camera_, alpha));
+  }
 
   if (zoom_ == ZoomLevel::CLOSE) {
     // Always update water palette when animation is active since Renderer
@@ -764,7 +782,8 @@ void CityView::render(const RenderContext& ctx) {
     }
 
     render_map_data(ctx);
-    car_mgr_->render(ctx, camera_);
+    car_mgr_->render(ctx, camera_,
+                     smooth && cars_moved_tick_ == tick_serial_ ? alpha : 1.0f);
   }
   else {
     render_tabs(ctx);
@@ -778,6 +797,11 @@ void CityView::render(const RenderContext& ctx) {
       render_map_data(ctx);
     }
   }
+  if (smooth) {
+    // The plain new frame is what the next zoom starts from.
+    remember_map_frame(*ctx.surface);
+    zoom_transition_.composite(*ctx.surface);
+  }
   if (zoom_ != ZoomLevel::CLOSE) {
     if (highlight_blink_visible_) {
       render_highlights(ctx);
@@ -788,6 +812,66 @@ void CityView::render(const RenderContext& ctx) {
     dropdowns_.add_interactions(ictx);
     dropdowns_.render(*ctx.surface, context_.font);
   }
+  if (smooth) {
+    camera_.scroll(camera_scroll);
+  }
+}
+
+bool CityView::smooth_motion() const { return state_.options().smooth_motion; }
+
+void CityView::advance(uint32_t dt_ms) {
+  if (!smooth_motion()) {
+    zoom_transition_.cancel();
+    return;
+  }
+  const bool zooming = zoom_transition_.active();
+  scroll_smoother_.advance(camera_, dt_ms, context_.clock.tick_alpha,
+                           rmb_drag_scroller_.is_active());
+  zoom_transition_.advance(dt_ms);
+  const bool cars =
+      zoom_ == ZoomLevel::CLOSE && car_mgr_ && car_mgr_->active_count() > 0;
+  // A transition that just ended needs one more frame, without it.
+  if (zooming || scroll_smoother_.moving() || cars) {
+    mark_dirty();
+  }
+}
+
+views::helpers::MapFrame CityView::map_frame() const {
+  return views::helpers::MapFrame{.viewport = viewport_rect(),
+                                  .top_left =
+                                      camera_.view_to_world(ViewPoint{0, 0}),
+                                  .zoom = camera_.zoom()};
+}
+
+void CityView::remember_map_frame(const gfx::Surface& surface) {
+  const views::helpers::MapFrame frame = map_frame();
+  const ViewRect r = frame.viewport;
+  if (r.x < 0 || r.y < 0 || r.w <= 0 || r.h <= 0 ||
+      r.x + r.w > surface.width() || r.y + r.h > surface.height()) {
+    last_map_frame_.reset();
+    return;
+  }
+  last_map_pixels_.resize(static_cast<std::size_t>(r.w) *
+                          static_cast<std::size_t>(r.h));
+  const uint8_t* src = surface.data();
+  for (int y = 0; y < r.h; ++y) {
+    std::copy_n(
+        src + (static_cast<std::size_t>(r.y + y) * surface.width()) + r.x, r.w,
+        last_map_pixels_.begin() + (static_cast<std::ptrdiff_t>(y) * r.w));
+  }
+  last_map_frame_ = frame;
+}
+
+void CityView::begin_zoom_transition(WorldPoint anchor_world) {
+  scroll_smoother_.snap(camera_);
+  if (!smooth_motion() || !last_map_frame_) {
+    return;
+  }
+  zoom_transition_.begin(*last_map_frame_, std::move(last_map_pixels_),
+                         map_frame(), anchor_world);
+  last_map_pixels_.clear();
+  last_map_frame_.reset();
+  mark_dirty();
 }
 
 void CityView::render_map_zoom_close(const RenderContext& ctx) {

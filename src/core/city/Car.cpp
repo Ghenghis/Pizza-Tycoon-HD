@@ -25,11 +25,15 @@ Car Car::spawn(int tile_x, int tile_y, int car_type, const City& city) {
 }
 
 Car::Car(int tile_x, int tile_y, Dir d, int car_type)
-    : tile_x_(tile_x), tile_y_(tile_y), dir_(d), car_type_(car_type) {
+    : tile_x_(tile_x), tile_y_(tile_y), dir_(d), car_type_(car_type),
+      previous_dir_(d) {
   calc_screen_pos();
+  previous_position_ = position_;
 }
 
 void Car::update(const WorldRect& view, const City& city) {
+  previous_position_ = position_;
+  previous_dir_ = dir_;
 
   if (remaining_cooldown_ > 0) {
     --remaining_cooldown_;

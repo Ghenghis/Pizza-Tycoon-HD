@@ -18,6 +18,7 @@
 #include "core/state/GameState.h"
 #include "core/util/GameContext.h"
 #include "core/util/LegacyConstants.h"
+#include "core/util/Tween.h"
 #include "engine/FormatCompat.h"
 #include "engine/Random.h"
 #include "engine/Size.h"
@@ -471,12 +472,9 @@ WorldPoint GuestWalkScene::drawn_position(const WalkingGuest& walker) const {
       (static_cast<float>(walker.anim_tick) + context_.clock.tick_alpha) /
           static_cast<float>(WALKER_MOVE_INTERVAL),
       0.0f, 1.0f);
-  const WorldPoint from = *walker.previous;
-  auto lerp = [t](int a, int b) {
-    return a + static_cast<int>(std::lround(static_cast<float>(b - a) * t));
-  };
-  return WorldPoint{lerp(from.x, walker.position.x),
-                    lerp(from.y, walker.position.y)};
+  // A step is one cell; anything further (a leg that starts elsewhere) is
+  // drawn at once.
+  return tween::drawn(*walker.previous, walker.position, t, WALK_CELL_SIZE);
 }
 
 void GuestWalkScene::render_walking_guest() {

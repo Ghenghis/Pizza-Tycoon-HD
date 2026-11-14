@@ -70,7 +70,7 @@ plegacy --hd-scale 3 --hd-pack pack
 | `hd_pack = <folder>` | `--hd-pack <folder>` | The pack. Empty means a folder called `hd` next to the program, if there is one. |
 | `hd_text = true` | | HD text: modern typefaces instead of the 1994 letters (see [HD text](#hd-text)). Options menu: "HD text". |
 | `lighting = true` | | HD lighting in the restaurant (see [HD lighting](#hd-lighting)). Options menu: "Lighting". |
-| `smooth_motion = true` | | Walking guests and waiters glide between steps at the screen's frame rate. Only the drawing changes: the game state is the same with it on and off (an HD gate checks this). Options menu: "Smooth motion". |
+| `smooth_motion = true` | | Everything that moves is drawn between its last two steps at the screen's frame rate: walking guests and waiters, cars on the city map and the fighters of a mafia attack (turns, lane changes and jumps are drawn at once). The city map camera glides between scroll steps and settles with a soft spring after a drag, and a zoom eases from the old scale to the new one in 180 ms (the map shows its indexed pictures during that moment). Only the drawing changes: input and hit-testing use the real positions and the new scale at once, and the game state is the same with it on and off (an HD gate and `SmoothMotionTests.cpp` check this). Off: drawn exactly as before. Options menu: "Smooth motion". |
 
 A pack, HD text and lighting are used only when `hd_scale` is 2 or more. With
 `hd_scale` above 1 and no pack, the game is drawn at the higher resolution
@@ -168,7 +168,13 @@ custom nodes are needed for the shipped workflows.
    `python tools/hdpack/hdpack.py doctor --checkpoint <file> --upscale-model <file>`
 4. Try ten pictures first: add `--limit 10`, look at them in the game, adjust
    `prompts.json` (prompt and `denoise` per group of files), then run the
-   rest. Runs resume: files already in the pack are skipped unless `--force`.
+   rest. Runs resume: files already in the pack are skipped unless `--force`
+   (a file whose provenance sidecar no longer matches it is redone). Each
+   picture's seed is a hash of `--seed` (default 1994), the workflow and the
+   picture's group, so `--limit`, `--only` and resuming never change it.
+   Every written picture gets `pack/_provenance/<file>/provenance.json`; pass
+   `--models models.json` to record model hashes and licences, and check a
+   pack with `hdpack.py provenance pack/`.
 
 Sprites and other small pictures are best done without AI:
 `hdpack.py upscale export/ pack/ --scale 12 --method mmpx --only 'bob/*'`
@@ -280,9 +286,12 @@ MMPX keeps the sprites faithful but they still look like magnified pixel
 art. `tools/hdpack/redraw.py` paints them again as real HD art without
 moving a single pixel of their outline:
 
-1. `depthmaps.py <pack> <maps>` makes a depth map (Depth Anything V2 Large)
-   and a normal map for every picture: about 6 pictures a second, so a few
-   minutes for the whole pack.
+1. `depthmaps.py <pack> <maps>` makes a depth map (Depth Anything V2 Small,
+   Apache-2.0; Base and Large are CC-BY-NC-4.0 and need
+   `--allow-noncommercial`) and a normal map for every picture, each with a
+   provenance sidecar: about 6 pictures a second, so a few minutes for the
+   whole pack. `maps.py` is the per-picture bundle form of the same stage
+   (see `docs/studio/notes/hdpack-maps-layout.md`).
 2. `redraw.py` starts from the pack picture, lets SDXL (`juggernautXL_v9`)
    paint over it at denoise 0.8, and holds the shape and perspective with a
    depth ControlNet (`diffusers_xl_depth_full`, strength 0.85 until 90% of
