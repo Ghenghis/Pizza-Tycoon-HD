@@ -1179,10 +1179,12 @@ TurnOrchestrator::execute_pipeline_step(const turn::Step& step) {
           },
 
           [&](const turn::Autosave&) {
-            // A failed autosave keeps the old one; the player is told, so
-            // they can save by hand.
-            if (gs_->context_ &&
-                !save::SaveGameManager::autosave(*gs_, *gs_->context_)) {
+            // The game is captured here; writing and checking the save run on
+            // a worker, and the game loop promotes it. A failed autosave
+            // keeps the old one; the player is told, so they can save by
+            // hand (here, or when the worker's checks fail).
+            if (gs_->context_ && !save::SaveGameManager::autosave_in_background(
+                                     *gs_, *gs_->context_)) {
               gs_->status().post(StatusMsg{
                   .payload = std::string("Autosave failed! Save by hand."),
                   .severity = StatusSeverity::Warning,

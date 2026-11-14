@@ -167,19 +167,38 @@ The game calls `TimedCheckpoints::frame` every frame, telling it whether the gam
 week begins. A week counts over a day, and a boundary over the interval. They go to the slot
 `AUTOCHK.plsave`, which nothing else writes. One job runs at a time.
 
-- **On the game thread, at a consistent tick:** capture `state_to_json` and its fingerprint. If the
-  fingerprint equals the newest checkpoint's, working or awaiting promotion, nothing more happens
-  (`Unchanged`).
+- **On the game thread, at a consistent tick:** `SaveGameManager::capture`, which is
+  `state_to_json` and nothing more.
 - **On the job's worker:**
   - bring the slot's file up to the active version;
-  - encode, list, write and integrity-check the new version (steps 1 to 3 above);
+  - fingerprint the captured game. If the slot's newest version, working or awaiting promotion,
+    has the same fingerprint, stop: the job reports `unchanged()`;
+  - otherwise encode, list, write and integrity-check the version (steps 1 to 3 above);
   - build it apart from the game, with the game's options and an empty context, and check its
-    fingerprint.
+    fingerprint;
+  - commit it as a candidate at `load-verified`, with the reason `awaiting promotion`, and write
+    the slot's file.
 
-  It is then committed as a candidate at `load-verified`, with the reason `awaiting promotion`. A
-  failure leaves it a candidate with its reason.
-- **On the game thread, once the job is done:** `promote_checkpoint` makes it working and active.
-  That is one small manifest write. The slot's file catches up on the next job's worker.
+  A failure leaves it a candidate with its reason. Until promotion, loading still takes the active
+  version, since this one is listed only as a candidate.
+- **On the game thread, once the job is done:** `promote(job)` makes it working and active. That is
+  one small manifest write.
+
+### Autosave
+
+The autosave takes the same path. The turn pipeline's Autosave step calls
+`autosave_in_background`, which captures the game and starts the worker. It writes to the next
+`AUTOSAVn` slot and never coalesces.
+
+`TimedCheckpoints::frame` calls `settle_background_saves(state)`, which promotes finished autosaves.
+For one that failed, it posts "Autosave failed! Save by hand." as before. `finish()` waits for
+whatever is still running and promotes it as the game closes.
+
+Anything on the game thread that touches a slot first waits for a background autosave to that slot
+and promotes it: `save_to_slot`, `load`, `restore_version`, `restore_as_branch` and `delete_save`.
+So there is never a second writer.
+
+The synchronous `autosave()` is kept. A manual Save stays synchronous behind the busy cursor.
 
 What makes the build safe on a worker:
 

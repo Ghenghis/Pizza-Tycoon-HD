@@ -32,6 +32,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -158,9 +159,10 @@ struct PreparedSlot {
   std::string manifest_text;
 };
 
-PreparedSlot prepare_slot(const TempDir& dir, LiveGame& game) {
+PreparedSlot prepare_slot(const TempDir& dir, LiveGame& game,
+                          const std::string& name = "game.plsave") {
   PreparedSlot slot{
-      .file = dir.path() / "game.plsave", .bytes = {}, .manifest_text = {}};
+      .file = dir.path() / name, .bytes = {}, .manifest_text = {}};
   REQUIRE(SaveGameManager::save(game.state, game.context, slot.file.string()));
   slot.bytes = read_file(slot.file);
   const SaveSlot versions(slot.file);
@@ -852,10 +854,19 @@ TEST_CASE("A timed checkpoint that fails on its worker costs nothing",
   const PreparedSlot slot = prepare_slot(dir, game);
   const SaveSlot versions(slot.file);
 
-  // The same game as the working version: nothing to keep.
+  // The same game as the working version: the worker finds nothing to keep,
+  // and stops before writing (or building) anything.
   save::CheckpointResult result = save::CheckpointResult::Failed;
-  CHECK_FALSE(start_timed(game, slot.file, &result));
-  CHECK(result == save::CheckpointResult::Unchanged);
+  {
+    auto job = start_timed(game, slot.file, &result);
+    REQUIRE(job);
+    CHECK(result == save::CheckpointResult::Written);
+    job->wait();
+    CHECK(job->unchanged());
+    CHECK_FALSE(job->ready());
+    CHECK(SaveGameManager::promote(*job) == save::CheckpointResult::Unchanged);
+    CHECK(read_file(versions.manifest_path()) == slot.manifest_text);
+  }
 
   move_on(game.state);
 
@@ -868,8 +879,7 @@ TEST_CASE("A timed checkpoint that fails on its worker costs nothing",
     job->wait();
     CHECK_FALSE(job->ready());
     CHECK_FALSE(job->error().empty());
-    CHECK(SaveGameManager::promote_checkpoint(*job, slot.file) ==
-          save::CheckpointResult::Failed);
+    CHECK(SaveGameManager::promote(*job) == save::CheckpointResult::Failed);
   }
   SECTION("the disk loses the end of the version on the worker") {
     ScopedAtomicFault fault(version_files(),
@@ -900,6 +910,36 @@ TEST_CASE("A timed checkpoint that fails on its worker costs nothing",
   CHECK_FALSE(SaveGameManager::start_timed_checkpoint(
       empty, game.context, save::TimedCheckpoint::NewDay, &result, slot.file));
   CHECK(result == save::CheckpointResult::NoGame);
+}
+
+// Settles the background autosaves until none is left, for a bounded time.
+void settle_all(GameState& state) {
+  for (int i = 0; i < 1000 && SaveGameManager::background_saves() > 0; ++i) {
+    SaveGameManager::settle_background_saves(state);
+    if (SaveGameManager::background_saves() > 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+  REQUIRE(SaveGameManager::background_saves() == 0);
+}
+
+TEST_CASE("A background autosave that fails keeps the last one",
+          "[save][versions][autosave]") {
+  TempDir dir;
+  LiveGame game;
+  game.state.options().autosave_count = 1;
+  const PreparedSlot slot = prepare_slot(dir, game, "AUTOSAV1.plsave");
+  move_on(game.state);
+
+  // It fails on the worker, before any build.
+  ScopedAtomicFault fault(version_files(),
+                          {.kind = AtomicFault::Kind::DiskFull, .bytes = 64});
+  REQUIRE(SaveGameManager::autosave_in_background(game.state, game.context,
+                                                  dir.path()));
+  CHECK(SaveGameManager::background_saves() == 1);
+  settle_all(game.state);
+  CHECK(fault.hits() == 1);
+  require_untouched(slot);
 }
 
 TEST_CASE("The Recovery Center lists every slot with its versions",
@@ -1006,22 +1046,64 @@ TEST_CASE("A timed checkpoint is built and checked on its worker",
   CHECK(waiting->reason == save::awaiting_promotion);
   CHECK(waiting->made_for == "checkpoint at a new day");
   CHECK_FALSE(manifest->active);
+  // The worker already wrote the slot's file; loading still takes the
+  // active version until promotion.
+  CHECK(read_file(slot) ==
+        read_file(SaveSlot(slot).version_path(job->sequence())));
   // Waiting, it already counts as the newest checkpoint.
-  save::CheckpointResult result = save::CheckpointResult::Failed;
-  CHECK_FALSE(SaveGameManager::start_timed_checkpoint(
-      state, context, save::TimedCheckpoint::Interval, &result, slot));
-  CHECK(result == save::CheckpointResult::Unchanged);
+  {
+    auto again = SaveGameManager::start_timed_checkpoint(
+        state, context, save::TimedCheckpoint::Interval, nullptr, slot);
+    REQUIRE(again);
+    again->wait();
+    CHECK(again->unchanged());
+  }
 
-  CHECK(SaveGameManager::promote_checkpoint(*job, slot) ==
-        save::CheckpointResult::Written);
+  CHECK(SaveGameManager::promote(*job) == save::CheckpointResult::Written);
   manifest = SaveGameManager::versions(slot.string());
   REQUIRE(manifest);
   CHECK(manifest->active == std::optional<std::uint64_t>{job->sequence()});
   CHECK(manifest->find(job->sequence())->status == VersionStatus::Working);
   CHECK(load_hash(slot, context) == kept);
   // Once only.
-  CHECK(SaveGameManager::promote_checkpoint(*job, slot) ==
-        save::CheckpointResult::Failed);
+  CHECK(SaveGameManager::promote(*job) == save::CheckpointResult::Failed);
+}
+
+TEST_CASE("The autosave is written and checked on its worker",
+          "[save][versions][game][autosave]") {
+  REQUIRE_GAME_DATA();
+  TempDir dir;
+  GameContext context;
+  GameState state;
+  start_free_game(state, context);
+  state.options().autosave_count = 2;
+  const std::string kept = hash_of(state, context);
+  const std::uint32_t game_stream = engine::random::get_state();
+
+  REQUIRE(SaveGameManager::autosave_in_background(state, context, dir.path()));
+  settle_all(state);
+  CHECK(engine::random::get_state() == game_stream);
+
+  const fs::path first = dir.path() / "AUTOSAV1.plsave";
+  const auto manifest = SaveGameManager::versions(first.string());
+  REQUIRE(manifest);
+  CHECK(manifest->active == std::optional<std::uint64_t>{1});
+  CHECK(manifest->find(1)->status == VersionStatus::Working);
+  CHECK(manifest->find(1)->made_for == "autosave");
+  CHECK(load_hash(first, context) == kept);
+
+  // The next one goes to the next slot, and a save by hand to the same slot
+  // waits for a background one still running.
+  move_on(state);
+  REQUIRE(SaveGameManager::autosave_in_background(state, context, dir.path()));
+  const fs::path second = dir.path() / "AUTOSAV2.plsave";
+  REQUIRE(SaveGameManager::save_to_slot(state, context, second.string()));
+  CHECK(SaveGameManager::background_saves() == 0);
+  const auto both = SaveGameManager::versions(second.string());
+  REQUIRE(both);
+  CHECK(sequences(*both) == std::vector<std::uint64_t>{2, 1});
+  CHECK(both->find(1)->status == VersionStatus::Working);
+  CHECK(both->find(2)->status == VersionStatus::Working);
 }
 
 TEST_CASE("TimedCheckpoints keeps the game as it is played",
@@ -1109,6 +1191,9 @@ TEST_CASE("Checkpoint costs", "[.][bench][checkpoint]") {
   };
   constexpr int rounds = 5;
   double capture = 0;
+  double dump = 0;
+  double fingerprint = 0;
+  std::size_t json_bytes = 0;
   double plain = 0;
   double slot = 0;
   double load = 0;
@@ -1117,9 +1202,18 @@ TEST_CASE("Checkpoint costs", "[.][bench][checkpoint]") {
   double promote = 0;
   for (int i = 0; i < rounds; ++i) {
     move_on(state);
+    // The game thread's share, in parts: building the JSON, then what a
+    // fingerprint adds (the dump and the hash), which now runs on the worker.
     auto t = clock::now();
-    static_cast<void>(SaveGameManager::fingerprint(state, context));
+    const json captured = SaveGameManager::capture(state, context);
     capture += ms(clock::now() - t);
+    t = clock::now();
+    const std::string dumped = captured.dump();
+    dump += ms(clock::now() - t);
+    t = clock::now();
+    static_cast<void>(SaveGameManager::fingerprint(state, context));
+    fingerprint += ms(clock::now() - t);
+    json_bytes = dumped.size();
     t = clock::now();
     REQUIRE(SaveGameManager::save(state, context,
                                   (dir.path() / "plain.plsave").string()));
@@ -1145,12 +1239,13 @@ TEST_CASE("Checkpoint costs", "[.][bench][checkpoint]") {
     worker += ms(clock::now() - t);
     REQUIRE(job->ready());
     t = clock::now();
-    REQUIRE(SaveGameManager::promote_checkpoint(*job, timed) ==
-            save::CheckpointResult::Written);
+    REQUIRE(SaveGameManager::promote(*job) == save::CheckpointResult::Written);
     promote += ms(clock::now() - t);
   }
-  WARN("per checkpoint, ms: capture (state to JSON and fingerprint) "
-       << capture / rounds << "; plain save " << plain / rounds
+  WARN("per checkpoint, ms: capture (state to JSON, the game thread's only "
+       << "part now) " << capture / rounds << "; its dump " << dump / rounds
+       << " (" << json_bytes << " bytes); a whole fingerprint "
+       << fingerprint / rounds << "; plain save " << plain / rounds
        << "; verified slot save " << slot / rounds
        << "; so the load check about " << (slot - plain) / rounds
        << "; a load (two builds) " << load / rounds

@@ -112,8 +112,8 @@ struct RecoverySlot {
   std::string problem; // why a manifest that is there could not be read
 };
 
-// A timed checkpoint being written and checked, the build included, off the
-// game thread.
+// A save written and checked, the build included, off the game thread: a
+// timed checkpoint or an autosave. The game thread only captured the game.
 class CheckpointJob {
 public:
   CheckpointJob() = default;
@@ -127,9 +127,15 @@ public:
       thread_.join();
     }
   }
+  // The slot it writes.
+  [[nodiscard]] const std::filesystem::path& slot_file() const {
+    return slot_file_;
+  }
   // Once done: whether the new version passed every check and waits to be
-  // promoted, which version it is, and if it failed, why.
+  // promoted, whether there was nothing new to keep, which version it is,
+  // and if it failed, why.
   [[nodiscard]] bool ready() const { return shared_->ready; }
+  [[nodiscard]] bool unchanged() const { return shared_->unchanged; }
   [[nodiscard]] std::uint64_t sequence() const { return shared_->sequence; }
   [[nodiscard]] const std::string& error() const { return shared_->error; }
 
@@ -138,12 +144,14 @@ public:
   struct Shared {
     std::atomic<bool> done{false};
     bool ready = false;
+    bool unchanged = false;
     std::uint64_t sequence = 0;
     std::string error;
   };
 
 private:
   friend class SaveGameManager;
+  std::filesystem::path slot_file_;
   std::shared_ptr<Shared> shared_ = std::make_shared<Shared>();
   std::jthread thread_;
 };
@@ -170,8 +178,35 @@ public:
   static bool save_to_slot(const GameState& state, const GameContext& context,
                            const std::string& filename,
                            std::string* error = nullptr);
+  // The autosave, all on this thread: as save_to_slot, to the next
+  // AUTOSAVn slot.
   static bool autosave(const GameState& state, const GameContext& context,
                        std::string* error = nullptr);
+
+  // The autosave the game makes mid-day: the game is captured now, on this
+  // thread; the rest runs on a worker, and settle_background_saves promotes
+  // it on the game thread. Returns false, having started nothing, only if
+  // the game could not be captured.
+  // The slot is the next AUTOSAVn in folder, the saves folder if empty.
+  static bool autosave_in_background(const GameState& state,
+                                     const GameContext& context,
+                                     const std::filesystem::path& folder = {});
+
+  // On the game thread, every frame: promotes the background autosaves
+  // that are done, and tells the player of one that failed, as the autosave
+  // always has.
+  static void settle_background_saves(GameState& state);
+
+  // Waits for every background autosave and promotes those that passed, as
+  // the game closes. Nobody is told; the log has it.
+  static void finish_background_saves();
+
+  // How many background autosaves are running or not yet promoted.
+  static std::size_t background_saves();
+
+  // What a save takes on the game thread: the game as save JSON, captured at
+  // one moment. Everything else can run on a worker.
+  static json capture(const GameState& state, const GameContext& context);
 
   // Checks the whole save before the running game is touched. A save that
   // fails any check is rejected and the game carries on exactly as it was.
@@ -219,11 +254,13 @@ public:
                               std::uint64_t sequence,
                               std::string* error = nullptr);
 
-  // Starts a timed checkpoint. The game is captured now, on this thread;
-  // writing the version and every check, the build apart from the game
-  // included, run on a worker. Returns no job, with result set to NoGame or
-  // Unchanged, when there is nothing to keep; result is Written when a job
-  // started, and Failed if the game could not be captured.
+  // Starts a timed checkpoint. The game is captured now, on this thread.
+  // The worker fingerprints it, and if the newest checkpoint (working or
+  // waiting) holds the same game it stops there (the job's unchanged());
+  // otherwise it writes the version and runs every check, the build apart
+  // from the game included. Returns no job, with result set to NoGame, when
+  // there is no game; result is Written when a job started, and Failed if
+  // the game could not be captured.
   static std::unique_ptr<CheckpointJob>
   start_timed_checkpoint(const GameState& state, const GameContext& context,
                          TimedCheckpoint reason,
@@ -231,12 +268,10 @@ public:
                          const std::filesystem::path& slot_file = {});
 
   // On the game thread, once the job is done: makes its version a working,
-  // active one, in one small manifest write. The slot's file catches up on
-  // the next job's worker. Written when it did, Unchanged while the job
-  // runs, Failed if the version did not pass its checks.
-  static CheckpointResult
-  promote_checkpoint(const CheckpointJob& job,
-                     const std::filesystem::path& slot_file = {});
+  // active one, in one small manifest write; the worker already wrote the
+  // slot's file. Written when it did, Unchanged while the job runs or when
+  // there was nothing new, Failed if the version did not pass its checks.
+  static CheckpointResult promote(const CheckpointJob& job);
 
   // The Recovery Center's model: every slot in the folder (the saves folder
   // if empty), with its versions and their levels, by name.
@@ -305,6 +340,12 @@ private:
                const std::string& expected_fingerprint,
                const GameOptions& options, const GameContext& context);
 
+  // Starts the worker of a background save of this captured game.
+  static std::unique_ptr<CheckpointJob>
+  start_background(const std::filesystem::path& path, json document,
+                   std::string_view made_for, const GameOptions& options,
+                   bool coalesce);
+
   // One save to a slot; see save_to_slot.
   static bool save_version(const GameState& state, const GameContext& context,
                            const std::filesystem::path& path,
@@ -327,11 +368,13 @@ class TimedCheckpoints {
 public:
   explicit TimedCheckpoints(std::filesystem::path slot_file = {});
 
-  // playing: the game ran this frame, not paused or in a menu.
-  void frame(const GameState& state, const GameContext& context,
+  // playing: the game ran this frame, not paused or in a menu. Also settles
+  // the background autosaves (SaveGameManager::settle_background_saves).
+  void frame(GameState& state, const GameContext& context,
              std::chrono::milliseconds time, bool playing);
 
-  // Waits for a checkpoint still being written, as the game closes.
+  // Waits for a checkpoint or autosave still being written, as the game
+  // closes, and promotes it.
   void finish();
 
 private:

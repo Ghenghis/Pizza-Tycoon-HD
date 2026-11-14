@@ -1377,7 +1377,7 @@ struct NewVersion {
 };
 
 // The bytes of a captured game, and what its version records.
-NewVersion capture(json document, std::string_view made_for) {
+NewVersion prepare_version(json document, std::string_view made_for) {
   NewVersion version;
   version.bytes = encode_save(document);
   version.game_date = metadata_from_save_json(document).value("game_date", "");
@@ -1544,15 +1544,35 @@ void bring_slot_file_in_step(const SaveSlot& slot) {
   }
 }
 
-// The worker's half of a timed checkpoint: write the version and check it
-// every way, the build included, then leave it for the game thread to
-// promote. A version that fails a check stays a candidate with the reason.
-void write_timed_checkpoint(const fs::path& path, const NewVersion& version,
-                            const std::function<std::optional<std::string>(
-                                std::string_view, const std::string&)>& build,
-                            CheckpointJob::Shared& shared) {
+// The worker's half of a background save: fingerprint the captured game,
+// stop if the slot's newest version (working or waiting) already holds it
+// and coalesce is set, else write the version and check it every way, the
+// build included. A version that passed waits for the game thread to
+// promote it, with the slot's file already written; one that failed stays a
+// candidate with the reason.
+void write_background_version(const fs::path& path, const NewVersion& version,
+                              bool coalesce,
+                              const std::function<std::optional<std::string>(
+                                  std::string_view, const std::string&)>& build,
+                              CheckpointJob::Shared& shared) {
   const SaveSlot slot(path);
   bring_slot_file_in_step(slot);
+  if (coalesce) {
+    const SaveSlot::ManifestRead read = slot.read_manifest();
+    if (read.manifest) {
+      for (const SaveVersion& v : read.manifest->versions) {
+        if (v.status == VersionStatus::Working ||
+            v.reason == awaiting_promotion) {
+          shared.unchanged = v.fingerprint == version.expected;
+          break;
+        }
+      }
+    }
+    if (shared.unchanged) {
+      return;
+    }
+  }
+
   Staged staged;
   if (!stage_version(slot, version, staged)) {
     shared.error = staged.newer
@@ -1588,7 +1608,38 @@ void write_timed_checkpoint(const fs::path& path, const NewVersion& version,
   shared.ready = level == VersionLevel::LoadVerified;
   if (!shared.ready) {
     shared.error = reason;
+    return;
   }
+  // The slot's file now, so promoting stays one small write. Until then,
+  // loading still takes the active version: this one is listed, and only
+  // as a candidate.
+  if (const util::AtomicWriteResult refreshed =
+          util::write_file_atomically(slot.file(), version.bytes);
+      !refreshed) {
+    Logger::warn("{} still holds an earlier version ({})", display(slot.file()),
+                 refreshed.error);
+  }
+}
+
+// The background autosaves still running or not yet promoted. The game
+// thread alone touches the list.
+std::vector<std::unique_ptr<CheckpointJob>>& background_autosaves() {
+  static std::vector<std::unique_ptr<CheckpointJob>> jobs;
+  return jobs;
+}
+
+// Finishes the background autosaves to path, if any, before the game thread
+// touches that slot itself.
+void wait_for_background(const fs::path& path) {
+  auto& jobs = background_autosaves();
+  std::erase_if(jobs, [&path](const std::unique_ptr<CheckpointJob>& job) {
+    if (job->slot_file() != path) {
+      return false;
+    }
+    job->wait();
+    static_cast<void>(SaveGameManager::promote(*job));
+    return true;
+  });
 }
 
 } // namespace
@@ -1638,8 +1689,10 @@ std::string autosave_slot_filename(int slot) {
   return std::string(autosave_prefix) + std::to_string(slot) + ".plsave";
 }
 
-std::string next_autosave_filename(int slot_count) {
-  fs::path saves_dir = platform_paths::saves_dir();
+std::string next_autosave_filename(int slot_count,
+                                   const fs::path& folder = {}) {
+  const fs::path saves_dir =
+      folder.empty() ? fs::path(platform_paths::saves_dir()) : folder;
 
   // Fill slots in order before overwriting any
   for (int i = 1; i <= slot_count; ++i) {
@@ -1769,6 +1822,7 @@ bool SaveGameManager::load_slot(GameState& state, GameContext& context,
                                 const std::function<void()>& before_replacing) {
   Logger::info("Loading game from {}", filename);
   const fs::path path = get_full_path(filename);
+  wait_for_background(path);
   const std::vector<LoadCopy> copies = plan_load(path);
 
   enum class Built { Loaded, Rejected, Lost };
@@ -1927,9 +1981,10 @@ bool SaveGameManager::save_version(const GameState& state,
                                    std::string_view made_for,
                                    std::string* error) {
   Logger::info("Saving game to {}, keeping its versions", display(path));
+  wait_for_background(path);
   NewVersion version;
   try {
-    version = capture(state_to_json(state, context), made_for);
+    version = prepare_version(state_to_json(state, context), made_for);
   }
   catch (const std::exception& e) {
     Logger::warn("Save failed: {}: {}", display(path), e.what());
@@ -2038,6 +2093,7 @@ bool SaveGameManager::restore_version(const GameState& state,
                                       std::uint64_t sequence,
                                       std::string* error) {
   const fs::path path = get_full_path(filename);
+  wait_for_background(path);
   const SaveSlot slot(path);
   SaveSlot::ManifestRead read = slot.read_manifest();
   if (!read.manifest) {
@@ -2116,67 +2172,29 @@ fs::path timed_slot(const fs::path& slot_file) {
 }
 } // namespace
 
-std::unique_ptr<CheckpointJob> SaveGameManager::start_timed_checkpoint(
-    const GameState& state, const GameContext& context, TimedCheckpoint reason,
-    CheckpointResult* result, const fs::path& slot_file) {
-  const auto report = [result](CheckpointResult r) {
-    if (result != nullptr) {
-      *result = r;
-    }
-  };
-  if (!game_in_progress(state)) {
-    report(CheckpointResult::NoGame);
-    return nullptr;
-  }
-  const fs::path path = timed_slot(slot_file);
-  const std::string_view made_for =
-      reason == TimedCheckpoint::Interval ? "checkpoint after five minutes"
-      : reason == TimedCheckpoint::NewDay ? "checkpoint at a new day"
-                                          : "checkpoint at a new week";
+json SaveGameManager::capture(const GameState& state,
+                              const GameContext& context) {
+  return state_to_json(state, context);
+}
 
-  // Captured here, at a consistent moment of the game; nothing on the
-  // worker looks at the game.
-  json document;
-  try {
-    document = state_to_json(state, context);
-  }
-  catch (const std::exception& e) {
-    Logger::warn("Checkpoint failed: {}", e.what());
-    report(CheckpointResult::Failed);
-    return nullptr;
-  }
-  // Its fingerprint, without copying it: the save time goes out and back.
-  json saved_at = std::move(document["saved_at"]);
-  document.erase("saved_at");
-  const std::string now = fingerprint_hash(document.dump());
-  document["saved_at"] = std::move(saved_at);
-  if (const auto read = SaveSlot(path).read_manifest(); read.manifest) {
-    // Unchanged since the newest checkpoint, verified or still waiting.
-    for (const SaveVersion& v : read.manifest->versions) {
-      const bool usable =
-          v.status == VersionStatus::Working || v.reason == awaiting_promotion;
-      if (usable) {
-        if (v.fingerprint == now) {
-          report(CheckpointResult::Unchanged);
-          return nullptr;
-        }
-        break;
-      }
-    }
-  }
-
+std::unique_ptr<CheckpointJob>
+SaveGameManager::start_background(const fs::path& path, json document,
+                                  std::string_view made_for,
+                                  const GameOptions& options, bool coalesce) {
   auto job = std::make_unique<CheckpointJob>();
+  job->slot_file_ = path;
   job->thread_ = std::jthread(
       [shared = job->shared_, path, document = std::move(document),
-       made_for = std::string(made_for), options = state.options()]() mutable {
+       made_for = std::string(made_for), options, coalesce]() mutable {
         // The build has this thread's own random streams and reads the
         // factories' tables without locks; it gets a context of its own, as
         // nothing in a build may reach the game's.
         const GameContext own_context;
         try {
-          const NewVersion version = capture(std::move(document), made_for);
-          write_timed_checkpoint(
-              path, version,
+          const NewVersion version =
+              prepare_version(std::move(document), made_for);
+          write_background_version(
+              path, version, coalesce,
               [&](std::string_view bytes, const std::string& name) {
                 return verify_build(bytes, name, version.expected, options,
                                     own_context);
@@ -2192,31 +2210,61 @@ std::unique_ptr<CheckpointJob> SaveGameManager::start_timed_checkpoint(
           shared->error = "it was cut short";
         }
         if (!shared->error.empty()) {
-          Logger::warn("Timed checkpoint failed: {}", shared->error);
+          Logger::warn("Background save of {} failed: {}", display(path),
+                       shared->error);
         }
         shared->done.store(true);
       });
-  report(CheckpointResult::Written);
   return job;
 }
 
-CheckpointResult
-SaveGameManager::promote_checkpoint(const CheckpointJob& job,
-                                    const fs::path& slot_file) {
-  if (!job.done()) {
+std::unique_ptr<CheckpointJob> SaveGameManager::start_timed_checkpoint(
+    const GameState& state, const GameContext& context, TimedCheckpoint reason,
+    CheckpointResult* result, const fs::path& slot_file) {
+  const auto report = [result](CheckpointResult r) {
+    if (result != nullptr) {
+      *result = r;
+    }
+  };
+  if (!game_in_progress(state)) {
+    report(CheckpointResult::NoGame);
+    return nullptr;
+  }
+  const std::string_view made_for =
+      reason == TimedCheckpoint::Interval ? "checkpoint after five minutes"
+      : reason == TimedCheckpoint::NewDay ? "checkpoint at a new day"
+                                          : "checkpoint at a new week";
+  // Captured here, at a consistent moment of the game, and nothing else:
+  // fingerprinting, comparing and writing run on the worker.
+  json document;
+  try {
+    document = capture(state, context);
+  }
+  catch (const std::exception& e) {
+    Logger::warn("Checkpoint failed: {}", e.what());
+    report(CheckpointResult::Failed);
+    return nullptr;
+  }
+  report(CheckpointResult::Written);
+  return start_background(timed_slot(slot_file), std::move(document), made_for,
+                          state.options(), true);
+}
+
+CheckpointResult SaveGameManager::promote(const CheckpointJob& job) {
+  if (!job.done() || job.unchanged()) {
     return CheckpointResult::Unchanged;
   }
   if (!job.ready()) {
     return CheckpointResult::Failed;
   }
-  const SaveSlot slot(timed_slot(slot_file));
+  const SaveSlot slot(job.slot_file());
   SaveSlot::ManifestRead read = slot.read_manifest();
   SaveVersion* version =
       read.manifest ? read.manifest->find(job.sequence()) : nullptr;
   if (version == nullptr || version->level != VersionLevel::LoadVerified ||
       version->reason != awaiting_promotion) {
-    Logger::warn("Timed checkpoint {} is no longer waiting to be promoted",
-                 job.sequence());
+    Logger::warn("Version {} of {} is no longer waiting to be promoted",
+                 job.sequence(), display(job.slot_file()));
     return CheckpointResult::Failed;
   }
   SlotManifest& manifest = *read.manifest;
@@ -2226,11 +2274,68 @@ SaveGameManager::promote_checkpoint(const CheckpointJob& job,
   apply_retention(manifest);
   if (const util::AtomicWriteResult committed = slot.write_manifest(manifest);
       !committed) {
-    Logger::warn("Checkpoint failed: {}", committed.error);
+    Logger::warn("Promotion failed: {}", committed.error);
     return CheckpointResult::Failed;
   }
-  Logger::info("Timed checkpoint {} is a working version", job.sequence());
+  Logger::info("Version {} of {} is a working version", job.sequence(),
+               display(job.slot_file()));
   return CheckpointResult::Written;
+}
+
+bool SaveGameManager::autosave_in_background(const GameState& state,
+                                             const GameContext& context,
+                                             const fs::path& folder) {
+  const int slot_count = std::clamp(state.options().autosave_count,
+                                    GameOptions::AUTOSAVE_COUNT_MIN,
+                                    GameOptions::AUTOSAVE_COUNT_MAX);
+  const std::string name = next_autosave_filename(slot_count, folder);
+  const fs::path path =
+      folder.empty() ? fs::path(get_full_path(name)) : folder / name;
+  wait_for_background(path);
+  json document;
+  try {
+    document = capture(state, context);
+  }
+  catch (const std::exception& e) {
+    Logger::warn("Autosave failed: {}", e.what());
+    return false;
+  }
+  Logger::info("Autosaving to {} in the background", display(path));
+  background_autosaves().push_back(start_background(
+      path, std::move(document), "autosave", state.options(), false));
+  return true;
+}
+
+void SaveGameManager::settle_background_saves(GameState& state) {
+  std::erase_if(
+      background_autosaves(),
+      [&state](const std::unique_ptr<CheckpointJob>& job) {
+        if (!job->done()) {
+          return false;
+        }
+        job->wait();
+        if (promote(*job) == CheckpointResult::Failed) {
+          // As the autosave always has: the old one is kept, and
+          // the player can save by hand.
+          state.status().post(StatusMsg{
+              .payload = std::string("Autosave failed! Save by hand."),
+              .severity = StatusSeverity::Warning,
+          });
+        }
+        return true;
+      });
+}
+
+std::size_t SaveGameManager::background_saves() {
+  return background_autosaves().size();
+}
+
+void SaveGameManager::finish_background_saves() {
+  for (const auto& job : background_autosaves()) {
+    job->wait();
+    static_cast<void>(promote(*job));
+  }
+  background_autosaves().clear();
 }
 
 std::vector<RecoverySlot>
@@ -2283,6 +2388,8 @@ bool SaveGameManager::restore_as_branch(const GameState& state,
                                         std::string* error) {
   const SaveSlot from(get_full_path(filename));
   const SaveSlot to(get_full_path(new_filename));
+  wait_for_background(from.file());
+  wait_for_background(to.file());
   std::error_code ec;
   if (fs::exists(to.file(), ec) || fs::exists(to.folder(), ec) ||
       to.file() == from.file()) {
@@ -2370,11 +2477,12 @@ bool SaveGameManager::undo_restore(const GameState& state,
 TimedCheckpoints::TimedCheckpoints(fs::path slot_file)
     : slot_file_(std::move(slot_file)) {}
 
-void TimedCheckpoints::frame(const GameState& state, const GameContext& context,
+void TimedCheckpoints::frame(GameState& state, const GameContext& context,
                              std::chrono::milliseconds time, bool playing) {
+  SaveGameManager::settle_background_saves(state);
   if (job_ && job_->done()) {
     job_->wait();
-    static_cast<void>(SaveGameManager::promote_checkpoint(*job_, slot_file_));
+    static_cast<void>(SaveGameManager::promote(*job_));
     job_.reset();
   }
   if (playing) {
@@ -2393,14 +2501,16 @@ void TimedCheckpoints::frame(const GameState& state, const GameContext& context,
 void TimedCheckpoints::finish() {
   if (job_) {
     job_->wait();
-    static_cast<void>(SaveGameManager::promote_checkpoint(*job_, slot_file_));
+    static_cast<void>(SaveGameManager::promote(*job_));
     job_.reset();
   }
+  SaveGameManager::finish_background_saves();
 }
 
 bool SaveGameManager::delete_save(const std::string& filename,
                                   std::string* error) {
   const fs::path path = get_full_path(filename);
+  wait_for_background(path);
   std::error_code file_ec;
   fs::remove(path, file_ec);
   std::error_code folder_ec;
