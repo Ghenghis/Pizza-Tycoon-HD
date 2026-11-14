@@ -1092,6 +1092,15 @@ void GameState::finalize_initialization(GameContext& context) {
   }
 
   init::Config cfg = *initializer_;
+
+  // The roster is fixed here for the whole game. The city arrays still hold
+  // one slot per original city, so only the Classic roster can start until
+  // they follow the roster (location-contract.md section 16, step 2).
+  if (!cfg.roster.is_classic()) {
+    fatal("A new game can only start with the Classic roster for now");
+  }
+  roster_ = cfg.roster;
+
   rules_ = options_.rules;
   starting_rules_ = options_.rules;
   rules_changed_ = false;

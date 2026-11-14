@@ -8,6 +8,7 @@
 
 #include "core/GameTypes.h"
 #include "core/common/Ids.h"
+#include "core/content/Roster.h"
 #include "core/mission/MissionTarget.h"
 
 #include <optional>
@@ -38,6 +39,10 @@ struct Config {
   DifficultyLevel difficulty = DifficultyLevel::PUSHOVER;
   std::string chosen_character;
   core::CityId city_id{0};
+  // The places the game is played in, fixed for the whole game when it
+  // starts; city_id indexes it. The Classic roster is the only one a game can
+  // start with until the city arrays follow the roster.
+  core::content::Roster roster = core::content::Roster::classic();
   std::vector<PlayerSlot> players;
   // Target CV; engaged only for GameMode::MISSION_MODE, nullopt otherwise.
   std::optional<core::mission::MissionTarget> mission;

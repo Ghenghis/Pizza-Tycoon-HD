@@ -364,6 +364,9 @@ set(PLEGACY_HEADERS
     src/core/city/PizzaCharts.h
     src/core/city/Property.h
     src/core/common/Ids.h
+    src/core/content/ClassicCities.h
+    src/core/content/ContentKey.h
+    src/core/content/Roster.h
     src/core/conversations/ArmsDealerConversation.h
     src/core/conversations/ArmsDealerLine.h
     src/core/conversations/BankConversation.h

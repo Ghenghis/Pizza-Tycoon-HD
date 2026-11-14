@@ -9,6 +9,7 @@
 #include "core/character/Player.h"
 #include "core/city/City.h"
 #include "core/city/CityViewMapState.h"
+#include "core/content/Roster.h"
 #include "core/economy/WeaponMarket.h"
 #include "core/events/CareerLog.h"
 #include "core/finance/Ledger.h"
@@ -220,6 +221,10 @@ public:
   const core::tutorial::Tutorial& tutorial() const { return tutorial_; }
 
   // City  management
+  // The places this game is played in: CityId{i} is entry i. Set once when a
+  // new game starts and kept until it ends; Classic in every other case,
+  // including a loaded save (location-contract.md section 2.3).
+  [[nodiscard]] const core::content::Roster& roster() const { return roster_; }
   core::CityId active_city_id() const;
   ViewPoint city_position() const;
   std::optional<int> last_clicked_property_index() const;
@@ -542,6 +547,8 @@ private:
   std::optional<core::DistrictIndex> active_district_index_;
   // Per-player city view state, persisted across screen transitions.
   std::array<CityViewMapState, NUMBER_OF_PLAYERS> city_view_view_state_;
+  // Only finalize_initialization and reset assign it.
+  core::content::Roster roster_ = core::content::Roster::classic();
   std::array<std::unique_ptr<City>, NUMBER_OF_CITIES> cities_;
   CityInitFlags city_initialised_{};
   City& city_or_create(core::CityId city_id);
