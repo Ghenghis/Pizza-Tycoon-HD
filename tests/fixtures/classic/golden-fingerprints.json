@@ -41,7 +41,16 @@
         "time_blocks": 54
       }
     },
-    "legacy-v1/loaded": null,
+    "legacy-v1/loaded": {
+      "linux-gcc-x64": {
+        "cities_built": 1,
+        "date": "1995-03-01",
+        "fingerprint": "84c8e5a930faab92",
+        "restaurants": 7,
+        "rng_state": 1076867286,
+        "time_blocks": 54
+      }
+    },
     "quick-start-madrid/day-4": {
       "linux-gcc-x64": {
         "cities_built": 1,
