@@ -246,6 +246,7 @@ public:
     if (shape_.failed()) {
       return nullptr;
     }
+    collect_tags(doc, *def);
     def->sha256 = definition_sha256(doc);
     def->canonical_document = canonical_json(doc);
     return def;
@@ -290,6 +291,22 @@ private:
     if (const json* list = JsonShape::member(object, key)) {
       shape_.string_set(*list, at(pointer, key), max_items, min_length,
                         max_length, latin1, pattern);
+    }
+  }
+
+  // The shape is known good here.
+  static void collect_tags(const json& doc, LocationDefinition& def) {
+    const auto add_all = [&](const json& list) {
+      for (const auto& item : list) {
+        def.tags.push_back(item.get<std::string>());
+      }
+    };
+    if (const auto& display = doc.at("display"); display.contains("tags")) {
+      add_all(display.at("tags"));
+    }
+    for (const char* facet : {"countries", "states", "communities", "biomes",
+                              "settings", "seasons"}) {
+      add_all(doc.at("facets").at(facet));
     }
   }
 

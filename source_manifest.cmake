@@ -28,6 +28,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/content/ScenarioSave.cpp
     src/core/content/Sha256.cpp
     src/core/content/ShippedScenarios.cpp
+    src/core/content/WorldMap.cpp
     src/core/conversations/ArmsDealerConversation.cpp
     src/core/conversations/BankConversation.cpp
     src/core/conversations/InsuranceConversation.cpp
@@ -177,6 +178,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/screens/StatusDisplay.cpp
     src/views/screens/Terminal.cpp
     src/views/screens/WinSequenceView.cpp
+    src/views/screens/WorldMapView.cpp
     src/views/screens/city_view/CityView.cpp
     src/views/screens/depot/DepotExportScreen.cpp
     src/views/screens/depot/DepotMain.cpp
@@ -404,12 +406,14 @@ set(PLEGACY_HEADERS
     src/core/content/LocationDefinition.h
     src/core/content/LocationReader.h
     src/core/content/LocationValidator.h
+    src/core/content/Regions.h
     src/core/content/Roster.h
     src/core/content/Scenario.h
     src/core/content/ScenarioGoals.h
     src/core/content/ScenarioSave.h
     src/core/content/Sha256.h
     src/core/content/ShippedScenarios.h
+    src/core/content/WorldMap.h
     src/core/conversations/ArmsDealerConversation.h
     src/core/conversations/ArmsDealerLine.h
     src/core/conversations/BankConversation.h
@@ -461,6 +465,7 @@ set(PLEGACY_HEADERS
     src/core/factories/CityFactory.h
     src/core/factories/CommercialFactory.h
     src/core/factories/DataFile.h
+    src/core/factories/FillOnce.h
     src/core/factories/FloorPatternFactory.h
     src/core/factories/FurnitureFactory.h
     src/core/factories/IngredientFactory.h
@@ -773,6 +778,7 @@ set(PLEGACY_HEADERS
     src/views/screens/StatusDisplay.h
     src/views/screens/Terminal.h
     src/views/screens/WinSequenceView.h
+    src/views/screens/WorldMapView.h
     src/views/screens/city_view/CityView.h
     src/views/screens/city_view/CityViewTab.h
     src/views/screens/city_view/ZoomConfig.h

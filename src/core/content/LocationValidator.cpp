@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "core/content/LocationReader.h"
+#include "core/content/Regions.h"
 #include "core/food/IngredientType.h"
 
 namespace core::content {
@@ -187,27 +188,6 @@ private:
   std::map<std::string, int> counts_;
   std::map<std::string, Severity> severities_;
 };
-
-// Region crop bounds in micro-degrees: west, south, east, north
-// (location-contract.md section 10.1).
-struct RegionBounds {
-  std::string_view id;
-  std::int64_t west;
-  std::int64_t south;
-  std::int64_t east;
-  std::int64_t north;
-};
-
-constexpr std::array<RegionBounds, 8> region_bounds = {{
-    {"north-america", -170000000, 10000000, -50000000, 83000000},
-    {"latin-america-caribbean", -120000000, -60000000, -30000000, 33000000},
-    {"europe", -25000000, 32000000, 50000000, 74000000},
-    {"north-africa-western-asia", -20000000, 5000000, 65000000, 47000000},
-    {"sub-saharan-africa", -20000000, -36000000, 55000000, 23000000},
-    {"central-south-asia", 42000000, -3000000, 97000000, 58000000},
-    {"east-southeast-asia", 92000000, -14000000, 155000000, 60000000},
-    {"oceania-pacific", 108000000, -52000000, 180000000, 8000000},
-}};
 
 constexpr std::array<std::string_view, named_building_types>
     building_type_names = {"church", "bank", "cinema",           "school",
@@ -759,13 +739,12 @@ private:
     if (!def_.geo) {
       return;
     }
-    for (const auto& r : region_bounds) {
+    for (const auto& r : regions) {
       if (r.id != def_.region) {
         continue;
       }
       const auto& g = *def_.geo;
-      if (g.lon_e6 < r.west || g.lon_e6 > r.east || g.lat_e6 < r.south ||
-          g.lat_e6 > r.north) {
+      if (!region_contains(r, g.lon_e6, g.lat_e6)) {
         report_.warning("WORLD-1", "/world/geo",
                         "outside the " + std::string(r.id) +
                             " overview; reachable from a neighbour only");

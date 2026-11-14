@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -118,6 +119,10 @@ struct Scenario {
   std::vector<ContentKey> win_locations;
   int win_percent{0};
   bool travel_disabled{true};
+  // travel geo_manhattan: thousandths of a dollar per degree, and the flat
+  // fare of a bonus route; unset means the defaults of WorldMap.h.
+  std::optional<std::int64_t> travel_dollars_per_degree_milli;
+  std::optional<std::int64_t> bonus_route_cost_dollars;
   ScenarioRuleOverrides game_rules;
 
   std::vector<Objective> goal;

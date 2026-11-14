@@ -53,6 +53,7 @@
 #include "views/screens/StatsRestaurants.h"
 #include "views/screens/Terminal.h"
 #include "views/screens/WinSequenceView.h"
+#include "views/screens/WorldMapView.h"
 #include "views/screens/city_view/CityView.h"
 #include "views/screens/depot/DepotExportScreen.h"
 #include "views/screens/depot/DepotMain.h"
@@ -323,7 +324,15 @@ ViewFactory::Result ViewFactory::create(GameContext& context, GameState& gs) {
                                                     mr.district_index);
           },
           [&](const EuroMapState& em) {
-            view = std::make_unique<EuroMap>(context, gs, em.mode, em.category);
+            // A game outside the original ten travels on the Expanded world
+            // map; Classic games, game set-up and depot exports keep EuroMap.
+            if (em.mode == MapMode::TRAVEL && !gs.roster().is_classic()) {
+              view = std::make_unique<WorldMapView>(context, gs);
+            }
+            else {
+              view =
+                  std::make_unique<EuroMap>(context, gs, em.mode, em.category);
+            }
           },
           [&](const RestaurantViewState& mm) {
             view = std::make_unique<RestaurantView>(context, gs, mm);

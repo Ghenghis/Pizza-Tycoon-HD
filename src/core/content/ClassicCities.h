@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cassert>
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -82,6 +83,31 @@ constexpr bool classic_table_is_consistent() {
 
 static_assert(detail::classic_table_is_consistent(),
               "classic_cities must follow core::city_names, in id order");
+
+// Where the original ten are on the globe, for the Expanded world map when a
+// roster mixes them with new locations: city-centre coordinates in
+// micro-degrees, and the region each belongs to (location-contract.md
+// section 2.2). To be replaced by the values of the pinned gazetteer
+// (section 19, decision 1) when it is added; they agree to well under the
+// precision travel costs use.
+struct ClassicPlace {
+  std::string_view region;
+  std::int64_t lon_e6;
+  std::int64_t lat_e6;
+};
+
+inline constexpr std::array<ClassicPlace, NUMBER_OF_CITIES> classic_places = {{
+    {"europe", 2352222, 48856613},          // Paris
+    {"europe", 13404954, 52520008},         // Berlin
+    {"north-america", -76612190, 39290385}, // Baltimore
+    {"europe", 16373819, 48208174},         // Vienna
+    {"north-america", -87629798, 41878114}, // Chicago
+    {"north-america", -74005941, 40712784}, // New York
+    {"europe", -3703790, 40416775},         // Madrid
+    {"europe", 12496366, 41902783},         // Rome
+    {"europe", 18068581, 59329323},         // Stockholm
+    {"europe", -127758, 51507351},          // London
+}};
 
 // The key of an original city. id must be 0..NUMBER_OF_CITIES-1.
 [[nodiscard]] inline ContentKey classic_key(CityId id) {

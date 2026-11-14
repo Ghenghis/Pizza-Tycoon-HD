@@ -339,8 +339,10 @@ private:
                                         {"disabled", "geo_manhattan"})) {
         out.travel_disabled = *model == 0;
       }
-      shape_.integer_at(*travel, tp, "dollars_per_unit_milli", 0, 100000);
-      shape_.integer_at(*travel, tp, "bonus_route_cost_dollars", 0, 1000000);
+      out.travel_dollars_per_degree_milli =
+          shape_.integer_at(*travel, tp, "dollars_per_unit_milli", 0, 100000);
+      out.bonus_route_cost_dollars = shape_.integer_at(
+          *travel, tp, "bonus_route_cost_dollars", 0, 1000000);
     }
     if (const json* g = JsonShape::member(v, "game_rules")) {
       const std::string gp = at(p, "game_rules");

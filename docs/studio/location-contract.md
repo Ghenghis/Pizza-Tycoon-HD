@@ -646,6 +646,27 @@ order); selecting a cluster zooms or opens the list. The full list is always ava
 - Search is offline over the index: display name, aliases, tags, facets. Filters: region or
   bonus route, source, admission state, playable-now, facets. Results are deterministic.
 
+### 10.4a Travel on the Expanded world map (step 9)
+
+A game whose roster is not the Classic ten travels on the Expanded world map
+(`src/views/screens/WorldMapView.cpp`, logic in `src/core/content/WorldMap.cpp`); EuroMap stays
+for Classic games, game set-up and depot exports. Regions are the placement's (a bonus route
+has its own view); the original ten use the Classic adapter's region and city-centre point
+(`ClassicCities.h`, to be replaced by the pinned gazetteer). Fares are integer arithmetic on
+micro-degrees and need no RNG:
+
+```
+degrees_e6 = min(|dlon|, 360e6 - |dlon|) + |dlat|
+base       = degrees_e6 * dollars_per_unit_milli div 1e9         (default 4,000 per degree)
+base       = bonus_route_cost_dollars when either place has no geo (default 600)
+fare       = base * (difficulty + 1)                              (as EuroMap.cpp)
+```
+
+The default rate matches the original map within a dollar (Paris to Berlin: 59 map units
+there, 58 here). `scenario.rules.travel` sets both rates. With travel `disabled` the map closes
+as it opens and offers no travel. Travel is one explicit action with a confirmation that names
+the fare; browsing, paging and previous/next only change the view.
+
 ### 10.5 Facets
 
 `facets` (definition) and catalog entries carry many-to-many tags: `countries` (ISO 3166-1

@@ -175,6 +175,10 @@ struct LocationDefinition {
   std::string region;
   std::string bonus_route;
   std::optional<GeoPoint> geo;
+  // Discovery tags: display.tags and every facet value (countries, states,
+  // communities, biomes, settings, seasons). Never identity, never a
+  // simulation input (location-contract.md section 10.5).
+  std::vector<std::string> tags;
 
   // Tile codes, index y * 160 + x.
   std::vector<std::uint8_t> tiles;
