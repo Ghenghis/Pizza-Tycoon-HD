@@ -1,10 +1,5 @@
 [
  {
-  "file": "bob/kuebobs/0000.png",
-  "description": "restaurant kitchen grill with glowing coals",
-  "seed": 27079
- },
- {
   "file": "bob/kuebobs/0001.png",
   "description": "brick oven with a glowing fire",
   "seed": 57307
@@ -58,26 +53,6 @@
   "file": "bob/kuebobs/0012.png",
   "description": "small red high-tech toaster oven with coloured buttons",
   "seed": 42724
- },
- {
-  "file": "bob/moebel/0000.png",
-  "description": "dining chair, 'Traditio Romano' style restaurant seating",
-  "seed": 31728
- },
- {
-  "file": "bob/moebel/0001.png",
-  "description": "dining chair, 'Traditio Romano' style restaurant seating",
-  "seed": 31728
- },
- {
-  "file": "bob/moebel/0002.png",
-  "description": "dining chair, 'Traditio Romano' style restaurant seating",
-  "seed": 31728
- },
- {
-  "file": "bob/moebel/0003.png",
-  "description": "dining chair, 'Traditio Romano' style restaurant seating",
-  "seed": 31728
  },
  {
   "file": "bob/moebel/0004.png",
@@ -350,11 +325,6 @@
   "seed": 97131
  },
  {
-  "file": "bob/moebel/0061.png",
-  "description": "lit candle in a small holder",
-  "seed": 13964
- },
- {
   "file": "bob/moebel/0062.png",
   "description": "restaurant table, 'Cappuccino' style",
   "seed": 99012
@@ -398,21 +368,6 @@
   "file": "bob/moebel/0070.png",
   "description": "round marble restaurant table, 'Marble Oval' style",
   "seed": 62911
- },
- {
-  "file": "bob/moebel/0071.png",
-  "description": "restaurant table, 'Royal' style",
-  "seed": 68937
- },
- {
-  "file": "bob/moebel/0072.png",
-  "description": "round restaurant table, 'Oval setting' style",
-  "seed": 81040
- },
- {
-  "file": "bob/moebel/0073.png",
-  "description": "round restaurant table, 'Oval setting' style",
-  "seed": 81040
  },
  {
   "file": "bob/moebel/0074.png",
@@ -590,26 +545,6 @@
   "seed": 67809
  },
  {
-  "file": "bob/moebel/0109.png",
-  "description": "white dining chair, 'Saloon White' style restaurant seating",
-  "seed": 33252
- },
- {
-  "file": "bob/moebel/0110.png",
-  "description": "white dining chair, 'Saloon White' style restaurant seating",
-  "seed": 33252
- },
- {
-  "file": "bob/moebel/0111.png",
-  "description": "white dining chair, 'Saloon White' style restaurant seating",
-  "seed": 33252
- },
- {
-  "file": "bob/moebel/0112.png",
-  "description": "white dining chair, 'Saloon White' style restaurant seating",
-  "seed": 33252
- },
- {
   "file": "bob/moebel/0113.png",
   "description": "dining chair, 'Hardcore' style restaurant seating",
   "seed": 96948
@@ -628,26 +563,6 @@
   "file": "bob/moebel/0116.png",
   "description": "dining chair, 'Hardcore' style restaurant seating",
   "seed": 96948
- },
- {
-  "file": "bob/moebel/0117.png",
-  "description": "white dining chair, 'Kitchen White' style restaurant seating",
-  "seed": 37953
- },
- {
-  "file": "bob/moebel/0118.png",
-  "description": "white dining chair, 'Kitchen White' style restaurant seating",
-  "seed": 37953
- },
- {
-  "file": "bob/moebel/0119.png",
-  "description": "white dining chair, 'Kitchen White' style restaurant seating",
-  "seed": 37953
- },
- {
-  "file": "bob/moebel/0120.png",
-  "description": "white dining chair, 'Kitchen White' style restaurant seating",
-  "seed": 37953
  },
  {
   "file": "bob/moebel/0121.png",
@@ -835,16 +750,6 @@
   "seed": 53135
  },
  {
-  "file": "bob/moebel/0165.png",
-  "description": "dark wooden restaurant table, 'Oak dark' style",
-  "seed": 11459
- },
- {
-  "file": "bob/moebel/0166.png",
-  "description": "dark wooden restaurant table, 'Oak dark' style",
-  "seed": 11459
- },
- {
   "file": "bob/moebel/0167.png",
   "description": "light wooden restaurant table, 'Oak light' style",
   "seed": 19070
@@ -868,26 +773,6 @@
   "file": "bob/moebel/0171.png",
   "description": "yellow restaurant table, 'Bistro Yellow' style",
   "seed": 31961
- },
- {
-  "file": "bob/moebel/0176.png",
-  "description": "armchair, 'Office Chair' style restaurant seating",
-  "seed": 4077
- },
- {
-  "file": "bob/moebel/0177.png",
-  "description": "armchair, 'Office Chair' style restaurant seating",
-  "seed": 4077
- },
- {
-  "file": "bob/moebel/0178.png",
-  "description": "armchair, 'Office Chair' style restaurant seating",
-  "seed": 4077
- },
- {
-  "file": "bob/moebel/0179.png",
-  "description": "armchair, 'Office Chair' style restaurant seating",
-  "seed": 4077
  },
  {
   "file": "bob/moebel/0180.png",
@@ -1155,26 +1040,6 @@
   "seed": 47075
  },
  {
-  "file": "bob/moebel/0233.png",
-  "description": "white dining chair, 'Pop White' style restaurant seating",
-  "seed": 12431
- },
- {
-  "file": "bob/moebel/0234.png",
-  "description": "white dining chair, 'Pop White' style restaurant seating",
-  "seed": 12431
- },
- {
-  "file": "bob/moebel/0235.png",
-  "description": "white dining chair, 'Pop White' style restaurant seating",
-  "seed": 12431
- },
- {
-  "file": "bob/moebel/0236.png",
-  "description": "white dining chair, 'Pop White' style restaurant seating",
-  "seed": 12431
- },
- {
   "file": "bob/moebel/0237.png",
   "description": "restaurant table, 'Modern Art 1' style",
   "seed": 59671
@@ -1210,26 +1075,6 @@
   "seed": 42093
  },
  {
-  "file": "bob/moebel/0246.png",
-  "description": "red armchair, 'Velvet Red' style restaurant seating",
-  "seed": 53010
- },
- {
-  "file": "bob/moebel/0247.png",
-  "description": "red armchair, 'Velvet Red' style restaurant seating",
-  "seed": 53010
- },
- {
-  "file": "bob/moebel/0248.png",
-  "description": "red armchair, 'Velvet Red' style restaurant seating",
-  "seed": 53010
- },
- {
-  "file": "bob/moebel/0249.png",
-  "description": "red armchair, 'Velvet Red' style restaurant seating",
-  "seed": 53010
- },
- {
   "file": "bob/moebel/0250.png",
   "description": "yellow armchair, 'Velvet Yellow' style restaurant seating",
   "seed": 48737
@@ -1250,46 +1095,6 @@
   "seed": 48737
  },
  {
-  "file": "bob/moebel/0254.png",
-  "description": "blue armchair, 'Velvet Blue' style restaurant seating",
-  "seed": 78303
- },
- {
-  "file": "bob/moebel/0255.png",
-  "description": "blue armchair, 'Velvet Blue' style restaurant seating",
-  "seed": 78303
- },
- {
-  "file": "bob/moebel/0256.png",
-  "description": "blue armchair, 'Velvet Blue' style restaurant seating",
-  "seed": 78303
- },
- {
-  "file": "bob/moebel/0257.png",
-  "description": "blue armchair, 'Velvet Blue' style restaurant seating",
-  "seed": 78303
- },
- {
-  "file": "bob/moebel/0258.png",
-  "description": "armchair, 'Basket Chair' style restaurant seating",
-  "seed": 90103
- },
- {
-  "file": "bob/moebel/0259.png",
-  "description": "armchair, 'Basket Chair' style restaurant seating",
-  "seed": 90103
- },
- {
-  "file": "bob/moebel/0260.png",
-  "description": "armchair, 'Basket Chair' style restaurant seating",
-  "seed": 90103
- },
- {
-  "file": "bob/moebel/0261.png",
-  "description": "armchair, 'Basket Chair' style restaurant seating",
-  "seed": 90103
- },
- {
   "file": "bob/moebel/0262.png",
   "description": "red armchair, 'Leather Red' style restaurant seating",
   "seed": 96282
@@ -1308,26 +1113,6 @@
   "file": "bob/moebel/0265.png",
   "description": "red armchair, 'Leather Red' style restaurant seating",
   "seed": 96282
- },
- {
-  "file": "bob/moebel/0266.png",
-  "description": "blue armchair, 'Leather Blue' style restaurant seating",
-  "seed": 29767
- },
- {
-  "file": "bob/moebel/0267.png",
-  "description": "blue armchair, 'Leather Blue' style restaurant seating",
-  "seed": 29767
- },
- {
-  "file": "bob/moebel/0268.png",
-  "description": "blue armchair, 'Leather Blue' style restaurant seating",
-  "seed": 29767
- },
- {
-  "file": "bob/moebel/0269.png",
-  "description": "blue armchair, 'Leather Blue' style restaurant seating",
-  "seed": 29767
  },
  {
   "file": "bob/moebel/0270.png",
@@ -1485,16 +1270,6 @@
   "seed": 73587
  },
  {
-  "file": "bob/moebel/0301.png",
-  "description": "decorative partition wall",
-  "seed": 5289
- },
- {
-  "file": "bob/moebel/0302.png",
-  "description": "decorative partition wall",
-  "seed": 5289
- },
- {
   "file": "bob/moebel/0308.png",
   "description": "colourful 1990s arcade game cabinet 'Place Invaders' with a glowing screen",
   "seed": 13796
@@ -1535,26 +1310,6 @@
   "seed": 74092
  },
  {
-  "file": "bob/moebel/0316.png",
-  "description": "retro jukebox with glowing coloured lights",
-  "seed": 40862
- },
- {
-  "file": "bob/moebel/0317.png",
-  "description": "retro jukebox with glowing coloured lights",
-  "seed": 40862
- },
- {
-  "file": "bob/moebel/0318.png",
-  "description": "retro jukebox with glowing coloured lights",
-  "seed": 40862
- },
- {
-  "file": "bob/moebel/0319.png",
-  "description": "retro jukebox with glowing coloured lights",
-  "seed": 40862
- },
- {
   "file": "bob/moebel/0320.png",
   "description": "wooden television cabinet",
   "seed": 79095
@@ -1578,46 +1333,6 @@
   "file": "bob/moebel/0324.png",
   "description": "small decorative indoor fountain with blue water",
   "seed": 83676
- },
- {
-  "file": "bob/moebel/0328.png",
-  "description": "chocolate machine vending machine",
-  "seed": 27018
- },
- {
-  "file": "bob/moebel/0329.png",
-  "description": "chocolate machine vending machine",
-  "seed": 27018
- },
- {
-  "file": "bob/moebel/0330.png",
-  "description": "chocolate machine vending machine",
-  "seed": 27018
- },
- {
-  "file": "bob/moebel/0331.png",
-  "description": "chocolate machine vending machine",
-  "seed": 27018
- },
- {
-  "file": "bob/moebel/0332.png",
-  "description": "cigarette machine vending machine",
-  "seed": 10861
- },
- {
-  "file": "bob/moebel/0333.png",
-  "description": "cigarette machine vending machine",
-  "seed": 10861
- },
- {
-  "file": "bob/moebel/0334.png",
-  "description": "cigarette machine vending machine",
-  "seed": 10861
- },
- {
-  "file": "bob/moebel/0335.png",
-  "description": "cigarette machine vending machine",
-  "seed": 10861
  },
  {
   "file": "bob/moebel/0336.png",

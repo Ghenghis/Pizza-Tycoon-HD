@@ -235,18 +235,30 @@ python tools/hdpack/redraw.py pack/ maps/ redraw-out/ --server http://127.0.0.1:
     --denoise 0.8 --skip-done --items-json tools/hdpack/furniture_redraw.json
 ```
 
-`furniture_redraw.json` lists 328 restaurant and kitchen furniture frames
-(`bob/moebel`, `bob/kuebobs`) with a description each. Left out, because the
-MMPX versions look better: plants (at this size the model turns leaves into
-blocks), tablecloths and seats whose pattern is one original pixel wide
-(gingham checks, the 'Modern Mix' chairs, the 'Modern Art 3' table: the
-softened start picture no longer shows the pattern and the model can't
-redraw it faithfully), and two sprites that are mostly lettering or digits. Running
-several `--denoise` values side by side writes `redraw-out/<denoise>/`
-folders and a `sheet.png` to compare them. About ten
-seconds per frame on an RTX 3090 Ti, so the whole list takes about an hour.
-Name a fine pattern in the description ("blue and white striped seat")
-when there is one, or it comes out plain.
+`furniture_redraw.json` lists the 271 restaurant and kitchen furniture
+frames (`bob/moebel`, `bob/kuebobs`) that came out right, each with a
+description. The rest keep their MMPX versions, which look better:
+
+* plants: at this size the model turns leaves into blocks;
+* patterns one original pixel wide (gingham tablecloths, button rows on the
+  vending machines, the 'Modern Mix' and 'Office Chair' seats): the softened
+  start picture no longer shows them and the model paints something else;
+* lattices and other sprites full of holes (the partition wall, the
+  'Traditio Romano' chair back): the outline keeps the pixel steps, so a
+  smooth painting inside looks half done;
+* lettering (the BLACK BOX, the jukebox name, the '59' sprite): models garble
+  letters;
+* a handful of chairs and tables where the model added things that aren't
+  there (cups on a seat, plates and cutlery on a table, a second small chair).
+
+Running several `--denoise` values side by side writes
+`redraw-out/<denoise>/` folders and a `sheet.png` to compare them. About ten
+seconds per frame on an RTX 3090 Ti. Name a fine pattern in the description
+("blue and white striped seat") when there is one, or it comes out plain, and
+look at every frame next to its original before it goes into a pack
+(`review_pairs.py <pack> redraw-out/0.80 <items.json> pairs` writes them
+side by side, 64 to a page): a contact sheet at thumbnail size hides most of
+the failures above.
 Copy `redraw-out/0.80/bob/` into the pack when you're happy with it (keep the
 old folders: they're the pixel-art versions).
 
