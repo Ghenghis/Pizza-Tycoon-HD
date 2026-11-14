@@ -49,9 +49,10 @@ Clean worktree `integ`; cloud build lane with 2 cores.
 |---|---|
 | Round 1: `15c9a2a` plus the audio patch | 60 cases: 58 passed, 2 skipped; [audio] and [budget] 16 of 16; 0 warnings |
 | Round 2: `1fd2a9e` (warnings as errors) | 85 cases: 78 passed, 1 **failed**, 6 skipped. The failure is the tinted-coverage GPU/CPU test (254/255); `9c5b776` fixes it. [audio], [budget] and [save] all passed. The Windows build was stopped, as `39c56ee` replaces it. |
-| Round 3: `39c56ee` | Running: tests, then the Windows exe |
+| Round 3: `39c56ee` | 86 cases: 79 passed, 1 failed (a sampling mistake in the new F7 test; fixed in `dda5539`, where it passes), 6 skipped; [audio], [budget] and [save]: 37 passed, 4 skipped; 0 warnings. Windows exe sha256 `0f2a8022...a757a` staged as `<work>\play-39c56ee` |
+| Round 4: `589a436` | Running (adds cursor glide, Auto HD scale and the test fix) |
 | PC: `PizzaTycoonHD-text-9.exe` (glyph sheets, before the ARGB, base-texture and batching changes) | Steady avg 3.3–4.3 ms, p99 5.0–5.7 ms. First frame **16.8–17.4 ms: FAILS** the 16 ms gate. HD text off: 10.7–11.8 ms. |
-| PC gates for round 3 | **Blocked.** The broker denied this request at rev 16/17 while the workstation freezes were being diagnosed. `bench-gate.ps1` is ready and parse-checked; a fresh grant is needed. |
+| PC gates for round 3 | **Waiting for a grant.** The broker denied it at rev 16/17 while the freezes were diagnosed. Readiness was sent to codex-einhander-crash-check as `msg_a8c4f3539628225c`, with the one command, all identities and the cleanup bounds (`<work>\logs\readiness-39c56ee.txt`). `bench-gate.ps1` sha256 is `ee527b47...dc97a`, parse-checked on the PC. |
 
 ### Lanes and their current tasks
 
