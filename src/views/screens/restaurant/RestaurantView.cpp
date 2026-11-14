@@ -206,9 +206,12 @@ RestaurantView::~RestaurantView() {
   if (current_restaurant_noise_) {
     context_.audio->stop_sound(*current_restaurant_noise_);
   }
+  // Last, so nothing above can start the kitchen bed again.
+  sound_cues_.stop_all();
 }
 
 void RestaurantView::update_restaurant_noise() {
+  update_kitchen_bed();
   if (!context_.audio || !state_.options().restaurant_fx) {
     return;
   }
@@ -602,7 +605,64 @@ void RestaurantView::toggle_kitchen_view() {
   }
 
   camctrl_.reset();
+  // Another room: drawn where it is at once.
+  scroll_smoother_.snap(camera_);
+  update_kitchen_bed();
   mark_dirty();
+}
+
+Camera RestaurantView::drawn_camera() const {
+  Camera drawn = camera_;
+  if (state_.options().smooth_motion && !attack_.active()) {
+    drawn.scroll(scroll_smoother_.drawn(camera_, context_.clock.tick_alpha));
+  }
+  return drawn;
+}
+
+bool RestaurantView::possibly_drawn(WorldRect r) const {
+  return camera_.possibly_visible(r) || drawn_camera().possibly_visible(r);
+}
+
+bool RestaurantView::dining_sounds_on() const {
+  if (!context_.audio || !state_.options().restaurant_fx || kitchen_view_) {
+    return false;
+  }
+  const bool jukebox = context_.music
+                           ? context_.music->playback().ambience_suppressed()
+                           : restaurant_->jukebox_music() > 0;
+  return !jukebox;
+}
+
+audio::Placement RestaurantView::placement_of(WorldPoint w) const {
+  return views::screens::restaurant::panel_placement(camera_.world_to_view(w));
+}
+
+void RestaurantView::on_guest_entered(WorldPoint door) {
+  if (dining_sounds_on()) {
+    sound_cues_.guest_entered(placement_of(door));
+  }
+}
+
+void RestaurantView::on_guest_leaving(WorldPoint door, WorldPoint table) {
+  if (dining_sounds_on()) {
+    sound_cues_.guest_leaving(placement_of(door), placement_of(table));
+  }
+}
+
+void RestaurantView::on_pizza_served(WorldPoint table) {
+  if (dining_sounds_on()) {
+    sound_cues_.pizza_served(placement_of(table));
+  }
+}
+
+void RestaurantView::update_kitchen_bed() {
+  const bool jukebox = context_.music
+                           ? context_.music->playback().ambience_suppressed()
+                           : restaurant_->jukebox_music() > 0;
+  sound_cues_.kitchen_bed(views::screens::restaurant::kitchen_bed_for(
+      context_.audio && state_.options().restaurant_fx && !jukebox,
+      kitchen_view_, restaurant_->is_open(state_.time().time_of_day()),
+      restaurant_->seating_utilization()));
 }
 
 void RestaurantView::apply_view_camera() {
@@ -758,8 +818,11 @@ bool RestaurantView::lighting(lighting::Scene& scene) {
     scene.ambient_g = 212;
     scene.ambient_b = 255;
   }
-  const auto visible = camera_.visible_world_rect();
-  const ViewPoint to_layer = camera_.origin_offset_in_view();
+  // As the room is drawn this frame (smooth motion), so the lights stay on
+  // their furniture.
+  const Camera drawn = drawn_camera();
+  const auto visible = drawn.visible_world_rect();
+  const ViewPoint to_layer = drawn.origin_offset_in_view();
   for (const auto& pf_uptr : current_furniture_list()) {
     const PlacedFurniture* pf = pf_uptr.get();
     auto light = light_profile(*pf->furniture());
@@ -772,7 +835,7 @@ bool RestaurantView::lighting(lighting::Scene& scene) {
     const auto reach = static_cast<int>(light->radius);
     const WorldRect lit_world{wp.x - reach, wp.y - reach, sz.w + 2 * reach,
                               sz.h + 2 * reach};
-    if (!camera_.possibly_visible(lit_world)) {
+    if (!drawn.possibly_visible(lit_world)) {
       continue;
     }
     // Layer position, exactly as render() copies the room onto the layer.
@@ -787,6 +850,14 @@ bool RestaurantView::lighting(lighting::Scene& scene) {
 }
 
 void RestaurantView::advance(uint32_t dt_ms) {
+  sound_cues_.advance(dt_ms);
+  if (state_.options().smooth_motion && !attack_.active()) {
+    scroll_smoother_.advance(camera_, dt_ms, context_.clock.tick_alpha,
+                             rmb_drag_scroller_.is_active());
+    if (scroll_smoother_.moving()) {
+      mark_dirty();
+    }
+  }
   if (attack_.active()) {
     attack_.advance(dt_ms);
   }
@@ -802,12 +873,15 @@ void RestaurantView::tick() {
     // camera, so we have to skip camctrl_ here since it's bound to the same
     // keys. The attack scene moves the camera when they get close to the edge
     // so regardless of key bindings we just return.
+    // The camera follows the attacker in steps: drawn as it is.
+    scroll_smoother_.snap(camera_);
     return;
   }
 
   if (camctrl_.tick()) {
     mark_dirty();
   }
+  scroll_smoother_.on_tick(camera_);
 
   // A music mode change (the jukebox mode starting or stopping) changes
   // whether the restaurant's ambience plays.
@@ -827,6 +901,8 @@ void RestaurantView::tick() {
     mark_dirty();
   }
   walk_scene_.tick();
+  // Opening hours and the crowd move the kitchen between busy and idle.
+  update_kitchen_bed();
 }
 
 void RestaurantView::handle_furniture_click(const PlacedFurniture* pf) {
@@ -987,7 +1063,7 @@ void RestaurantView::render_placement_layer(PlacementLayer placement) {
     const Size sz = r.size(*pf);
 
     const WorldRect furn_world{wp.x, wp.y, sz.w, sz.h};
-    if (!camera_.possibly_visible(furn_world)) {
+    if (!possibly_drawn(furn_world)) {
       continue;
     }
 
@@ -1309,9 +1385,12 @@ void RestaurantView::render(const RenderContext& ctx) {
 
   // Blit the visible portion of background_ to screen.
   // background_ is rendered at 1:1, so world coords are pixel indices into it.
-  const auto [x, y, w, h] = camera_.visible_world_rect();
+  // Where the camera is drawn this frame (smooth motion); the room itself is
+  // drawn in world pixels, so this is the only place the picture moves.
+  const Camera drawn = drawn_camera();
+  const auto [x, y, w, h] = drawn.visible_world_rect();
   const ViewRect src_rect{x, y, w, h};
-  const ViewPoint dst_point = camera_.origin_offset_in_view();
+  const ViewPoint dst_point = drawn.origin_offset_in_view();
 
   ctx.surface->blit(background_, src_rect, dst_point);
 }

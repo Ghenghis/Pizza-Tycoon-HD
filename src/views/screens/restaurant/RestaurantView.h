@@ -26,12 +26,14 @@
 #include "views/base/BobRenderer.h"
 #include "views/base/MainPanelView.h"
 #include "views/helpers/camera/CameraController.h"
+#include "views/helpers/camera/CameraSmoother.h"
 #include "views/helpers/camera/RmbDragScroller.h"
 #include "views/helpers/camera/ScrollEdges.h"
 #include "views/screens/restaurant/AttackScene.h"
 #include "views/screens/restaurant/CharacterController.h"
 #include "views/screens/restaurant/FurniturePlacementController.h"
 #include "views/screens/restaurant/GuestWalkScene.h"
+#include "views/screens/restaurant/RestaurantSoundCues.h"
 #include "views/screens/restaurant/SeatedCharacterRenderer.h"
 #include "views/screens/restaurant/WalkNavigation.h"
 #include "views/ui/status/StatusController.h"
@@ -201,6 +203,28 @@ private:
   // For weapon and sabotage picker:
   std::optional<core::item::Item> hovered_item_;
   RmbDragScroller rmb_drag_scroller_;
+
+  // Smooth motion, drawing only: where the room is drawn this frame. Input,
+  // hit-testing and the saved scroll use camera_ itself.
+  CameraSmoother scroll_smoother_;
+  [[nodiscard]] Camera drawn_camera() const;
+  // Visible with the camera or as drawn (culling, so nothing is missing
+  // from the edge of the drawn room).
+  [[nodiscard]] bool possibly_drawn(WorldRect r) const;
+
+  // Pack-only restaurant sounds (RestaurantSoundCues.h): silent with the
+  // original effects. Cosmetic: frame time and a cosmetic generator.
+  views::screens::restaurant::AudioCueSink cue_sink_{context_.audio};
+  views::screens::restaurant::RestaurantSoundCues sound_cues_{
+      cue_sink_, context_.clock.now_ms ^ 0xD00B5E11ull};
+  // The dining room's sounds play: restaurant sounds on, not the kitchen
+  // view, no jukebox (as for the crowd).
+  [[nodiscard]] bool dining_sounds_on() const;
+  [[nodiscard]] audio::Placement placement_of(WorldPoint w) const;
+  void on_guest_entered(WorldPoint door);
+  void on_guest_leaving(WorldPoint door, WorldPoint table);
+  void on_pizza_served(WorldPoint table);
+  void update_kitchen_bed();
 
   // Friend scenes so they can access things like the furniture list, etc.
   friend class views::screens::restaurant::AttackScene;

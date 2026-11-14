@@ -264,6 +264,8 @@ void GuestWalkScene::spawn_guest_departure() {
         .sprite_blit_offset_y = anchor.y,
     };
     snapshot_walk_debug_grid(*walking_guest_, route);
+    // Cosmetic: payment at the table, the door as they go.
+    view_.on_guest_leaving(exit_pos, chair_rect.center());
 
     view_.mark_dirty();
     return;
@@ -299,6 +301,8 @@ void GuestWalkScene::spawn_guest() {
       .sprite_blit_offset_x = anchor.x,
       .sprite_blit_offset_y = anchor.y,
   };
+  // Cosmetic: the door as they come in.
+  view_.on_guest_entered(door);
 }
 
 void GuestWalkScene::spawn_waiter() {
@@ -331,6 +335,8 @@ bool GuestWalkScene::waiter_delivered(WalkingGuest& walker) {
   if (auto* seated = view_.seated_guest(walker.chair_id)) {
     seated->controller.set_eating(true);
   }
+  // Cosmetic: a plate as the pizza goes down.
+  view_.on_pizza_served(walker.position);
   view_.mark_dirty();
 
   walker.kind = WalkingGuest::WalkerKind::WAITER_RETURNING;
@@ -493,7 +499,7 @@ void GuestWalkScene::render_walking_guest() {
   const WorldRect sprite_rect{
       blit_pos.x, blit_pos.y, guest_bob.width(static_cast<std::size_t>(frame)),
       guest_bob.height(static_cast<std::size_t>(frame))};
-  if (!view_.camera_.possibly_visible(sprite_rect)) {
+  if (!view_.possibly_drawn(sprite_rect)) {
     return;
   }
 
