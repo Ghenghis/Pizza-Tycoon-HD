@@ -224,6 +224,14 @@ void MenuOptions::build_graphics(GameState& state) {
                     }))
       .help_text("Walking guests and waiters glide from step to step instead "
                  "of jumping. Only the picture changes, not the game.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Lighting", state.options().lighting,
+                    [&state, this] {
+                      state.options().lighting = !state.options().lighting;
+                      mark_dirty();
+                    }))
+      .help_text("HD only: candles, ovens, arcade machines and TVs light the "
+                 "room around them. Only the picture changes, not the game.");
   add_menu_item(std::make_unique<EnumMenuItem<Smoothing>>(
                     context_, "Smoothing", state.options().smoothing,
                     std::vector{Smoothing::Off, Smoothing::Text,

@@ -53,6 +53,10 @@ void Renderer::destroy_layer_textures() {
     SDL_DestroyTexture(tex);
   }
   layer_tex_.clear();
+  for (auto& [view, tex] : lit_tex_) {
+    SDL_DestroyTexture(tex);
+  }
+  lit_tex_.clear();
   gpu_cached_.clear();
 }
 
@@ -143,8 +147,14 @@ void Renderer::render_gpu() {
     }
     SDL_Texture* tex = layer_texture(view, area.w * scale_, area.h * scale_);
 
+    // Lit layers are relit every frame while a light flickers.
+    lighting::Scene scene;
+    const bool lit =
+        lighting::enabled() && view->lighting(scene) && scene.active();
+    const bool relight = lit && scene.animated();
+
     const bool rerender = view->is_dirty() || !gpu_cached_.contains(view);
-    const bool recomposite = rerender || below_changed;
+    const bool recomposite = rerender || below_changed || relight;
     if (rerender) {
       if (!layer.preserve_background) {
         layer_surface->fill(0);
@@ -158,14 +168,37 @@ void Renderer::render_gpu() {
       view->clean();
     }
     if (recomposite) {
+      SDL_Texture* shown = tex;
+      if (lit) {
+        SDL_Texture*& out = lit_tex_[view];
+        if (out && (out->w != tex->w || out->h != tex->h)) {
+          SDL_DestroyTexture(out);
+          out = nullptr;
+        }
+        if (!out) {
+          out = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888,
+                                  SDL_TEXTUREACCESS_TARGET, tex->w, tex->h);
+          if (!out) {
+            fatal(SDL_GetError());
+          }
+          SDL_SetTextureBlendMode(out, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+          SDL_SetTextureScaleMode(out, SDL_SCALEMODE_NEAREST);
+        }
+        if (!light_) {
+          light_ = std::make_unique<LightPass>(r);
+        }
+        light_->apply(tex, out, area.w, area.h, scale_, scene,
+                      static_cast<double>(SDL_GetTicks()) / 1000.0);
+        shown = out;
+      }
       SDL_SetRenderTarget(r, back_tex_);
       const SDL_FRect dest{static_cast<float>(area.x * scale_),
                            static_cast<float>(area.y * scale_),
                            static_cast<float>(area.w * scale_),
                            static_cast<float>(area.h * scale_)};
-      SDL_RenderTexture(r, tex, nullptr, &dest);
+      SDL_RenderTexture(r, shown, nullptr, &dest);
       frame_changed = true;
-      below_changed |= rerender;
+      below_changed |= rerender || relight;
     }
   }
   force_recompose_ = false;

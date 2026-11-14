@@ -65,6 +65,8 @@ public:
   ~RestaurantView();
   void tick() override;
   void advance(uint32_t dt_ms) override;
+  // Candles, ovens, arcade machines, TVs and the like light the room (HD).
+  bool lighting(lighting::Scene& scene) override;
   void render(const RenderContext& ctx) override;
   bool on_action(const input::ActionEvent& ev) override;
   InterruptionRate interruption_rate() const override;

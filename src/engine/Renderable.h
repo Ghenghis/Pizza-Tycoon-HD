@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "engine/Lighting.h"
+
 #include <vector>
 #include "engine/LayerInfo.h"
 #include "engine/RenderContext.h"
@@ -22,5 +24,8 @@ public:
   virtual bool preserve_background() const { return false; }
   // Composite at full brightness during palette fades.
   virtual bool ignore_fade() const { return false; }
+  // HD only: the light sources and ambient level of this layer (see
+  // engine/Lighting.h). Return false for an unlit layer.
+  virtual bool lighting(lighting::Scene& /*scene*/) { return false; }
   virtual ~Renderable() = default;
 };

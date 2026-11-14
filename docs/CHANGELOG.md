@@ -1,3 +1,15 @@
+Unreleased
+
+* HD lighting (option `lighting`, on by default; also in the options menu):
+  candles, ovens and grills, arcade machines, TVs, the jukebox and vending
+  machines light the restaurant around them, with flicker (flames, fire,
+  screens, the jukebox's slowly turning colours), and the room follows the
+  game clock: bright by day, warm in the evening, dim and blue at night.
+  Shader-free GPU pass (`LightPass`): a light map at engine resolution,
+  multiplied in and doubled, so lights can be brighter than the art, plus an
+  additive halo on emitters. Only the picture changes; GPU-only by design.
+* `--exec` prints what each command reports, so scripts can read results.
+
 Pizza Tycoon HD 1.1.0 (2026-11-14)
 
 * End-to-end gates (`tools/ci/hd_gates.py`, `scripts/hd-gates.ps1`, part of

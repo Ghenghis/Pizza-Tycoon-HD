@@ -133,6 +133,9 @@ const auto option_defs = std::to_array({
     bool_option<&GameOptions::smooth_motion>(
         "smooth_motion", {},
         "Walking characters glide between steps instead of jumping"),
+    bool_option<&GameOptions::lighting>(
+        "lighting", {},
+        "HD: candles, ovens and screens light the room around them"),
     bool_option<&GameOptions::software_cursor>("software_cursor"),
     enum_option<&GameOptions::smoothing, &smoothing_from_config_value>(
         "smoothing", {},

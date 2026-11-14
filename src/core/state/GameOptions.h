@@ -186,6 +186,9 @@ struct GameOptions {
   // Draw walking characters gliding between steps instead of jumping a whole
   // step at a time. Only the drawing changes, never the game.
   bool smooth_motion = true;
+  // HD: candles, ovens, screens and lamps light the restaurant around them.
+  // Only the picture changes.
+  bool lighting = true;
   bool vsync = true;
 
   bool load_list_sort_by_date = true;

@@ -611,6 +611,7 @@ int Game::run() {
     if (tick_accumulator_ms >= simulation_tick_ms) {
       tick_accumulator_ms = 0;
     }
+    lighting::set_enabled(state.options().lighting);
     context.clock.tick_alpha = view_frozen()
                                    ? 0.0f
                                    : static_cast<float>(tick_accumulator_ms) /
@@ -695,7 +696,18 @@ int Game::run_exec_script(DebugConsole& console, GameState& state) const {
       continue;
     }
 
-    if (!console.execute_command(line)) {
+    const std::size_t before = console.lines().size();
+    const bool ok = console.execute_command(line);
+    // Print what the command reported, so scripts can read it.
+    const auto& lines = console.lines();
+    for (std::size_t i = std::min(before, lines.size()); i < lines.size();
+         ++i) {
+      if (lines[i].type != ConsoleLineType::Command) {
+        std::cout << lines[i].text << "\n";
+      }
+    }
+    std::cout.flush();
+    if (!ok) {
       ++failures;
       std::cerr << "error: command failed: " << line << "\n";
     }
@@ -938,6 +950,7 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   if (!result.view || frames <= 0) {
     return {};
   }
+  lighting::set_enabled(gs.options().lighting);
   Renderer renderer(sdl_, display_height_);
   renderer.add_layers(result.view.get());
   // In a real session the intro gives the background warm-up time to decode
@@ -1014,6 +1027,7 @@ bool Game::capture_screenshot(GameState& gs, const std::string& path) {
   auto result = ViewFactory::create(context, gs);
   bool saved = false;
   if (result.view) {
+    lighting::set_enabled(gs.options().lighting);
     Renderer renderer(sdl_, display_height_);
     renderer.add_layers(result.view.get());
     if (tutorial_layer_ && gs.tutorial().active()) {

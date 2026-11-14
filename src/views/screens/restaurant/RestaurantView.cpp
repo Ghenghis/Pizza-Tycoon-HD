@@ -10,6 +10,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 #include "core/Demographics.h"
@@ -617,6 +619,155 @@ void RestaurantView::calculate_background_dimensions() {
       kitchen_view_ ? restaurant_->kitchen_size() : restaurant_->size();
   background_width_ = (room_size.w + 2) * RESTAURANT_TILE_WIDTH;
   background_height_ = (room_size.h + 2) * RESTAURANT_TILE_HEIGHT;
+}
+
+namespace {
+
+// The light a piece of furniture gives, if any. Radii are engine pixels.
+std::optional<lighting::Light> light_profile(const Furniture& f) {
+  using lighting::Flicker;
+  lighting::Light l;
+  const std::string& name = f.name();
+  auto has = [&name](std::string_view part) {
+    return name.find(part) != std::string::npos;
+  };
+  switch (f.category()) {
+  case FurnitureCategory::DECOR:
+    if (name != "Candle") {
+      return std::nullopt;
+    }
+    l = {.radius = 36,
+         .r = 255,
+         .g = 190,
+         .b = 120,
+         .intensity = 1.3f,
+         .flicker = Flicker::Candle,
+         .glow = 0.55f,
+         .glow_radius = 9};
+    break;
+  case FurnitureCategory::KITCHENWARE:
+    if (has("Electric")) {
+      l = {.radius = 46,
+           .r = 255,
+           .g = 200,
+           .b = 150,
+           .intensity = 1.2f,
+           .flicker = Flicker::Steady,
+           .glow = 0.2f,
+           .glow_radius = 14};
+    }
+    else {
+      l = {.radius = 54,
+           .r = 255,
+           .g = 160,
+           .b = 90,
+           .intensity = 1.4f,
+           .flicker = Flicker::Fire,
+           .glow = 0.35f,
+           .glow_radius = 16};
+    }
+    break;
+  case FurnitureCategory::GAMES:
+    l = {.radius = 42,
+         .r = 185,
+         .g = 225,
+         .b = 255,
+         .intensity = 1.25f,
+         .flicker = Flicker::Screen,
+         .glow = 0.3f,
+         .glow_radius = 12};
+    break;
+  case FurnitureCategory::ENTERTAINMENT:
+    if (has("Jukebox")) {
+      l = {.radius = 48,
+           .r = 255,
+           .g = 255,
+           .b = 255,
+           .intensity = 1.2f,
+           .flicker = Flicker::Cycle,
+           .glow = 0.35f,
+           .glow_radius = 14};
+    }
+    else {
+      l = {.radius = 38,
+           .r = 200,
+           .g = 215,
+           .b = 255,
+           .intensity = 1.1f,
+           .flicker = Flicker::Screen,
+           .glow = 0.25f,
+           .glow_radius = 11};
+    }
+    break;
+  case FurnitureCategory::SLOT_MACHINES:
+    if (has("Telephone")) {
+      return std::nullopt;
+    }
+    l = {.radius = 30,
+         .r = 225,
+         .g = 240,
+         .b = 255,
+         .intensity = 0.8f,
+         .flicker = Flicker::Steady,
+         .glow = 0.15f,
+         .glow_radius = 10};
+    break;
+  default:
+    return std::nullopt;
+  }
+  return l;
+}
+
+} // namespace
+
+bool RestaurantView::lighting(lighting::Scene& scene) {
+  // The room follows the game clock: bright by day, warm in the evening,
+  // dim and blue at night, when the candles, ovens and screens carry it.
+  const int hour = state_.time().current_hour();
+  if (hour >= 7 && hour < 17) {
+    scene.ambient = 0.95f;
+    scene.ambient_r = 255;
+    scene.ambient_g = 250;
+    scene.ambient_b = 242;
+  }
+  else if (hour >= 17 && hour < 20) {
+    scene.ambient = 0.78f;
+    scene.ambient_r = 255;
+    scene.ambient_g = 228;
+    scene.ambient_b = 195;
+  }
+  else {
+    scene.ambient = 0.62f;
+    scene.ambient_r = 205;
+    scene.ambient_g = 212;
+    scene.ambient_b = 255;
+  }
+  const auto visible = camera_.visible_world_rect();
+  const ViewPoint to_layer = camera_.origin_offset_in_view();
+  for (const auto& pf_uptr : current_furniture_list()) {
+    const PlacedFurniture* pf = pf_uptr.get();
+    auto light = light_profile(*pf->furniture());
+    if (!light) {
+      continue;
+    }
+    const auto& r = bob_renderer_for(*pf);
+    const WorldPoint wp = pf->origin();
+    const Size sz = r.size(*pf);
+    const auto reach = static_cast<int>(light->radius);
+    const WorldRect lit_world{wp.x - reach, wp.y - reach, sz.w + 2 * reach,
+                              sz.h + 2 * reach};
+    if (!camera_.possibly_visible(lit_world)) {
+      continue;
+    }
+    // Layer position, exactly as render() copies the room onto the layer.
+    const float lx = static_cast<float>(wp.x - visible.x + to_layer.x);
+    const float ly = static_cast<float>(wp.y - visible.y + to_layer.y);
+    light->x = lx + static_cast<float>(sz.w) / 2.0f;
+    light->y = ly + static_cast<float>(sz.h) * 0.4f;
+    light->seed = static_cast<uint32_t>(pf->id().value) * 2654435761u;
+    scene.lights.push_back(*light);
+  }
+  return true;
 }
 
 void RestaurantView::advance(uint32_t dt_ms) {

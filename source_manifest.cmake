@@ -299,6 +299,8 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/PlatformPaths.cpp
     src/engine/Random.cpp
     src/engine/HdCompositor.cpp
+    src/engine/LightPass.cpp
+    src/engine/Lighting.cpp
     src/engine/Renderer.cpp
     src/engine/RendererManager.cpp
     src/engine/Screenshot.cpp
@@ -555,6 +557,8 @@ set(PLEGACY_HEADERS
     src/engine/RenderContext.h
     src/engine/Renderable.h
     src/engine/HdCompositor.h
+    src/engine/LightPass.h
+    src/engine/Lighting.h
     src/engine/Renderer.h
     src/engine/RendererManager.h
     src/engine/SDLContext.h

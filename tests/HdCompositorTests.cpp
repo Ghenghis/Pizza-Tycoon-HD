@@ -16,6 +16,8 @@
 
 #include "TestSupport.h"
 #include "engine/HdCompositor.h"
+#include "engine/LightPass.h"
+#include "engine/Lighting.h"
 #include "engine/Renderer.h"
 #include "engine/SDL_include.h"
 #include "engine/gfx/Surface.h"
@@ -221,4 +223,69 @@ TEST_CASE("streamed textures draw the same as direct uploads", "[hd][gpu]") {
   comp.stream({other}, 0.0);
   CHECK(comp.texture_for(other) != nullptr);
   CHECK(worst_direct <= 2);
+}
+
+TEST_CASE("lights brighten their surroundings over the ambient level",
+          "[hd][lighting]") {
+  resources::load_fallback_palette();
+  ScopedHdScale scale(2);
+  const int w = 64;
+  const int h = 40;
+  SoftGpu gpu(w * 2, h * 2);
+  // A plain white layer.
+  SDL_Texture* albedo =
+      SDL_CreateTexture(gpu.renderer, SDL_PIXELFORMAT_RGBA8888,
+                        SDL_TEXTUREACCESS_TARGET, w * 2, h * 2);
+  SDL_Texture* out = SDL_CreateTexture(gpu.renderer, SDL_PIXELFORMAT_RGBA8888,
+                                       SDL_TEXTUREACCESS_TARGET, w * 2, h * 2);
+  SDL_SetRenderTarget(gpu.renderer, albedo);
+  SDL_SetRenderDrawColor(gpu.renderer, 255, 255, 255, 255);
+  SDL_RenderClear(gpu.renderer);
+
+  lighting::Scene scene;
+  scene.ambient = 0.5f;
+  lighting::Light lamp;
+  lamp.x = 32;
+  lamp.y = 20;
+  lamp.radius = 12;
+  scene.lights.push_back(lamp);
+  LightPass pass(gpu.renderer);
+  pass.apply(albedo, out, w, h, 2, scene, 0.0);
+  SDL_Surface* raw = SDL_RenderReadPixels(gpu.renderer, nullptr);
+  REQUIRE(raw);
+  SDL_Surface* px = SDL_ConvertSurface(raw, SDL_PIXELFORMAT_RGBA8888);
+  auto red_at = [px](int x, int y) {
+    const auto* row = reinterpret_cast<const uint32_t*>(
+        static_cast<const uint8_t*>(px->pixels) + y * px->pitch);
+    return static_cast<int>(red(row[x]));
+  };
+  CHECK(red_at(64, 40) >= 250);              // at the lamp: full brightness
+  CHECK(std::abs(red_at(4, 4) - 128) <= 3);  // far away: the ambient level
+  CHECK(red_at(64 + 16, 40) > red_at(4, 4)); // in between: lit, fading
+  SDL_DestroySurface(px);
+  SDL_DestroySurface(raw);
+  SDL_DestroyTexture(out);
+  SDL_DestroyTexture(albedo);
+}
+
+TEST_CASE("flicker stays in range and differs per seed", "[lighting]") {
+  lighting::Light candle;
+  candle.flicker = lighting::Flicker::Candle;
+  candle.seed = 1;
+  lighting::Light other = candle;
+  other.seed = 99;
+  bool differs = false;
+  for (int i = 0; i < 200; ++i) {
+    const double t = i * 0.05;
+    const auto a = lighting::sample(candle, t);
+    CHECK(a.r >= 0.0f);
+    CHECK(a.r <= 1.0f);
+    differs |= std::abs(a.r - lighting::sample(other, t).r) > 0.01f;
+  }
+  CHECK(differs);
+  lighting::Scene scene;
+  CHECK_FALSE(scene.active());
+  scene.lights.push_back(candle);
+  CHECK(scene.active());
+  CHECK(scene.animated());
 }

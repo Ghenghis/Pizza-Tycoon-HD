@@ -14,6 +14,7 @@
 #include <vector>
 #include "engine/HdCompositor.h"
 #include "engine/LayerInfo.h"
+#include "engine/LightPass.h"
 #include "engine/SDLContext.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Blit.h"
@@ -108,6 +109,9 @@ private:
   [[nodiscard]] bool software_crt() const;
 
   std::unique_ptr<HdCompositor> gpu_;
+  std::unique_ptr<LightPass> light_;
+  // Lit copy of each lit layer (see Renderable::lighting).
+  std::unordered_map<Renderable*, SDL_Texture*> lit_tex_;
   std::unordered_map<Renderable*, SDL_Texture*> layer_tex_;
   std::unordered_set<Renderable*> gpu_cached_;
   SDL_Texture* back_tex_{nullptr};

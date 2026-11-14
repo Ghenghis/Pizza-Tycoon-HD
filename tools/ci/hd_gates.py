@@ -67,7 +67,9 @@ def gate_equivalence(args: argparse.Namespace, work: Path) -> bool:
     for mode, env in (("gpu", {"PLEGACY_CPU_COMPOSE": ""}), ("cpu", {"PLEGACY_CPU_COMPOSE": "1"})):
         shot = work / f"eq_{mode}.png"
         script = (
-            "restaurant qs 0 0\nnav restaurant 0\ngame tick 200\n" f"screenshot {shot.as_posix()}\n"
+            "game options set lighting false\n"  # lighting is GPU-only by design
+            "restaurant qs 0 0\nnav restaurant 0\ngame tick 200\n"
+            f"screenshot {shot.as_posix()}\n"
         )
         extra = ["--hd-scale", "3"] + (["--hd-pack", args.pack] if args.pack else [])
         run_game(args, work, script, f"eq_{mode}", extra, env)
