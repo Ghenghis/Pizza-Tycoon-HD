@@ -26,7 +26,7 @@ the pack tools, which do talk to the network.
 | `--exec` scripts and console commands | Commands write files wherever they are told: `screenshot`, `savevga`, `dumpgameloc`, `dump fingerprint`, `debug bindings save`, and `--export-assets` | The debug console has no key by default (bind one on the Key bindings screen to open it). Run `--exec` scripts and `console <cmd>` lines only if you wrote them or read them: they act with your rights |
 | `hdpack.py comfy`, `redraw.py` | HTTP to a ComfyUI server | Only `http`/`https` URLs accepted; default is `127.0.0.1`; nothing else is contacted; no credentials are sent |
 | ComfyUI workflows (`tools/hdpack/workflows`, `--workflow`) | Workflow JSON is sent to ComfyUI as-is | Only use workflows you trust: ComfyUI custom nodes can run code on the GPU machine. Unknown `{{placeholders}}` are refused |
-| `depthmaps.py` | Downloads Depth Anything V2 (`depth-anything/Depth-Anything-V2-Large-hf`) from Hugging Face through `transformers` on first use | No token is needed or sent. The model is not pinned to a revision yet and torch/transformers are not in a requirements file, so `scripts/scan.*` can't audit them; install them from PyPI in a separate environment |
+| `depthmaps.py` | Downloads Depth Anything V2 (`depth-anything/Depth-Anything-V2-Small-hf` by default; Base/Large only with `--allow-noncommercial`) from Hugging Face through `transformers` on first use (`maps.py run` too, and only with a GPU grant file) | No token is needed or sent. `--revision` pins the model commit (recorded in each provenance sidecar), and torch/transformers are not in a requirements file, so `scripts/scan.*` can't audit them; install them from PyPI in a separate environment |
 
 ## Threat model in short
 

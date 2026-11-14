@@ -10,7 +10,8 @@ Workflow:
   2. Make a pack, either
        * baseline, no AI:   hdpack.py upscale export/ pack/ --scale 6
        * with ComfyUI:      hdpack.py comfy export/ pack/ --workflow ...
-  3. Check it:            hdpack.py validate export/ pack/
+  3. Check it:            hdpack.py validate export/ pack/ [--provenance]
+                          (or just the sidecars: hdpack.py provenance pack/)
   4. Play it:             plegacy --hd-scale 3 --hd-pack pack/
                           (or put the pack in a folder called "hd" next to
                           the program and set hd_scale in the settings)
@@ -18,6 +19,11 @@ Workflow:
 The pack layout mirrors the export layout: export/gfx/back1.png becomes
 pack/gfx/back1.png, only bigger. Anything missing from the pack keeps the
 original art, so a pack can be built up a few pictures at a time.
+
+Every picture the tool writes gets a provenance sidecar,
+pack/_provenance/gfx/back1/provenance.json (see provenance.py), and each
+asset's ComfyUI seed is a hash of --seed, the workflow and the asset's group,
+so a filtered, limited or resumed run gives every asset the same seed.
 """
 
 from __future__ import annotations
@@ -26,7 +32,6 @@ import argparse
 import copy
 import fnmatch
 import json
-import random
 import subprocess
 import sys
 import time
@@ -46,6 +51,7 @@ from PIL import Image, ImageFilter
 # script's folder off sys.path).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pixelart  # noqa: E402
+import provenance  # noqa: E402
 
 # Must match resources::HdPack::aspect_tolerance in the engine.
 ASPECT_TOLERANCE = 0.02
@@ -249,6 +255,42 @@ class Counts:
     skipped: int = 0
     failed: int = 0
     errors: list[str] = field(default_factory=list)
+    # Files already in the pack without a sidecar: kept (no silent
+    # regeneration), reported by the provenance check.
+    unrecorded: int = 0
+    seeds: dict[str, int] = field(default_factory=dict)  # asset file -> seed used (comfy)
+
+
+def encode_png(img: Image.Image) -> bytes:
+    from io import BytesIO
+
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def existing_state(pack_dir: Path, rel: str) -> str:
+    """'missing', 'recorded' (sidecar names the file as it is), 'stale'
+    (sidecar names another version: redo) or 'unrecorded' (no sidecar)."""
+    try:
+        dst = contained_path(pack_dir, rel)
+    except UnsafePathError:
+        return "missing"  # fails in the loop, with the reason
+    if not dst.exists():
+        return "missing"
+    if provenance.sidecar_path(pack_dir, rel).exists():
+        return "recorded" if provenance.matches(pack_dir, rel, [rel]) else "stale"
+    return "unrecorded"
+
+
+def asset_json(asset: Asset) -> dict[str, Any]:
+    return {
+        "file": asset.file,
+        "key": asset.key,
+        "kind": asset.kind,
+        "frame": asset.frame,
+        "id": provenance.asset_id(asset.file),
+    }
 
 
 def upscale_pack(
@@ -277,8 +319,10 @@ def upscale_pack(
             counts.failed += 1
             counts.errors.append(f"{asset.file}: {exc}")
             continue
-        if dst.exists() and not force:
+        state = existing_state(pack_dir, asset.file)
+        if state in ("recorded", "unrecorded") and not force:
             counts.skipped += 1
+            counts.unrecorded += state == "unrecorded"
             continue
         try:
             with Image.open(src_path) as src:
@@ -289,10 +333,21 @@ def upscale_pack(
                     out = pixelart.upscale(src, size)
                 else:
                     out = premultiplied_resize(src, size, UPSCALE_METHODS[method])
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            out.save(dst)
+            provenance.write_bytes_atomic(dst, encode_png(out))
+            provenance.write(
+                pack_dir,
+                asset.file,
+                provenance.Record(
+                    stage="upscale",
+                    asset=asset_json(asset),
+                    input_file=asset.file,
+                    input_sha256=provenance.sha256_file(src_path),
+                    outputs={asset.file: provenance.sha256_file(dst)},
+                    parameters={"method": method, "scale": scale, "size": list(asset.target_size(scale))},
+                ),
+            )
             counts.written += 1
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, provenance.ProvenanceError) as exc:
             counts.failed += 1
             counts.errors.append(f"{asset.file}: {exc}")
     return counts
@@ -580,11 +635,46 @@ class ComfySettings:
     # small_workflow instead (model upscaling only). 0 turns the split off.
     small_workflow: dict[str, Any] | None = None
     small_area: int = 4096
+    # {"<model file name>": {"sha256": ..., "license": ...}} for provenance.
+    models: dict[str, dict[str, str]] = field(default_factory=dict)
+    workflow_name: str = "workflow"
+    small_workflow_name: str = "small_workflow"
+
+    def is_small(self, asset: Asset) -> bool:
+        return self.small_workflow is not None and asset.width * asset.height < self.small_area
 
     def workflow_for(self, asset: Asset) -> dict[str, Any]:
-        if self.small_workflow is not None and asset.width * asset.height < self.small_area:
+        if self.small_workflow is not None and self.is_small(asset):
             return self.small_workflow
         return self.workflow
+
+    def global_seed(self) -> int:
+        return self.seed if self.seed is not None else 0
+
+    def seed_for(self, asset: Asset) -> tuple[int, str]:
+        """The asset's seed and its workflow's id. The group is the asset's
+        key, so every frame of a sprite gets the same seed."""
+        wid = provenance.workflow_id(self.workflow_for(asset))
+        return provenance.asset_seed(self.global_seed(), wid, asset.key), wid
+
+
+def placeholders(template: Any) -> set[str]:
+    """The {{names}} a workflow uses."""
+    found: set[str] = set()
+    if isinstance(template, dict):
+        for v in template.values():
+            found |= placeholders(v)
+    elif isinstance(template, list):
+        for v in template:
+            found |= placeholders(v)
+    elif isinstance(template, str):
+        rest = template
+        while "{{" in rest and "}}" in rest:
+            start = rest.index("{{") + 2
+            end = rest.index("}}", start)
+            found.add(rest[start:end].strip())
+            rest = rest[end + 2 :]
+    return found
 
 
 def gpu_utilisation(index: int) -> int | None:
@@ -674,25 +764,29 @@ def comfy_pack(
     counts = Counts()
     assets = select(load_manifest(export_dir), patterns)
 
-    def done(asset: Asset) -> bool:
-        try:
-            return contained_path(pack_dir, asset.file).exists()
-        except UnsafePathError:
-            return False  # fails in the loop, with the reason
-
-    todo = [a for a in assets if force or not done(a)]
-    counts.skipped = len(assets) - len(todo)
+    todo = []
+    for a in assets:
+        state = existing_state(pack_dir, a.file)
+        if force or state in ("missing", "stale"):
+            todo.append(a)
+        else:
+            counts.skipped += 1
+            counts.unrecorded += state == "unrecorded"
     if limit is not None:
         todo = todo[:limit]
-    rng = random.Random(settings.seed)
     for n, asset in enumerate(todo, 1):
-        seed = rng.randrange(2**31)
+        # From the asset itself, never from its place in this queue.
+        seed, wid = settings.seed_for(asset)
+        counts.seeds[asset.file] = seed
         if dry_run:
             values = comfy_values(asset, settings, "<upload>", seed)
             workflow = settings.workflow_for(asset)
             fill_template(workflow, values)  # catches placeholder errors
             path = "upscale only" if workflow is not settings.workflow else "diffusion"
-            log(f"[{n}/{len(todo)}] would generate {asset.file} at {values['width']}x{values['height']} ({path})")
+            log(
+                f"[{n}/{len(todo)}] would generate {asset.file} at {values['width']}x{values['height']} "
+                f"({path}, seed {seed})"
+            )
             continue
         if settings.wait_gpu is not None:
             wait_for_gpu(settings.wait_gpu, settings.wait_below, log)
@@ -701,9 +795,9 @@ def comfy_pack(
             src_path = contained_path(export_dir, asset.file)
             dst = contained_path(pack_dir, asset.file)
             uploaded = client.upload_image(src_path, asset.file.replace("/", "_"))
-            prompt = fill_template(
-                copy.deepcopy(settings.workflow_for(asset)), comfy_values(asset, settings, uploaded, seed)
-            )
+            workflow = settings.workflow_for(asset)
+            values = comfy_values(asset, settings, uploaded, seed)
+            prompt = fill_template(copy.deepcopy(workflow), values)
             entry = client.wait(client.queue(prompt), settings.job_timeout)
             data = client.first_image(entry)
             from io import BytesIO
@@ -711,11 +805,44 @@ def comfy_pack(
             with Image.open(BytesIO(data)) as generated, Image.open(src_path) as ref:
                 out = fit_to_target(generated, asset.target_size(settings.scale))
                 out = apply_reference_alpha(out, ref, settings.feather)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            out.save(dst)
+            # The picture first, then its sidecar, each written whole: a
+            # picture without a matching sidecar is redone next time.
+            provenance.write_bytes_atomic(dst, encode_png(out))
+            used = placeholders(workflow)
+            models = [
+                provenance.model(role, name, settings.models)
+                for role, key, name in (
+                    ("checkpoint", "checkpoint", settings.checkpoint),
+                    ("upscale", "upscale_model", settings.upscale_model),
+                )
+                if key in used
+            ]
+            provenance.write(
+                pack_dir,
+                asset.file,
+                provenance.Record(
+                    stage="comfy",
+                    asset=asset_json(asset),
+                    input_file=asset.file,
+                    input_sha256=provenance.sha256_file(src_path),
+                    outputs={asset.file: provenance.sha256_file(dst)},
+                    workflow={
+                        "id": provenance.store_workflow(pack_dir, workflow),
+                        "name": settings.small_workflow_name if settings.is_small(asset) else settings.workflow_name,
+                    },
+                    models=models,
+                    seed=seed,
+                    seed_inputs={"global_seed": settings.global_seed(), "workflow_id": wid, "group": asset.key},
+                    parameters={
+                        k: values[k]
+                        for k in ("positive", "negative", "denoise", "width", "height", "gen_width", "gen_height")
+                    }
+                    | {"scale": settings.scale, "feather": settings.feather, "server": client.server},
+                ),
+            )
             counts.written += 1
             log(f"[{n}/{len(todo)}] {asset.file} done in {time.monotonic() - started:.1f}s")
-        except HdPackError as exc:
+        except (HdPackError, provenance.ProvenanceError) as exc:
             counts.failed += 1
             counts.errors.append(f"{asset.file}: {exc}")
             log(f"[{n}/{len(todo)}] {asset.file} FAILED: {exc}")
@@ -733,6 +860,8 @@ HERE = Path(__file__).resolve().parent
 
 def _print_counts(counts: Counts) -> int:
     print(f"written {counts.written}, skipped {counts.skipped} (already in pack), failed {counts.failed}")
+    if counts.unrecorded:
+        print(f"warning: {counts.unrecorded} pictures already in the pack have no provenance sidecar (kept)")
     for e in counts.errors:
         print("error:", e, file=sys.stderr)
     return 1 if counts.failed else 0
@@ -746,6 +875,10 @@ def cmd_upscale(args: argparse.Namespace) -> int:
 
 def cmd_validate(args: argparse.Namespace) -> int:
     report = validate_pack(Path(args.export), Path(args.pack), args.min_scale, args.max_holes)
+    if args.provenance:
+        prov = provenance.check(Path(args.pack))
+        report.errors.extend(prov.errors)
+        report.warnings.extend(prov.warnings)
     if args.json:
         print(json.dumps(report.to_json(), indent=1))
     else:
@@ -755,6 +888,22 @@ def cmd_validate(args: argparse.Namespace) -> int:
         for e in report.errors:
             print("error:", e)
         print(f"{len(report.errors)} errors, {len(report.warnings)} warnings")
+    return 1 if report.errors else 0
+
+
+def cmd_provenance(args: argparse.Namespace) -> int:
+    root = Path(args.folder)
+    if not root.is_dir():
+        raise HdPackError(f"{root} is not a folder")
+    report = provenance.check(root)
+    if args.json:
+        print(json.dumps(report.to_json(), indent=1))
+    else:
+        for w in report.warnings:
+            print("warning:", w)
+        for e in report.errors:
+            print("error:", e)
+        print(f"{report.recorded}/{report.pictures} pictures recorded, {len(report.errors)} errors")
     return 1 if report.errors else 0
 
 
@@ -776,14 +925,19 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     workflow = json.loads(Path(args.workflow).read_text(encoding="utf-8"))
     for node in sorted({n["class_type"] for n in workflow.values()}):
         try:
-            client.node_info(node)
-            print("PASS node", node)
+            # ComfyUI answers {} (not an error) for a node it does not have.
+            found = node in client.node_info(node)
         except HdPackError:
+            found = False
+        if found:
+            print("PASS node", node)
+        else:
             print("FAIL node", node, "is not installed in ComfyUI")
             ok = False
     for loader, field_name, wanted in (
         ("CheckpointLoaderSimple", "ckpt_name", args.checkpoint),
         ("UpscaleModelLoader", "model_name", args.upscale_model),
+        ("DepthAnythingV2Preprocessor", "ckpt_name", args.depth_model),
     ):
         if not wanted or loader not in {n["class_type"] for n in workflow.values()}:
             continue
@@ -814,6 +968,9 @@ def cmd_comfy(args: argparse.Namespace) -> int:
             json.loads(Path(args.small_workflow).read_text(encoding="utf-8")) if args.small_area > 0 else None
         ),
         small_area=args.small_area,
+        models=provenance.load_model_index(Path(args.models) if args.models else None),
+        workflow_name=Path(args.workflow).name,
+        small_workflow_name=Path(args.small_workflow).name,
     )
     client = ComfyClient(args.server)
     return _print_counts(
@@ -853,7 +1010,13 @@ def build_parser() -> argparse.ArgumentParser:
     va.add_argument("--min-scale", type=int, default=2)
     va.add_argument("--max-holes", type=float, default=0.05, help="allowed share of see-through sprite pixels")
     va.add_argument("--json", action="store_true")
+    va.add_argument("--provenance", action="store_true", help="also require a matching provenance sidecar per picture")
     va.set_defaults(func=cmd_validate)
+
+    pr = sub.add_parser("provenance", help="check that every picture under a folder has a matching sidecar")
+    pr.add_argument("folder", help="a pack, or a maps/depth output folder")
+    pr.add_argument("--json", action="store_true")
+    pr.set_defaults(func=cmd_provenance)
 
     defaults = {
         "server": "http://127.0.0.1:8188",
@@ -865,6 +1028,7 @@ def build_parser() -> argparse.ArgumentParser:
     do.add_argument("--workflow", default=defaults["workflow"])
     do.add_argument("--checkpoint", default="")
     do.add_argument("--upscale-model", default="")
+    do.add_argument("--depth-model", default="", help="e.g. depth_anything_v2_vits.pth (maps.py --route comfy)")
     do.set_defaults(func=cmd_doctor)
 
     co = sub.add_parser("comfy", help="generate HD art with a local ComfyUI")
@@ -888,7 +1052,17 @@ def build_parser() -> argparse.ArgumentParser:
     co.add_argument("--checkpoint", default="", help="checkpoint file name as ComfyUI lists it")
     co.add_argument("--upscale-model", default="", help="upscale model file name as ComfyUI lists it")
     co.add_argument("--scale", type=int, default=6, help="output size, times the original (default 6)")
-    co.add_argument("--seed", type=int, default=None)
+    co.add_argument(
+        "--seed",
+        type=int,
+        default=1994,
+        help="global seed; each asset's seed is a hash of it, the workflow and the asset's group",
+    )
+    co.add_argument(
+        "--models",
+        default=None,
+        help='JSON {"<model file>": {"sha256": ..., "license": ...}} recorded in every sidecar',
+    )
     co.add_argument("--feather", type=float, default=1.5, help="softness of sprite edges in output pixels")
     co.add_argument("--job-timeout", type=float, default=900.0)
     co.add_argument("--denoise", type=float, default=None, help="use this denoise for every picture (style tests)")

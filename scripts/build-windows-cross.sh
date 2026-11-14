@@ -99,6 +99,7 @@ cp -R "$BUILD/data" "$STAGE/data"
 cp -R "$ROOT/assets/hd" "$STAGE/hd"
 cp "$ROOT/tools/hdpack/hdpack.py" "$ROOT/tools/hdpack/export.py" "$ROOT/tools/hdpack/pixelart.py" \
   "$ROOT/tools/hdpack/depthmaps.py" "$ROOT/tools/hdpack/redraw.py" "$ROOT/tools/hdpack/review_pairs.py" \
+  "$ROOT/tools/hdpack/provenance.py" "$ROOT/tools/hdpack/maps.py" \
   "$ROOT/tools/hdpack/furniture_redraw.json" "$ROOT/tools/hdpack/palettes.json" \
   "$ROOT/tools/hdpack/prompts.json" "$ROOT/tools/hdpack/requirements.txt" "$STAGE/tools/hdpack/"
 cp -R "$ROOT/tools/hdpack/workflows" "$STAGE/tools/hdpack/"

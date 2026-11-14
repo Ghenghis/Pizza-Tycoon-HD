@@ -81,6 +81,7 @@ New-Item -ItemType Directory -Force -Path $tools | Out-Null
 Copy-Item (Join-Path $script:Root 'tools\hdpack\hdpack.py'), (Join-Path $script:Root 'tools\hdpack\export.py'),
     (Join-Path $script:Root 'tools\hdpack\pixelart.py'), (Join-Path $script:Root 'tools\hdpack\depthmaps.py'),
     (Join-Path $script:Root 'tools\hdpack\redraw.py'), (Join-Path $script:Root 'tools\hdpack\review_pairs.py'),
+    (Join-Path $script:Root 'tools\hdpack\provenance.py'), (Join-Path $script:Root 'tools\hdpack\maps.py'),
     (Join-Path $script:Root 'tools\hdpack\furniture_redraw.json'),
     (Join-Path $script:Root 'tools\hdpack\palettes.json'), (Join-Path $script:Root 'tools\hdpack\prompts.json'),
     (Join-Path $script:Root 'tools\hdpack\requirements.txt') $tools
