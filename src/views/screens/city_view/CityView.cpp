@@ -41,11 +41,13 @@
 #include "engine/audio/AudioManager.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Draw.h"
+#include "engine/gfx/HdImage.h"
 #include "engine/gfx/Surface.h"
 #include "engine/input/Action.h"
 #include "engine/input/InputManager.h"
 #include "engine/ui/ICursorManager.h"
 #include "views/base/ViewDefs.h"
+#include "views/hd/CityMapHd.h"
 #include "views/screens/StatusDisplay.h"
 #include "views/screens/city_view/ZoomConfig.h"
 #include "views/ui/popups/ConfirmPopup.h"
@@ -73,6 +75,32 @@ constexpr std::array<std::array<std::array<uint8_t, 3>, 4>, 4> SEASON_COLORS = {
         // Winter -- blue-gray
         {{{12, 12, 16}, {44, 36, 44}, {36, 32, 36}, {16, 24, 24}}},
     }};
+
+namespace {
+
+// How the HD far map draws a tile (views/hd/CityMapHd.h).
+views::hd::MapTileClass far_map_tile_class(MapTileType type) {
+  switch (type) {
+  case MapTileType::TILE_TYPE_WATER:
+    return views::hd::MapTileClass::Water;
+  case MapTileType::TILE_TYPE_ROAD:
+  case MapTileType::TILE_TYPE_PATH:
+    return views::hd::MapTileClass::Road;
+  case MapTileType::TILE_TYPE_BUILDING:
+  case MapTileType::TILE_TYPE_VILLA:
+  case MapTileType::TILE_TYPE_RESIDENTIAL_BUILDING:
+    return views::hd::MapTileClass::Building;
+  default:
+    return views::hd::MapTileClass::Ground;
+  }
+}
+
+// A palette entry as a colour, black when out of range.
+gfx::Color palette_color(const std::vector<gfx::Color>& colors, uint8_t index) {
+  return index < colors.size() ? colors[index] : gfx::Color{0, 0, 0};
+}
+
+} // namespace
 
 constexpr PaletteHandle palette_for_season(Season season) {
   switch (season) {
@@ -842,6 +870,14 @@ void CityView::render_map_zoom_far(const RenderContext& ctx) {
         0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
         0x0C, 0x0C, 0x0C, 0x0C};
 
+    // HD: the same map drawn at full resolution, from the same colours, as
+    // the surface's HD picture; the indexed pixels stay as they are.
+    const bool hd = gfx::hd_scale() > 1;
+    std::vector<views::hd::FarMapTile> hd_tiles;
+    if (hd) {
+      hd_tiles.resize(static_cast<std::size_t>(city_->data_length()));
+    }
+
     for (int i = 0; i < city_->data_length(); ++i) {
       auto type = city_->type(i);
       int x_pos = (i % MAP_TILES_PER_ROW) * 2;
@@ -850,6 +886,15 @@ void CityView::render_map_zoom_far(const RenderContext& ctx) {
       uint8_t palette_index =
           palette_map[((type & 0x0F) << 4) | ((type & 0xF0) >> 4)];
       far_map.fill_rect(pixel_location, palette_index);
+      if (hd) {
+        hd_tiles[static_cast<std::size_t>(i)] = {
+            .color = palette_index,
+            .cls = far_map_tile_class(city_->tile_category(i))};
+      }
+    }
+    if (hd) {
+      views::hd::attach_far_map(far_map, hd_tiles, MAP_TILES_PER_ROW,
+                                MAP_TILES_PER_COLUMN, 2, season_palette_);
     }
     far_map_cache_ = std::move(far_map);
   }
@@ -1212,6 +1257,16 @@ void CityView::draw_cell_with_pattern(Surface& map, ViewRect cell,
         }
       }
     }
+  }
+
+  // HD: the same hatching as smooth stripes over the cell, in the colours
+  // the screen shows (views/hd/CityMapHd.h). The indexed pixels stay.
+  if (gfx::hd_scale() > 1) {
+    views::hd::hatch_cell(map, cell,
+                          (cell.x - cell_screen_origin.x) + pattern_offset_x,
+                          (cell.y - cell_screen_origin.y) + pattern_offset_y,
+                          palette_color(season_palette_, cell_color),
+                          palette_color(season_palette_, line_color));
   }
 }
 

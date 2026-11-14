@@ -128,6 +128,8 @@ set(GAME_PLEGACY_SOURCES
     src/views/base/View.cpp
     src/views/factories/ActorViewFactory.cpp
     src/views/factories/ViewFactory.cpp
+    src/views/hd/CityMapHd.cpp
+    src/views/hd/HdRestore.cpp
     src/views/helpers/CardGfx.cpp
     src/views/helpers/JudgeAnimator.cpp
     src/views/helpers/TVPlaybackEngine.cpp
@@ -667,6 +669,8 @@ set(PLEGACY_HEADERS
     src/views/base/ViewDefs.h
     src/views/factories/ActorViewFactory.h
     src/views/factories/ViewFactory.h
+    src/views/hd/CityMapHd.h
+    src/views/hd/HdRestore.h
     src/views/helpers/ButtonGeometry.h
     src/views/helpers/CardGfx.h
     src/views/helpers/JudgeAnimator.h

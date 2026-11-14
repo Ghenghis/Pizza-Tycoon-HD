@@ -15,8 +15,10 @@
 #include "core/util/GameContext.h"
 #include "engine/gfx/Blit.h"
 #include "engine/gfx/Draw.h"
+#include "engine/gfx/HdImage.h"
 #include "resources/FontManager.h"
 #include "resources/FontTypes.h"
+#include "views/hd/HdRestore.h"
 
 Newspaper::Newspaper(GameContext& context, GameState& state)
     : MainPanelView(context, state) {
@@ -63,12 +65,40 @@ void Newspaper::tick() {}
 
 void Newspaper::render(const RenderContext& ctx) {
   // Draw newspaper background
-  gfx::blit::blit_raw_with_palette(*ctx.surface,
-                                   context_.vga->get("gfx/back31"));
+  const Surface& paper = context_.vga->get("gfx/back31");
+  gfx::blit::blit_raw_with_palette(*ctx.surface, paper);
 
   constexpr int bgcolor_index = 159;
+
+  // The original clears the date box and the article area to the paper
+  // colour. In HD that would replace the paper's HD picture with one flat
+  // colour, so the paper's own HD picture is put back over each cleared area
+  // where the original paper already had that colour, before the text goes
+  // on top. The indexed pixels are exactly the original's either way.
+  const bool keep_hd_paper = gfx::hd_scale() > 1 && paper.has_hd();
+  const auto clear_to_paper = [&](ViewRect area) {
+    ctx.surface->fill_rect(area, bgcolor_index);
+    if (keep_hd_paper) {
+      // back31 is drawn at (0, 0), so its rect is the same as the screen's.
+      views::hd::restore_hd_where(*ctx.surface, paper, area, area.point(),
+                                  bgcolor_index);
+    }
+  };
+  // Copies a text surface (paper colour and letters) as blit_raw does.
+  const auto place_on_paper = [&](const Surface& text, ViewPoint at) {
+    if (!keep_hd_paper) {
+      ctx.surface->blit_raw(text, at);
+      return;
+    }
+    // The same pixels: the paper colour first, then everything else of the
+    // text surface; the paper's HD picture in between, the letters' HD over
+    // it.
+    clear_to_paper(ViewRect{at.x, at.y, text.width(), text.height()});
+    ctx.surface->blit(text, text.rect(), at, bgcolor_index);
+  };
+
   auto date_box = ViewRect{252, 34, 100, 22};
-  ctx.surface->fill_rect(date_box, bgcolor_index);
+  clear_to_paper(date_box);
 
   // Render date in newspaper header
   auto date_str = state_.time().current_date().to_string();
@@ -117,7 +147,7 @@ void Newspaper::render(const RenderContext& ctx) {
       // Blank out the side column, if we have a picture we don't display
       // that and we center the image instead and center the text underneath it.
       auto side_column_box = ViewRect{250, 60, 100, 284};
-      ctx.surface->fill_rect(side_column_box, bgcolor_index);
+      clear_to_paper(side_column_box);
 
       auto image_path = compat::format("z/zb{}", current_article_->image_id);
       const auto& image = context_.vga->get(image_path);
@@ -129,10 +159,10 @@ void Newspaper::render(const RenderContext& ctx) {
                                     ViewPoint{4, 0}, FontFace::SUPERSMA, 240);
 
     const ViewPoint title_pos{34, 74};
-    ctx.surface->blit_raw(title_surface, title_pos);
-    ctx.surface->blit_raw(
-        text_surface,
-        title_pos + PxOffset{0, title_surface.height() + picture_offset_y});
+    place_on_paper(title_surface, title_pos);
+    place_on_paper(text_surface,
+                   title_pos +
+                       PxOffset{0, title_surface.height() + picture_offset_y});
   }
   else {
     Logger::warn("No current article");
