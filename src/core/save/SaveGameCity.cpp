@@ -12,20 +12,63 @@
 
 #include "core/city/CentralDepot.h"
 #include "core/city/City.h"
+#include "core/city/CityTypes.h"
 #include "core/city/District.h"
 #include "core/city/JobMarket.h"
 #include "core/city/MayorOffice.h"
 #include "core/city/Property.h"
 #include "core/finance/Money.h"
 #include "core/food/IngredientCategory.h"
+#include "core/food/IngredientCategoryType.h"
+#include "core/food/IngredientType.h"
 #include "core/marketing/AdvertisingCampaign.h"
 #include "core/newspaper/NewspaperEventSystem.h"
 #include "core/newspaper/NewspaperState.h"
 #include "core/save/SaveGameCharacter.h"
+#include "core/save/SaveGameEnums.h"
 #include "core/supply/FoodSupplier.h"
 #include "engine/Logger.h"
 
 namespace save {
+
+namespace {
+
+using core::character::MarketStatus;
+using core::newspaper::NewspaperEvent;
+
+// Every enum a city's save holds, as the checks below expect it.
+static_assert(enum_runs(PremiseStatus::NOT_AVAILABLE, PremiseStatus::RENTED));
+static_assert(enum_runs(MayorAwardType::None,
+                        MayorAwardType::TransAtlanticTrade));
+static_assert(enum_runs(IngredientCategory::VEGETABLES,
+                        IngredientCategory::CHEESE));
+static_assert(enum_runs(TrendDuration::None, TrendDuration::Count));
+static_assert(enum_runs(NewspaperEvent::TomatoesContaminated,
+                        NewspaperEvent::ElderlyPreferSweet));
+// MarketStatus names the bases of the hired and player ranges, not each value.
+static_assert(magic_enum::enum_count<MarketStatus>() == 8 &&
+              magic_enum::enum_values<MarketStatus>().back() ==
+                  MarketStatus::PLAYER_BASE);
+static_assert(static_cast<int>(MarketStatus::HIRED_BASE) + NUMBER_OF_PLAYERS <=
+              static_cast<int>(MarketStatus::PLAYER_BASE));
+
+// A job market slot: free or in reserve for one of the three jobs, hired by a
+// player, or a player's own character.
+MarketStatus checked_market_status(const json& value) {
+  const auto status = checked_enum(
+      value, MarketStatus::CHEF,
+      static_cast<MarketStatus>(static_cast<int>(MarketStatus::PLAYER_BASE) +
+                                NUMBER_OF_PLAYERS - 1),
+      "a job market slot");
+  const int number = static_cast<int>(status);
+  if (number > static_cast<int>(MarketStatus::RESERVE_MANAGER) &&
+      number < static_cast<int>(MarketStatus::HIRED_BASE)) {
+    detail::bad_enum(value, "a job market slot");
+  }
+  return status;
+}
+
+} // namespace
 
 json property_to_json(const Property& property) {
   json j;
@@ -95,7 +138,8 @@ void json_to_property(const json& j, Property& property) {
 
   // Restore status
   if (j.contains("status")) {
-    property.status(static_cast<PremiseStatus>(j.at("status").get<int>()));
+    property.status(
+        checked_enum<PremiseStatus>(j.at("status"), "a premise status"));
   }
 
   // Restore potential customers per demographic
@@ -436,8 +480,8 @@ void json_to_mayor_office(const json& j, MayorOffice& mo) {
     mo.appointment_day(j.at("appointment_day").get<int>());
   }
   if (j.contains("current_quarterly_award")) {
-    mo.current_quarterly_award(static_cast<MayorAwardType>(
-        j.at("current_quarterly_award").get<int>()));
+    mo.current_quarterly_award(checked_enum<MayorAwardType>(
+        j.at("current_quarterly_award"), "the mayor's quarterly award"));
   }
   if (j.contains("award_announcement_day")) {
     mo.award_announcement_day(j.at("award_announcement_day").get<int>());
@@ -512,8 +556,8 @@ static void json_to_depot(const json& j, core::city::CentralDepot& depot) {
     depot.delivery_priorities(std::move(prios));
   }
   if (j.contains("stock_stolen") && !j.at("stock_stolen").is_null()) {
-    depot.stock_stolen(
-        static_cast<IngredientCategory>(j.at("stock_stolen").get<int>()));
+    depot.stock_stolen(checked_enum<IngredientCategory>(
+        j.at("stock_stolen"), "a depot's stolen stock"));
   }
 }
 
@@ -714,8 +758,7 @@ void json_to_city(const json& j, City& city) {
     std::vector<core::character::MarketStatus> slots;
     slots.reserve(arr.size());
     for (const auto& entry : arr) {
-      slots.push_back(
-          static_cast<core::character::MarketStatus>(entry.get<uint8_t>()));
+      slots.push_back(checked_market_status(entry));
     }
     city.job_market().load_slots(slots);
   }
@@ -758,8 +801,10 @@ void json_to_city(const json& j, City& city) {
       TrendEffect effect;
       effect.initial_value = slot_j.at("current").get<int>();
       effect.control = slot_j.at("target").get<int>();
+      // Count is no duration of its own.
       effect.duration =
-          static_cast<TrendDuration>(slot_j.at("duration").get<int>());
+          checked_enum(slot_j.at("duration"), TrendDuration::None,
+                       TrendDuration::Countdown, "an ingredient trend");
       trend_sys.apply_effect(type, effect);
       if (!slot_j.at("approaching").get<bool>()) {
         trend_sys.reset_approaching(type);
@@ -825,8 +870,8 @@ void json_to_city(const json& j, City& city) {
     ns.category = ns_j.value("category", uint8_t{0});
     if (ns_j.contains("target_ingredient") &&
         !ns_j.at("target_ingredient").is_null()) {
-      ns.target_ingredient = static_cast<core::food::IngredientType>(
-          ns_j.at("target_ingredient").get<int>());
+      ns.target_ingredient = checked_enum<core::food::IngredientType>(
+          ns_j.at("target_ingredient"), "the newspaper's ingredient");
     }
     else {
       ns.target_ingredient = std::nullopt;
@@ -855,13 +900,15 @@ void json_to_city(const json& j, City& city) {
 
   // Restore scheduled newspaper events
   if (j.contains("newspaper_scheduled")) {
-    using core::newspaper::NewspaperEvent;
     std::array<NewspaperEvent, 50> types{};
     std::array<int, 50> countdowns{};
     for (const auto& entry : j.at("newspaper_scheduled")) {
       int slot = entry.at("slot").get<int>();
       if (slot >= 0 && slot < 50) {
-        types[slot] = static_cast<NewspaperEvent>(entry.at("event").get<int>());
+        // 0 is a slot with a countdown and no event yet.
+        types[slot] = checked_enum(entry.at("event"), NewspaperEvent{0},
+                                   NewspaperEvent::ElderlyPreferSweet,
+                                   "a scheduled newspaper event");
         countdowns[slot] = entry.at("countdown").get<int>();
       }
     }

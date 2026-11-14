@@ -490,6 +490,7 @@ set(PLEGACY_HEADERS
     src/core/save/SaveGameCharacter.h
     src/core/save/SaveGameCity.h
     src/core/save/SaveGameDate.h
+    src/core/save/SaveGameEnums.h
     src/core/save/SaveGameFood.h
     src/core/save/SaveGameManager.h
     src/core/save/SaveGameRestaurant.h

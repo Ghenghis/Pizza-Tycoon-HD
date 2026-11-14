@@ -7,6 +7,7 @@
 #include "core/save/SaveGameRestaurant.h"
 
 #include <ctime>
+#include <optional>
 #include <utility>
 
 #include "core/character/Staff.h"
@@ -23,11 +24,24 @@
 #include "core/restaurant/PlacedFurniture.h"
 #include "core/restaurant/Restaurant.h"
 #include "core/restaurant/RestaurantLayout.h"
+#include "core/restaurant/RestaurantTypes.h"
 #include "core/save/SaveGameCharacter.h"
+#include "core/save/SaveGameEnums.h"
 #include "engine/Logger.h"
 #include "engine/geom/Spaces.h"
 
 namespace save {
+
+// Every enum a restaurant's save holds, as the checks below expect it.
+static_assert(enum_runs(core::character::JobRole::CHEF,
+                        core::character::JobRole::NONE));
+static_assert(enum_runs(TrainingType::COOKERY_COURSE_1,
+                        TrainingType::MASTER_OF_BUSINESS));
+static_assert(enum_runs(ManagerReaction::DoNothing,
+                        ManagerReaction::ActYourself));
+static_assert(enum_runs(ManagerBehavior::Merciless, ManagerBehavior::Warmly));
+static_assert(enum_runs(FurnitureType::TRADITIO_ROMANO,
+                        FurnitureType::ASHES_KITCHEN));
 
 json staff_to_json(const Staff& staff) {
   json j;
@@ -49,8 +63,14 @@ json staff_to_json(const Staff& staff) {
 }
 
 Staff json_to_staff(const json& j) {
-  auto job_role =
-      static_cast<core::character::JobRole>(j.at("job_role").get<int>());
+  // The checked values first, before building the character.
+  const auto job_role = checked_enum<core::character::JobRole>(
+      j.at("job_role"), "a staff member's job");
+  std::optional<TrainingType> course;
+  if (j.contains("course")) {
+    course = checked_enum<TrainingType>(j.at("course"), "a training course");
+  }
+
   auto character = json_to_character(j.at("character"));
   Staff staff(job_role, character);
 
@@ -64,9 +84,8 @@ Staff json_to_staff(const json& j) {
     staff.payment(Money::from_dollars(dollars));
   }
 
-  if (j.contains("course")) {
-    auto course = static_cast<TrainingType>(j.at("course").get<int>());
-    staff.send_on_training(TrainingFactory::create_training(course));
+  if (course) {
+    staff.send_on_training(TrainingFactory::create_training(*course));
   }
   staff.days_away(j.value("days_away_remaining", 0));
 
@@ -107,7 +126,8 @@ ManagerSettings json_to_manager_settings(const json& j) {
   }
   auto restore_setting = [&](std::string_view setting, auto& member) {
     if (j.contains(setting)) {
-      member = static_cast<ManagerReaction>(j.at(setting).get<int>());
+      member =
+          checked_enum<ManagerReaction>(j.at(setting), "a manager setting");
     }
   };
   restore_setting("turnover_decrease", m.turnover_decrease);
@@ -115,8 +135,8 @@ ManagerSettings json_to_manager_settings(const json& j) {
   restore_setting("supply_shortage", m.supply_shortage);
   restore_setting("staff_shortage", m.staff_shortage);
   if (j.contains("behavior_towards_staff")) {
-    m.behavior_towards_staff =
-        static_cast<ManagerBehavior>(j.at("behavior_towards_staff").get<int>());
+    m.behavior_towards_staff = checked_enum<ManagerBehavior>(
+        j.at("behavior_towards_staff"), "a manager's behaviour");
   }
   return m;
 }
@@ -225,12 +245,14 @@ json placed_furniture_to_json(const PlacedFurniture& pf) {
 }
 
 std::unique_ptr<PlacedFurniture> json_to_placed_furniture(const json& j) {
-  int furniture_type = j.at("furniture_type").get<int>();
-  const Furniture* furniture = FurnitureFactory::create_furniture(
-      static_cast<FurnitureType>(furniture_type));
+  const auto furniture_type =
+      checked_enum<FurnitureType>(j.at("furniture_type"), "a furniture type");
+  const Furniture* furniture =
+      FurnitureFactory::create_furniture(furniture_type);
 
   if (!furniture) {
-    Logger::warn("Failed to find furniture type {}", furniture_type);
+    Logger::warn("Failed to find furniture type {}",
+                 magic_enum::enum_name(furniture_type));
     return nullptr;
   }
 

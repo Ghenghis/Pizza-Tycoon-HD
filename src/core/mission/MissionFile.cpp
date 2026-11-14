@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -19,6 +20,7 @@
 #include "core/food/PizzaJudging.h"
 #include "core/state/GameRules.h"
 #include "core/time/GameDate.h"
+#include "core/util/AtomicFile.h"
 #include "engine/Logger.h"
 #include "engine/PlatformPaths.h"
 #include "resources/util/FileUtils.h"
@@ -242,20 +244,23 @@ bool write_mission_file(const fs::path& path,
         static_cast<uint8_t>(entry.date.year() - MIS_YEAR_BIAS);
   }
 
-  std::ofstream os(path, std::ios::binary | std::ios::trunc);
-  if (!os) {
-    Logger::warn("Could not open mission file for writing: {}", path.string());
-    return false;
-  }
-  os.write(reinterpret_cast<const char*>(buf.data()), buf.size());
-
   const std::vector<uint8_t> payload = encode_rules(rules, rules_changed);
   std::vector<uint8_t> trailer(trailer_magic.begin(), trailer_magic.end());
   trailer.push_back(trailer_version);
   trailer.push_back(static_cast<uint8_t>(payload.size()));
   trailer.insert(trailer.end(), payload.begin(), payload.end());
-  os.write(reinterpret_cast<const char*>(trailer.data()), trailer.size());
-  return os.good();
+
+  // The slots, then the trailer, written in one step: a failed write leaves
+  // an older mission file of that name as it was.
+  std::string bytes(buf.begin(), buf.end());
+  bytes.append(trailer.begin(), trailer.end());
+  const util::AtomicWriteResult written =
+      util::write_file_atomically(path, bytes);
+  if (!written) {
+    Logger::warn("Mission file not written: {}", written.error);
+    return false;
+  }
+  return true;
 }
 
 std::vector<MissionListEntry> list_available_missions() {

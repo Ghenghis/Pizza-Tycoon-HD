@@ -36,6 +36,11 @@ namespace {
 // How many temporary names to try before giving up.
 constexpr int temp_name_attempts = 16;
 
+// What goes between a destination's name and the hex digits of its
+// temporary file, and how many digits there are.
+constexpr std::string_view temp_infix = ".tmp-";
+constexpr std::size_t temp_suffix_length = 12;
+
 // The most handed to the system in one write call.
 constexpr std::size_t max_write_chunk = std::size_t{1} << 30;
 
@@ -69,7 +74,7 @@ std::string unique_suffix() {
   x ^= x >> 31;
 
   constexpr std::string_view digits = "0123456789abcdef";
-  std::string out(12, '0');
+  std::string out(temp_suffix_length, '0');
   for (char& c : out) {
     c = digits[x & 0xF];
     x >>= 4;
@@ -80,7 +85,7 @@ std::string unique_suffix() {
 // Beside the target, so the final rename never crosses file systems.
 fs::path temp_name_for(const fs::path& target) {
   fs::path name = target.filename();
-  name += ".tmp-";
+  name += temp_infix;
   name += unique_suffix();
   return target.parent_path() / name;
 }
@@ -445,6 +450,63 @@ AtomicWriteResult write_file_atomically(const fs::path& destination,
     return {};
   }
   return {file.error(), file.error_code()};
+}
+
+bool is_temp_file_name(std::string_view name) {
+  const std::size_t tail = temp_infix.size() + temp_suffix_length;
+  if (name.size() <= tail) {
+    return false; // the destination's name can't be empty
+  }
+  const std::string_view infix =
+      name.substr(name.size() - tail, temp_infix.size());
+  const std::string_view suffix = name.substr(name.size() - temp_suffix_length);
+  return infix == temp_infix &&
+         std::all_of(suffix.begin(), suffix.end(), [](char c) {
+           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+         });
+}
+
+StaleTempFiles remove_stale_temp_files(const fs::path& folder,
+                                       std::chrono::seconds min_age) {
+  StaleTempFiles result;
+  std::error_code ec;
+  if (!fs::is_directory(folder, ec)) {
+    return result;
+  }
+
+  // Ages are measured from one moment, so the order files are listed in
+  // makes no difference.
+  const auto now = fs::file_time_type::clock::now();
+  fs::directory_iterator it(folder, ec);
+  if (ec) {
+    result.failed.emplace_back(folder, ec.message());
+    return result;
+  }
+  // An error moving on stops the walk; what was found so far still goes.
+  for (const fs::directory_iterator end; !ec && it != end; it.increment(ec)) {
+    const fs::path path = it->path();
+    if (!is_temp_file_name(display(path.filename()))) {
+      continue;
+    }
+    std::error_code entry_ec;
+    if (!fs::is_regular_file(it->symlink_status(entry_ec)) || entry_ec) {
+      continue;
+    }
+    const auto written = fs::last_write_time(path, entry_ec);
+    if (entry_ec || now - written < min_age) {
+      continue;
+    }
+    if (fs::remove(path, entry_ec)) {
+      result.removed.push_back(path);
+    }
+    else if (entry_ec) {
+      result.failed.emplace_back(path, entry_ec.message());
+    }
+  }
+  if (ec) {
+    result.failed.emplace_back(folder, ec.message());
+  }
+  return result;
 }
 
 } // namespace util

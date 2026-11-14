@@ -7,12 +7,12 @@
 #include "core/debug/commands/DebugCommands.h"
 
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 #include "core/debug/command/CommandRegistry.h"
 #include "core/debug/command/CommonArgs.h"
 #include "core/save/SaveGameManager.h"
 #include "core/state/GameState.h"
+#include "core/util/AtomicFile.h"
 #include "core/util/GameContext.h"
 #include "engine/FormatCompat.h"
 #include "engine/input/BindingsFile.h"
@@ -215,15 +215,12 @@ Examples:
 
         if (ctx.has_arg(0)) {
           const std::string file = ctx.string_arg(0);
-          std::ofstream out(file);
-          if (!out) {
+          // In one step, so a diff never reads a half-written document.
+          const util::AtomicWriteResult written =
+              util::write_file_atomically(file, document + "\n");
+          if (!written) {
             return CommandResult::error(
-                compat::format("Cannot write {}", file));
-          }
-          out << document << "\n";
-          if (!out) {
-            return CommandResult::error(
-                compat::format("Failed writing {}", file));
+                compat::format("Cannot write {}: {}", file, written.error));
           }
           result.add_message(compat::format("Wrote {}", file));
         }

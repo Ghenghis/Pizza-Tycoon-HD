@@ -8,9 +8,19 @@
 
 #include <utility>
 
+#include "core/food/IngredientType.h"
+#include "core/food/StandardPizza.h"
+#include "core/save/SaveGameEnums.h"
 #include "engine/geom/Spaces.h"
 
 namespace save {
+
+// Every enum a pizza's save holds, as the checks below expect it.
+static_assert(enum_runs(core::food::Origin::Standard,
+                        core::food::Origin::User));
+// COUNT ends the list and is no pizza of its own.
+static_assert(enum_runs(core::food::StandardPizza::PizzaNapoletana,
+                        core::food::StandardPizza::COUNT));
 
 json topping_to_json(const core::food::Topping& topping) {
   json j;
@@ -21,7 +31,11 @@ json topping_to_json(const core::food::Topping& topping) {
 }
 
 std::unique_ptr<core::food::Topping> json_to_topping(const json& j) {
-  int ingredient_id = j.at("ingredient_id").get<int>();
+  // An ingredient the game doesn't have ends the game when the topping is
+  // built, so it is checked here.
+  const auto ingredient = checked_enum<core::food::IngredientType>(
+      j.at("ingredient_id"), "a topping's ingredient");
+  const int ingredient_id = static_cast<int>(ingredient);
   int state = j.at("state").get<int>();
   WorldPoint origin{j.at("origin").at("x").get<int>(),
                     j.at("origin").at("y").get<int>()};
@@ -81,7 +95,7 @@ json_to_pizza(const json& j,
   auto pizza = Pizza(name);
 
   // Restore origin
-  pizza.set_origin(static_cast<Origin>(j.at("origin").get<int>()));
+  pizza.set_origin(checked_enum<Origin>(j.at("origin"), "a pizza's origin"));
 
   // Restore toppings
   if (j.contains("toppings")) {
@@ -152,7 +166,9 @@ json_to_recipe(const json& j,
     const json& reference = j.contains("reference_id") ? j.at("reference_id")
                                                        : j.at("canonical_id");
     if (!reference.is_null()) {
-      auto reference_id = static_cast<StandardPizza>(reference.get<int>());
+      auto reference_id =
+          checked_enum(reference, StandardPizza::PizzaNapoletana,
+                       StandardPizza::VegetablePizza, "a standard pizza");
       return Recipe::standard(id, reference_id, std::move(display_name),
                               std::move(pizza));
     }

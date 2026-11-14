@@ -26,6 +26,9 @@ struct RestaurantLoader {
 json staff_to_json(const Staff& staff);
 Staff json_to_staff(const json& j);
 
+json manager_settings_to_json(const ManagerSettings& settings);
+ManagerSettings json_to_manager_settings(const json& j);
+
 json menu_to_json(const core::restaurant::Menu& menu);
 core::restaurant::Menu json_to_menu(const json& j);
 

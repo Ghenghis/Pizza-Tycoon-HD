@@ -26,6 +26,10 @@ json player_to_json(const Player& player);
 std::unique_ptr<Player>
 json_to_player(const json& j, GameContext& context,
                const core::food::CustomerTasteProfiles& taste_profiles);
+// Everything json_to_player restores but the player's id, control and
+// character: what can be read into a Player that already exists.
+void load_player_state(const json& j, Player& player,
+                       const core::food::CustomerTasteProfiles& taste_profiles);
 
 json player_recipes_to_json(const core::food::PlayerRecipes& recipes);
 core::food::PlayerRecipes

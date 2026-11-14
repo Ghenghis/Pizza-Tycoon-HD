@@ -19,8 +19,11 @@
 #include "core/factories/CharacterFactory.h"
 #include "core/finance/Ledger.h"
 #include "core/food/IngredientCategoryType.h"
+#include "core/food/IngredientType.h"
+#include "core/marketing/AdvertisingCampaign.h"
 #include "core/marketing/NewspaperAdFormat.h"
 #include "core/save/SaveGameDate.h"
+#include "core/save/SaveGameEnums.h"
 #include "core/state/GameState.h"
 #include "core/status/StatusHub.h"
 #include "core/supply/ActiveContract.h"
@@ -28,6 +31,27 @@
 #include "core/util/GameContext.h"
 
 namespace save {
+
+// Every enum a player's save holds, as the checks below expect it.
+static_assert(enum_runs(InsuranceType::THEFT, InsuranceType::LIFE));
+static_assert(enum_runs(AwardLevel::None, AwardLevel::Gold));
+static_assert(enum_runs(IngredientCategory::VEGETABLES,
+                        IngredientCategory::CHEESE));
+static_assert(enum_runs(StatusSeverity::Info, StatusSeverity::Error));
+static_assert(enum_runs(StatusScope::Global, StatusScope::View));
+static_assert(enum_runs(AdvertisingChannel::FLYERS,
+                        AdvertisingChannel::TV_ADS));
+static_assert(enum_runs(NewspaperAdFormat::HalfTwoColor,
+                        NewspaperAdFormat::FullFourColor));
+static_assert(enum_runs(MafiaMissionType::Package,
+                        MafiaMissionType::Investment));
+// IngredientType has gaps; every value it names indexes the ingredient arrays.
+static_assert(magic_enum::enum_values<core::food::IngredientType>().front() ==
+              core::food::IngredientType::TOMATOES);
+static_assert(
+    magic_enum::enum_integer(
+        magic_enum::enum_values<core::food::IngredientType>().back()) <
+    max_ingredient_count);
 
 json character_to_json(const core::character::Character& character) {
   json j;
@@ -158,8 +182,8 @@ static InsurancePlayerState json_to_insurance_state(const json& j) {
     }
   }
   if (j.contains("pending_claim") && !j.at("pending_claim").is_null()) {
-    state.pending_claim =
-        static_cast<InsuranceType>(j.at("pending_claim").get<int>());
+    state.pending_claim = checked_enum<InsuranceType>(j.at("pending_claim"),
+                                                      "an insurance claim");
   }
   return state;
 }
@@ -362,44 +386,51 @@ json_to_player(const json& j, GameContext& /*context*/,
   auto character = json_to_character(j.at("character"));
 
   auto player = std::make_unique<Player>(pid, character, human);
-  player->name(j.at("name").get<std::string>());
+  load_player_state(j, *player, taste_profiles);
+  return player;
+}
+
+void load_player_state(
+    const json& j, Player& player,
+    const core::food::CustomerTasteProfiles& taste_profiles) {
+  player.name(j.at("name").get<std::string>());
 
   // Restore recipes
   if (j.contains("recipes")) {
-    player->recipes() = json_to_player_recipes(j.at("recipes"), taste_profiles);
+    player.recipes() = json_to_player_recipes(j.at("recipes"), taste_profiles);
   }
 
   // Restore financials (including ledger)
   if (j.contains("financials")) {
-    player->financials() = json_to_player_financials(j.at("financials"));
+    player.financials() = json_to_player_financials(j.at("financials"));
   }
 
   if (j.contains("ai_expansion_cooldown")) {
-    player->ai_expansion_cooldown(j.at("ai_expansion_cooldown").get<int>());
+    player.ai_expansion_cooldown(j.at("ai_expansion_cooldown").get<int>());
   }
   if (j.contains("start_of_day_hour")) {
-    player->start_of_day_hour(j.at("start_of_day_hour").get<uint8_t>());
+    player.start_of_day_hour(j.at("start_of_day_hour").get<uint8_t>());
   }
   if (j.contains("end_of_day_block")) {
-    player->end_of_day_block(j.at("end_of_day_block").get<int>());
+    player.end_of_day_block(j.at("end_of_day_block").get<int>());
   }
   if (j.contains("holiday_days_left")) {
-    player->holiday(j.at("holiday_days_left").get<int>());
+    player.holiday(j.at("holiday_days_left").get<int>());
   }
   if (j.contains("criminal_record")) {
-    player->criminal_record(j.at("criminal_record").get<int>());
+    player.criminal_record(j.at("criminal_record").get<int>());
   }
   if (j.contains("eliminated") && j.at("eliminated").get<bool>()) {
-    player->eliminate();
+    player.eliminate();
   }
   if (j.contains("jail_days_left")) {
-    player->jail(j.at("jail_days_left").get<int>());
+    player.jail(j.at("jail_days_left").get<int>());
   }
-  player->jail_time(j.at("jail_time").get<uint8_t>());
+  player.jail_time(j.at("jail_time").get<uint8_t>());
 
   // Restore AI menu slots
   if (j.contains("ai_menu_slots")) {
-    auto& slots = player->ai_menu_slots();
+    auto& slots = player.ai_menu_slots();
     int i = 0;
     for (const auto& slot_j : j.at("ai_menu_slots")) {
       if (i >= static_cast<int>(slots.size())) {
@@ -427,7 +458,7 @@ json_to_player(const json& j, GameContext& /*context*/,
       core::CityId city_id{std::stoi(it.key())};
       for (const auto& loan_j : it.value()) {
         Loan loan = json_to_loan(loan_j);
-        player->loans_in_city(city_id).push_back(loan);
+        player.loans_in_city(city_id).push_back(loan);
       }
     }
   }
@@ -435,33 +466,33 @@ json_to_player(const json& j, GameContext& /*context*/,
   // Restore investments
   if (j.contains("investments")) {
     for (const auto& inv_j : j.at("investments")) {
-      player->add_investment(json_to_investment(inv_j));
+      player.add_investment(json_to_investment(inv_j));
     }
   }
 
   // Restore inventory into existing object (Inventory is not copy-assignable)
   if (j.contains("inventory")) {
-    load_inventory(j.at("inventory"), player->inventory());
+    load_inventory(j.at("inventory"), player.inventory());
   }
   if (j.contains("social_score")) {
-    player->social_status().social_score(j.at("social_score"));
+    player.social_status().social_score(j.at("social_score"));
   }
   if (j.contains("underworld_score")) {
-    player->social_status().underworld_score(j.at("underworld_score"));
+    player.social_status().underworld_score(j.at("underworld_score"));
   }
-  player->weapon_dealing_profit(
+  player.weapon_dealing_profit(
       Money{j.value("weapon_dealing_profit", int64_t{0})});
-  player->trade_activity(j.value("trade_activity", int64_t{0}));
+  player.trade_activity(j.value("trade_activity", int64_t{0}));
   if (j.contains("weapon_unit_costs")) {
     const auto& costs = j.at("weapon_unit_costs");
     for (auto item : core::item::weapon_list) {
       auto key = std::string(core::item::to_string(item));
       if (costs.contains(key)) {
-        player->weapon_unit_cost(item, Money{costs.at(key).get<int64_t>()});
+        player.weapon_unit_cost(item, Money{costs.at(key).get<int64_t>()});
       }
     }
   }
-  player->set_competition_willingness(
+  player.set_competition_willingness(
       j.value("competition_willingness", uint8_t{0}));
 
   if (j.contains("ad_effectiveness")) {
@@ -469,14 +500,14 @@ json_to_player(const json& j, GameContext& /*context*/,
       if (!entry.contains("city_id") || !entry.contains("channels")) {
         continue;
       }
-      player->ad_effectiveness(
+      player.ad_effectiveness(
           core::CityId{entry.at("city_id").get<int>()},
           entry.at("channels").get<std::array<uint8_t, 4>>());
     }
   }
 
   if (j.contains("score")) {
-    player->add_score(j.at("score").get<int>());
+    player.add_score(j.at("score").get<int>());
   }
   if (j.contains("awards")) {
     int category = 0;
@@ -484,22 +515,21 @@ json_to_player(const json& j, GameContext& /*context*/,
       if (category >= static_cast<int>(AwardCategory::Count)) {
         break;
       }
-      player->award(static_cast<AwardCategory>(category),
-                    static_cast<AwardLevel>(level.get<int>()));
+      player.award(static_cast<AwardCategory>(category),
+                   checked_enum<AwardLevel>(level, "an award level"));
       ++category;
     }
   }
   if (j.contains("mafia_state")) {
-    player->mafia_state() = json_to_mafia_state(j.at("mafia_state"));
+    player.mafia_state() = json_to_mafia_state(j.at("mafia_state"));
   }
   if (j.contains("insurance_state")) {
-    player->insurance_state() =
-        json_to_insurance_state(j.at("insurance_state"));
+    player.insurance_state() = json_to_insurance_state(j.at("insurance_state"));
   }
 
   if (j.contains("visited_city_ids")) {
     for (const auto& val : j.at("visited_city_ids")) {
-      player->mark_city_visited(core::CityId{val.get<int>()});
+      player.mark_city_visited(core::CityId{val.get<int>()});
     }
   }
 
@@ -508,7 +538,9 @@ json_to_player(const json& j, GameContext& /*context*/,
     for (const auto& cj : j.at("contracts")) {
       ActiveContract c;
       c.supplier_id = cj.value("supplier_id", uint8_t{0});
-      c.category = static_cast<IngredientCategory>(cj.value("category", 0));
+      c.category =
+          checked_enum_or(cj, "category", IngredientCategory::VEGETABLES,
+                          "a contract's ingredient category");
       c.city_id = core::CityId{cj.value("city_id", -1)};
       c.restaurant_id = core::RestaurantId{cj.value("restaurant_id", -1)};
       c.discount_pct = cj.value("discount_pct", uint8_t{0});
@@ -522,12 +554,13 @@ json_to_player(const json& j, GameContext& /*context*/,
       if (cj.contains("items")) {
         for (const auto& ij : cj.at("items")) {
           c.items.push_back(
-              {static_cast<core::food::IngredientType>(ij.value("type", 0)),
+              {checked_enum_or(ij, "type", core::food::IngredientType::TOMATOES,
+                               "a contract's ingredient"),
                ij.value("kg_per_day", 0)});
         }
       }
       if (c.remaining_term > 0) {
-        player->add_contract(std::move(c));
+        player.add_contract(std::move(c));
       }
     }
   }
@@ -536,9 +569,11 @@ json_to_player(const json& j, GameContext& /*context*/,
     for (const auto& mj : j.at("pending_notifications")) {
       StatusMsg msg;
       msg.payload = mj.value("text", std::string{});
-      msg.severity = static_cast<StatusSeverity>(mj.value("severity", 0));
-      msg.scope = static_cast<StatusScope>(mj.value("scope", 0));
-      player->queue_notification(std::move(msg));
+      msg.severity = checked_enum_or(mj, "severity", StatusSeverity::Info,
+                                     "a notification's severity");
+      msg.scope = checked_enum_or(mj, "scope", StatusScope::Global,
+                                  "a notification's scope");
+      player.queue_notification(std::move(msg));
     }
   }
 
@@ -546,7 +581,8 @@ json_to_player(const json& j, GameContext& /*context*/,
   if (j.contains("campaigns")) {
     for (const auto& cj : j.at("campaigns")) {
       AdvertisingCampaign c;
-      c.channel = static_cast<AdvertisingChannel>(cj.value("channel", 0));
+      c.channel = checked_enum_or(cj, "channel", AdvertisingChannel::FLYERS,
+                                  "a campaign's channel");
       c.city_id = core::CityId{cj.value("city_id", -1)};
       c.days_remaining = cj.value("days_remaining", 0);
       c.rate.effectiveness = cj.value("effectiveness", 0);
@@ -558,8 +594,8 @@ json_to_player(const json& j, GameContext& /*context*/,
         c.poster_id = cj.at("poster_id").get<int>();
       }
       if (cj.contains("newspaper_ad_format")) {
-        c.newspaper_ad_format = static_cast<NewspaperAdFormat>(
-            cj.at("newspaper_ad_format").get<int>());
+        c.newspaper_ad_format = checked_enum<NewspaperAdFormat>(
+            cj.at("newspaper_ad_format"), "a newspaper ad's format");
       }
       if (cj.contains("newspaper_lines")) {
         c.newspaper_lines =
@@ -568,7 +604,7 @@ json_to_player(const json& j, GameContext& /*context*/,
       if (cj.contains("tv_ad_id")) {
         c.tv_ad_id = cj.at("tv_ad_id").get<int>();
       }
-      player->add_campaign(c);
+      player.add_campaign(c);
     }
   }
 
@@ -576,12 +612,10 @@ json_to_player(const json& j, GameContext& /*context*/,
     const auto& arr = j.at("turnover_by_city");
     for (int c = 0; c < NUMBER_OF_CITIES && c < static_cast<int>(arr.size());
          ++c) {
-      player->set_turnover_in_city(core::CityId{c},
-                                   Money{arr[c].get<int64_t>()});
+      player.set_turnover_in_city(core::CityId{c},
+                                  Money{arr[c].get<int64_t>()});
     }
   }
-
-  return player;
 }
 
 static json mission_location_to_json(const MissionLocation& loc) {
@@ -640,7 +674,8 @@ static json mission_to_json(const MafiaMission& m) {
 
 static MafiaMission json_to_mission(const json& j) {
   MafiaMission m;
-  m.mission_type = static_cast<MafiaMissionType>(j.value("mission_type", 0));
+  m.mission_type = checked_enum_or(j, "mission_type", MafiaMissionType::Package,
+                                   "a mafia mission's type");
   m.active = j.value("active", false);
   m.risk_pct = j.value("risk_pct", 0);
   m.reward = Money{j.value("reward", int64_t{0})};

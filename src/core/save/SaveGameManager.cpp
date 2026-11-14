@@ -48,6 +48,7 @@
 #include "core/save/SaveGameCharacter.h"
 #include "core/save/SaveGameCity.h"
 #include "core/save/SaveGameDate.h"
+#include "core/save/SaveGameEnums.h"
 #include "core/save/SaveGameFood.h"
 #include "core/save/SaveGameRestaurant.h"
 #include "core/state/GameOptions.h"
@@ -655,23 +656,39 @@ void check_list(const json& j, std::string_view key, Check check_entry) {
   }
 }
 
+// A game always has all its players: a new game fills every slot, and a
+// player who drops out stays in theirs. The turn code and the start of a
+// city's day count and walk them without checking for an empty slot, and
+// they count the people first: those are the first slots, then the
+// computer's.
 void check_players(const json& j) {
   const json& players =
       check_array(require_member(j, "players"), "players", NUMBER_OF_PLAYERS);
+  if (players.size() != NUMBER_OF_PLAYERS) {
+    reject("players has " + std::to_string(players.size()) +
+           " entries, not " + std::to_string(NUMBER_OF_PLAYERS));
+  }
+  bool computer_seen = false;
   for (std::size_t i = 0; i < players.size(); ++i) {
     const json& player = players[i];
-    if (player.is_null()) {
-      continue;
-    }
     const std::string what = item("players", i);
+    if (player.is_null()) {
+      reject(what + " is empty");
+    }
     check_object(player, what);
     // The loader puts each player at its place in the list.
     if (check_int(require_member(player, "id", what), 0, NUMBER_OF_PLAYERS - 1,
                   member_name(what, "id")) != static_cast<int>(i)) {
       reject(member_name(what, "id") + " does not match its place");
     }
-    check_bool(require_member(player, "human_controlled", what),
-               member_name(what, "human_controlled"));
+    const json& human = require_member(player, "human_controlled", what);
+    check_bool(human, member_name(what, "human_controlled"));
+    if (!human.get<bool>()) {
+      computer_seen = true;
+    }
+    else if (computer_seen) {
+      reject(what + " is a person after a computer player");
+    }
     check_string(require_member(player, "name", what),
                  member_name(what, "name"));
     const std::string character_name = member_name(what, "character");
@@ -680,14 +697,13 @@ void check_players(const json& j) {
     check_int(require_member(character, "id", character_name), 0, 255,
               member_name(character_name, "id"));
   }
+  if (!players[0].at("human_controlled").get<bool>()) {
+    reject("players has no person playing");
+  }
 
   // The game runs as the active player from the first frame.
-  const int active = check_int(require_member(j, "active_player"), 0,
-                               NUMBER_OF_PLAYERS - 1, "active_player");
-  if (static_cast<std::size_t>(active) >= players.size() ||
-      players[static_cast<std::size_t>(active)].is_null()) {
-    reject("active_player is not one of the players");
-  }
+  check_int(require_member(j, "active_player"), 0, NUMBER_OF_PLAYERS - 1,
+            "active_player");
 }
 
 void check_property(const json& property, const std::string& what) {
@@ -929,10 +945,9 @@ void check_scalars(const json& j) {
           find_member(require_member(j, "time"), "blocks_since_start")) {
     check_int(*blocks, 0, int_max, "time.blocks_since_start");
   }
-  if (const json* city = find_member(j, "active_city")) {
-    // Out of range is allowed: the loader falls back to a city it has.
-    check_int(*city, int_min, int_max, "active_city");
-  }
+  // Every save names the city the game is in. Out of range is allowed: the
+  // loader falls back to a city it has.
+  check_int(require_member(j, "active_city"), int_min, int_max, "active_city");
   if (const json* mode = find_member(j, "game_mode")) {
     check_enum<GameMode>(*mode, "game_mode");
   }
@@ -1261,6 +1276,27 @@ int SaveGameManager::get_save_version(const std::string& filename) {
 
 namespace {
 
+// Every enum json_to_state reads, as the checks expect it.
+static_assert(enum_runs(GameMode::FREEMODE, GameMode::QUICKSTART));
+static_assert(enum_runs(core::restaurant::StaffEventData::Type::Late,
+                        core::restaurant::StaffEventData::Type::ForgotToOpen));
+static_assert(enum_runs(core::character::JobRole::CHEF,
+                        core::character::JobRole::NONE));
+static_assert(enum_runs(TurnOrchestrator::DeferredCall::Kind::MayorInspection,
+                        TurnOrchestrator::DeferredCall::Kind::DepotRaid));
+static_assert(enum_runs(MayorAwardType::None,
+                        MayorAwardType::TransAtlanticTrade));
+
+// MilestoneId runs past magic_enum's reflection range, so it is read by its
+// bounds; the unused ids between them index nothing.
+static_assert(static_cast<int>(core::events::MilestoneId::LaughingStock) == 1);
+static_assert(static_cast<int>(core::events::MilestoneId::ControlsWorld) ==
+              core::events::max_milestone_id);
+core::events::MilestoneId checked_milestone(const json& value) {
+  return checked_enum(value, core::events::MilestoneId::LaughingStock,
+                      core::events::MilestoneId::ControlsWorld, "a milestone");
+}
+
 json time_to_json(const GameTime& time) {
   return {
       {"blocks_since_start", time.time_blocks()},
@@ -1563,8 +1599,7 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
     state.active_player(pid);
   }
   if (j.contains("game_mode")) {
-    auto mode{j.at("game_mode").get<int>()};
-    state.game_mode(static_cast<GameMode>(mode));
+    state.game_mode(checked_enum<GameMode>(j.at("game_mode"), "a game mode"));
   }
   if (j.contains("mission_target")) {
     const auto& mt = j.at("mission_target");
@@ -1574,8 +1609,7 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
       target.milestones.push_back(
           {save_date(milestone.at("y").get<int>(), milestone.at("m").get<int>(),
                      milestone.at("d").get<int>()),
-           static_cast<core::events::MilestoneId>(
-               milestone.at("id").get<int>())});
+           checked_milestone(milestone.at("id"))});
     }
     // MissionTarget::final_event() reads the last milestone.
     if (target.milestones.empty()) {
@@ -1751,10 +1785,10 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
   if (j.contains("deferred_staff_events")) {
     for (const auto& ev : j.at("deferred_staff_events")) {
       core::restaurant::StaffEventData data;
-      data.type = static_cast<core::restaurant::StaffEventData::Type>(
-          ev.at("type").get<int>());
-      data.job_role =
-          static_cast<core::character::JobRole>(ev.at("job_role").get<int>());
+      data.type = checked_enum<core::restaurant::StaffEventData::Type>(
+          ev.at("type"), "a staff event");
+      data.job_role = checked_enum<core::character::JobRole>(
+          ev.at("job_role"), "a staff event's job");
       data.slot_index = ev.at("slot_index").get<int>();
       state.turn().restore_deferred_staff_event(
           data, core::RestaurantId{ev.at("restaurant_id").get<int>()});
@@ -1767,7 +1801,7 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
     using Kind = DeferredCall::Kind;
     for (const auto& ev : j.at("deferred_calls")) {
       DeferredCall queued;
-      queued.kind = static_cast<Kind>(ev.at("kind").get<int>());
+      queued.kind = checked_enum<Kind>(ev.at("kind"), "a queued call");
       queued.player_id = core::PlayerId{ev.value("player_id", 0)};
       switch (queued.kind) {
       case Kind::MayorInspection:
@@ -1779,8 +1813,8 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
                                    : TurnOrchestrator::roll_inspection_block();
         break;
       case Kind::MayorAward:
-        queued.award.type =
-            static_cast<MayorAwardType>(ev.at("award_type").get<int>());
+        queued.award.type = checked_enum<MayorAwardType>(ev.at("award_type"),
+                                                         "a mayor's award");
         queued.award.announces_winner = ev.contains("announces_winner") &&
                                         ev.at("announces_winner").get<bool>();
         if (ev.contains("winner_player_id") &&
@@ -1813,8 +1847,7 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
       state.career_log().clear_player_messages(pid);
       std::vector<core::events::CareerLog::CvEntry> entries;
       for (const auto& val : entries_json) {
-        auto id =
-            static_cast<core::events::MilestoneId>(val.at("id").get<int>());
+        auto id = checked_milestone(val.at("id"));
         GameDate date =
             save_date(val.at("y").get<int>(), val.at("m").get<int>(),
                       val.at("d").get<int>());
@@ -2029,6 +2062,46 @@ bool SaveGameManager::add_high_score(HighScoreEntry entry) {
     Logger::warn("High score not saved to {}: {}", display(path), e.what());
     return false;
   }
+}
+
+int SaveGameManager::remove_stale_temp_files(const std::string& settings_file) {
+  return remove_stale_temp_files(
+      {fs::path(platform_paths::saves_dir()),
+       fs::path(settings_file).parent_path(),
+       fs::path(platform_paths::bindings_file_path()).parent_path()},
+      STALE_TEMP_FILE_AGE);
+}
+
+int SaveGameManager::remove_stale_temp_files(
+    const std::vector<fs::path>& folders, std::chrono::seconds min_age) {
+  std::vector<fs::path> done;
+  int removed = 0;
+  for (const fs::path& folder : folders) {
+    // The settings and bindings files usually share a folder; "saves/" and
+    // "saves" are the same one.
+    fs::path where =
+        (folder.empty() ? fs::path(".") : folder).lexically_normal();
+    if (!where.has_filename() && where.has_relative_path()) {
+      where = where.parent_path();
+    }
+    if (std::find(done.begin(), done.end(), where) != done.end()) {
+      continue;
+    }
+    done.push_back(where);
+
+    const util::StaleTempFiles result =
+        util::remove_stale_temp_files(where, min_age);
+    for (const fs::path& file : result.removed) {
+      Logger::info("Removed {}, left by a write that never finished",
+                   display(file));
+      ++removed;
+    }
+    for (const auto& [file, reason] : result.failed) {
+      Logger::warn("Could not clear leftover temporary files at {}: {}",
+                   display(file), reason);
+    }
+  }
+  return removed;
 }
 
 StateFingerprint SaveGameManager::fingerprint(const GameState& state,

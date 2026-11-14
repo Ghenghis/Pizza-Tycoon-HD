@@ -14,8 +14,10 @@
 #include <fstream>
 #include <iostream>
 #include <span>
+#include <string_view>
 #include <sys/stat.h>
 #include <utility>
+#include "core/util/AtomicFile.h"
 #include "engine/Fatal.h"
 #include "engine/Logger.h"
 #include "engine/PlatformPaths.h"
@@ -118,13 +120,14 @@ std::vector<uint8_t> read_bytes(const std::string& file_path) {
 }
 
 bool write_bytes(const std::string& path, std::span<const uint8_t> bytes) {
-  std::ofstream out(path, std::ios::binary);
-  if (!out) {
+  const util::AtomicWriteResult written = util::write_file_atomically(
+      path, std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                             bytes.size()));
+  if (!written) {
+    Logger::warn("Not written: {}", written.error);
     return false;
   }
-  out.write(reinterpret_cast<const char*>(bytes.data()),
-            static_cast<std::streamsize>(bytes.size()));
-  return out.good();
+  return true;
 }
 
 std::vector<std::string> load_text_lines(const std::string& path,

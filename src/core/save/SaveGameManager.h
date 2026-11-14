@@ -7,7 +7,9 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -39,6 +41,10 @@ constexpr std::uint64_t MAX_SAVE_FILE_SIZE = 64ULL * 1024 * 1024;  // on disk
 constexpr std::uint64_t MAX_SAVE_JSON_SIZE = 256ULL * 1024 * 1024; // inflated
 constexpr int MAX_SAVE_JSON_DEPTH = 64; // nested objects/arrays
 constexpr std::uint64_t MAX_SAVE_JSON_VALUES = 16'000'000; // all JSON values
+
+// A temporary file this old belongs to a write that never finished: no save
+// or settings write takes more than a moment.
+constexpr std::chrono::hours STALE_TEMP_FILE_AGE{1};
 
 struct SaveMetadata {
   std::string display_name;
@@ -97,6 +103,17 @@ public:
 
   static StateFingerprint fingerprint(const GameState& state,
                                       const GameContext& context);
+
+  // Removes the temporary files that saves, settings and key bindings writes
+  // cut short by a crash or a power cut left behind: in the saves folder and
+  // the folders of the settings file and the bindings file, older than
+  // STALE_TEMP_FILE_AGE. Logs each file removed. Call once at startup, after
+  // platform_paths::init(). Returns how many it removed.
+  static int remove_stale_temp_files(const std::string& settings_file);
+  // The same for these folders, each looked at once.
+  static int
+  remove_stale_temp_files(const std::vector<std::filesystem::path>& folders,
+                          std::chrono::seconds min_age);
 
 private:
   static json state_to_json(const GameState& state, const GameContext& context);

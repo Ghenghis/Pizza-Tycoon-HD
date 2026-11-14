@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <set>
 #include <span>
@@ -24,6 +23,7 @@
 #include "core/food/Pizza.h"
 #include "core/food/RecipeNode.h"
 #include "core/food/Topping.h"
+#include "core/util/AtomicFile.h"
 #include "core/util/LegacyConstants.h"
 #include "engine/Logger.h"
 #include "engine/Math.h"
@@ -198,21 +198,22 @@ bool save_prez(const core::food::Pizza& pizza,
   const uint32_t checksum = math::sum_bytes(std::as_bytes(std::span{blob}));
   const auto length = static_cast<uint32_t>(n);
 
-  std::ofstream os(path, std::ios::binary);
-  if (!os) {
-    Logger::warn("Unable to create file");
+  // PREZ header, then the blob, written in one step: a failed export leaves
+  // an older recipe file of that name as it was.
+  const uint32_t magic = 0x5A455250u; // 'PREZ' LE
+  std::string bytes;
+  bytes.reserve((3 * sizeof(uint32_t)) + blob.size());
+  bytes.append(reinterpret_cast<const char*>(&magic), sizeof magic);
+  bytes.append(reinterpret_cast<const char*>(&checksum), sizeof checksum);
+  bytes.append(reinterpret_cast<const char*>(&length), sizeof length);
+  bytes.append(blob.begin(), blob.end());
+
+  const util::AtomicWriteResult written =
+      util::write_file_atomically(path, bytes);
+  if (!written) {
+    Logger::warn("Recipe not exported: {}", written.error);
     return false;
   }
-
-  // PREZ header
-  const uint32_t magic = 0x5A455250u; // 'PREZ' LE
-  os.write(reinterpret_cast<const char*>(&magic), sizeof magic);
-  os.write(reinterpret_cast<const char*>(&checksum), sizeof checksum);
-  os.write(reinterpret_cast<const char*>(&length), sizeof length);
-
-  // blob
-  os.write(reinterpret_cast<const char*>(blob.data()), blob.size());
-  os.close();
-  return static_cast<bool>(os);
+  return true;
 }
 }; // namespace io::recipe

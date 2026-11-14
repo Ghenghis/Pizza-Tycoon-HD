@@ -6,11 +6,14 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 namespace util {
 
@@ -103,5 +106,25 @@ struct AtomicWriteResult {
 [[nodiscard]] AtomicWriteResult
 write_file_atomically(const std::filesystem::path& destination,
                       std::string_view contents);
+
+// Whether name is one AtomicFile gives its temporary files: the destination's
+// name, ".tmp-", then twelve lowercase hex digits.
+[[nodiscard]] bool is_temp_file_name(std::string_view name);
+
+struct StaleTempFiles {
+  std::vector<std::filesystem::path> removed;
+  // What matched but could not be removed, or a folder that could not be
+  // read, each with the reason.
+  std::vector<std::pair<std::filesystem::path, std::string>> failed;
+};
+
+// Removes the temporary files that writes cut short by a crash or a power cut
+// left in folder, without looking into its subfolders: regular files, not
+// links, with a temporary file's name, last written at least min_age ago. A
+// younger one may belong to a write still going on, in another copy of the
+// game. A folder that isn't there has nothing to remove.
+[[nodiscard]] StaleTempFiles
+remove_stale_temp_files(const std::filesystem::path& folder,
+                        std::chrono::seconds min_age);
 
 } // namespace util
