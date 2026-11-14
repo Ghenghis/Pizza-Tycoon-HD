@@ -665,8 +665,8 @@ void check_players(const json& j) {
   const json& players =
       check_array(require_member(j, "players"), "players", NUMBER_OF_PLAYERS);
   if (players.size() != NUMBER_OF_PLAYERS) {
-    reject("players has " + std::to_string(players.size()) +
-           " entries, not " + std::to_string(NUMBER_OF_PLAYERS));
+    reject("players has " + std::to_string(players.size()) + " entries, not " +
+           std::to_string(NUMBER_OF_PLAYERS));
   }
   bool computer_seen = false;
   for (std::size_t i = 0; i < players.size(); ++i) {
@@ -1209,6 +1209,12 @@ bool SaveGameManager::load(GameState& state, GameContext& context,
   bool built = false;
   std::string build_error;
   try {
+    // Set up as the live state is, as far as anything set up survives:
+    // json_to_state starts with reset(), which keeps the options (and the
+    // presenters and status hub, which the scratch state has none of) and
+    // empties the rest. What the game's startup adds on top, a player in
+    // every slot (create_placeholder_players), json_to_state requires of the
+    // save itself.
     auto scratch = std::make_unique<GameState>();
     scratch->options() = state.options();
     json_to_state(*document, *scratch, context);
@@ -1671,15 +1677,18 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
     }
   }
 
-  // Load players
-  if (j.contains("players")) {
+  // Load players. reset() above emptied every slot, and a game always has
+  // all of them (see check_players): the start of a city's day below already
+  // walks them without checking.
+  {
     const auto& players_json = j.at("players");
     std::array<std::unique_ptr<Player>, NUMBER_OF_PLAYERS> players;
-    for (size_t i = 0; i < players_json.size() && i < players.size(); ++i) {
-      if (!players_json.at(i).is_null()) {
-        players[i] = json_to_player(players_json.at(i), context,
-                                    state.customer_taste_profiles());
+    for (size_t i = 0; i < players.size(); ++i) {
+      if (i >= players_json.size() || players_json.at(i).is_null()) {
+        throw std::out_of_range("the save has no player " + std::to_string(i));
       }
+      players[i] = json_to_player(players_json.at(i), context,
+                                  state.customer_taste_profiles());
     }
     state.players(std::move(players));
   }
@@ -1763,9 +1772,10 @@ void SaveGameManager::json_to_state(const json& j, GameState& state,
     state.turn().ai_action_flags(
         j.at("city_ai_action_taken").get<TurnOrchestrator::CityDayFlags>());
   }
-  if (j.contains("active_city")) {
-    core::CityId cid{j.at("active_city").get<int>()};
-    // If somehow there is no valid active city, just pick one.
+  {
+    // A game is always in a city. If somehow there is no valid active city,
+    // just pick one.
+    core::CityId cid{j.value("active_city", -1)};
     if (!is_valid_city_id(cid)) {
       cid = state.default_city_id();
       Logger::warn("Save has no active city; falling back to city {}",

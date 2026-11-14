@@ -12,11 +12,15 @@
 // from a hand-made character, and every damaged save is turned away before
 // loading would need the game's files. The ones that load a save for real
 // SKIP without PLEGACY_TEST_GAME_PATH.
+//
+// tests/fixtures/saves/legacy_v1.plsave is made by the hidden "[record]" case
+// at the end, from a real quick start; see there.
 
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
@@ -41,6 +45,7 @@
 #include "core/character/Character.h"
 #include "core/character/Player.h"
 #include "core/city/City.h"
+#include "core/init/NewGameConfig.h"
 #include "core/save/SaveGameManager.h"
 #include "core/state/GameState.h"
 #include "core/time/GameTime.h"
@@ -48,7 +53,18 @@
 #include "core/util/ConfigManager.h"
 #include "core/util/GameContext.h"
 #include "engine/Random.h"
+#include "resources/BobManager.h"
 #include "resources/util/FileUtils.h"
+
+// Only the fixture recorder compresses, as the game does; without zlib's
+// header it skips.
+#if __has_include(<zlib.h>)
+#include <zlib.h>
+// zlib.h defines FAR as a macro for legacy DOS far-pointer compat, which
+// conflicts with our ZoomLevel::FAR
+#undef FAR
+#define PLEGACY_TESTS_HAVE_ZLIB 1
+#endif
 
 namespace fs = std::filesystem;
 using nlohmann::json;
@@ -143,8 +159,9 @@ std::string encode(const RawSave& save) {
   return out;
 }
 
-// A game in progress built without the original game's files: two players
-// sharing a hand-made character, and no city yet.
+// A game in progress built without the original game's files: all eight
+// players, one person and seven computer players, sharing a hand-made
+// character, and no city yet.
 struct LiveGame {
   core::character::CharacterData character{}; // outlives the players
   GameState state;
@@ -152,7 +169,7 @@ struct LiveGame {
 
   LiveGame() {
     std::array<std::unique_ptr<Player>, NUMBER_OF_PLAYERS> players;
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < NUMBER_OF_PLAYERS; ++i) {
       players[i] = std::make_unique<Player>(
           core::PlayerId{i}, core::character::Character(&character), i == 0);
       players[i]->name("Player " + std::to_string(i + 1));
@@ -215,6 +232,13 @@ void require_document_rejected(LiveGame& game, const TempDir& dir,
   require_rejected(game, file, message);
 }
 
+// What tests/fixtures/saves/legacy_v1.plsave holds: a quick start in this
+// city, fingerprinted at 9:00 on its first day, with this person.
+constexpr int legacy_city = 0;
+constexpr int legacy_time_blocks = 9 * 6;
+constexpr std::string_view legacy_player_name = "Legacy Pizza";
+constexpr std::string_view legacy_saved_at = "Sat Mar  4 12:00:00 1995";
+
 // A file under tests/fixtures/saves, found from the source tree or the build.
 fs::path fixture(std::string_view name) {
   const fs::path beside_source =
@@ -244,6 +268,15 @@ void swap_rent_and_sale(json& document) {
       }
     }
   }
+}
+
+// The save as save format 1 wrote it: version 1, the premise statuses
+// numbered the old way, and (in the file) header version 1 with no metadata
+// block. Loading it migrates it back.
+json downgrade_to_v1(json document) {
+  document["version"] = 1;
+  swap_rent_and_sale(document);
+  return document;
 }
 
 // A new free game in city 0 with eight players, which needs the original
@@ -808,15 +841,35 @@ TEST_CASE("IDs out of range and broken references are turned away",
 
   SECTION("the active player is not there") {
     require_document_rejected(game, dir,
-                              with([](json& d) { d["active_player"] = 2; }));
-    require_document_rejected(game, dir,
                               with([](json& d) { d["active_player"] = 8; }));
     require_document_rejected(game, dir,
                               with([](json& d) { d["active_player"] = -1; }));
   }
-  SECTION("more players than the game has") {
+  // A game always has all its players, the people first; the start of a
+  // city's day walks them without checking.
+  SECTION("more or fewer players than the game has") {
     require_document_rejected(
         game, dir, with([](json& d) { d["players"].push_back(nullptr); }));
+    require_document_rejected(game, dir,
+                              with([](json& d) { d["players"].erase(7); }));
+  }
+  SECTION("an empty player slot") {
+    require_document_rejected(game, dir,
+                              with([](json& d) { d["players"][2] = nullptr; }));
+    require_document_rejected(game, dir,
+                              with([](json& d) { d["players"][0] = nullptr; }));
+  }
+  SECTION("a person after a computer player, or no person at all") {
+    require_document_rejected(game, dir, with([](json& d) {
+                                d["players"][3]["human_controlled"] = true;
+                              }));
+    require_document_rejected(game, dir, with([](json& d) {
+                                d["players"][0]["human_controlled"] = false;
+                              }));
+  }
+  SECTION("no city the game is in") {
+    require_document_rejected(game, dir,
+                              with([](json& d) { d.erase("active_city"); }));
   }
   SECTION("a player out of place") {
     require_document_rejected(game, dir,
@@ -940,16 +993,19 @@ TEST_CASE("A legacy save still reads", "[save][legacy]") {
   const fs::path legacy = fixture("legacy_v1.plsave");
   REQUIRE(fs::exists(legacy));
 
-  // legacy_v1.plsave is header version 1 (no metadata block) holding save
-  // format 1: one player, "Legacy Pizza", and city 0 with premise 0 at the
-  // version 1 status 1, for rent.
+  // A quick start in city 0 at 9:00 on its first day, with "Legacy Pizza" the
+  // one person, written as save format 1 (see the recorder at the end). With
+  // header version 1 there is no metadata block, so this reads the details
+  // from the game data.
   CHECK(SaveGameManager::is_valid_save(legacy.string()));
   CHECK(SaveGameManager::get_save_version(legacy.string()) == 1);
   const auto meta = SaveGameManager::read_save_metadata(legacy.string());
   REQUIRE(meta);
-  CHECK(meta->saved_at == "Sat Mar  4 12:00:00 1995");
-  CHECK(meta->game_date == "1-Jan-1995 9:00");
-  CHECK(meta->player_names[0] == "Legacy Pizza");
+  CHECK(meta->saved_at == legacy_saved_at);
+  GameTime start_of_day;
+  start_of_day.time_blocks(legacy_time_blocks);
+  CHECK(meta->game_date == start_of_day.to_string());
+  CHECK(meta->player_names[0] == legacy_player_name);
   CHECK(meta->active_player == 0);
   CHECK(meta->active_city == 0);
 
@@ -1002,10 +1058,8 @@ TEST_CASE("A save loads back to the same game", "[save][game]") {
 
   // The same game written in the version 1 layout loads to the same state:
   // the premise statuses are numbered back.
-  json legacy = before.document;
-  legacy["version"] = 1;
+  json legacy = downgrade_to_v1(before.document);
   legacy["saved_at"] = "test";
-  swap_rent_and_sale(legacy);
   const fs::path legacy_file = dir.path() / "legacy.plsave";
   write_file(legacy_file,
              encode(RawSave{.game_data = legacy.dump(), .header_version = 1}));
@@ -1027,10 +1081,13 @@ TEST_CASE("The legacy fixture loads into a game", "[save][legacy][game]") {
   REQUIRE(SaveGameManager::load(state, context,
                                 fixture("legacy_v1.plsave").string(), &error));
   CHECK(error.empty());
+  for (const Player* player : state.players()) {
+    CHECK(player != nullptr);
+  }
   REQUIRE(state.active_player() != nullptr);
-  CHECK(state.active_player()->name() == "Legacy Pizza");
-  CHECK(state.time().time_blocks() == 54);
-  CHECK(state.active_city_id() == core::CityId{0});
+  CHECK(state.active_player()->name() == legacy_player_name);
+  CHECK(state.time().time_blocks() == legacy_time_blocks);
+  CHECK(state.active_city_id() == core::CityId{legacy_city});
 }
 
 TEST_CASE("A load that is turned away keeps a real game as it was",
@@ -1063,4 +1120,93 @@ TEST_CASE("A load that is turned away keeps a real game as it was",
   CHECK(error == damaged);
   require_same_game(before, SaveGameManager::fingerprint(state, context));
   CHECK(state.ui().size() == ui_depth);
+}
+
+// Records tests/fixtures/saves/legacy_v1.plsave. It is a real quick start, so
+// that the fixture has everything a save has, written the way save format 1
+// wrote it: downgrade_to_v1, then header version 1 without a metadata block
+// and the game data compressed as the game compresses it. Before writing, it
+// checks the file loads back to the same game.
+//
+// Hidden, and it writes only when asked. With the original game, run
+//   PLEGACY_UPDATE_FIXTURES=1 test_plegacy "[record]"
+// with PLEGACY_TEST_GAME_PATH set, then commit the fixture. Recording again
+// gives a different file only if the quick start itself changed.
+TEST_CASE("Record the legacy save fixture", "[.][record][legacy]") {
+  const char* update = std::getenv("PLEGACY_UPDATE_FIXTURES");
+  if (!update || std::string_view(update) != "1") {
+    SKIP("Set PLEGACY_UPDATE_FIXTURES=1 to write legacy_v1.plsave");
+  }
+  const auto game_path = test_support::game_path();
+  if (!game_path) {
+    SKIP("Set PLEGACY_TEST_GAME_PATH to the folder with PT.EXE");
+  }
+#if defined(PLEGACY_TESTS_HAVE_ZLIB)
+  fileutils::game_data_path(game_path->string());
+
+  // The quick start loads standard pizzas, which needs the sprite sizes.
+  BobManager bobs{BobLoader{}};
+  GameContext context;
+  context.bob = &bobs;
+  GameState state;
+  engine::random::seed(19950304);
+  state.options().autosave_frequency = AutosaveFrequency::Off;
+  state.begin_initialization();
+  auto& config = state.initializer();
+  config.mode = GameMode::QUICKSTART;
+  config.size = init::RestaurantSize::BIG;
+  config.difficulty = init::DifficultyLevel::NORMAL;
+  config.city_id = core::CityId{legacy_city};
+  config.players.resize(NUMBER_OF_PLAYERS);
+  for (int i = 0; i < NUMBER_OF_PLAYERS; ++i) {
+    config.players[i].name = i == 0 ? std::string(legacy_player_name)
+                                    : "Player " + std::to_string(i + 1);
+    config.players[i].character_id = i;
+    config.players[i].is_human = (i == 0);
+  }
+  state.finalize_initialization(context);
+  REQUIRE(state.time().time_blocks() == legacy_time_blocks);
+
+  const save::StateFingerprint quick_start =
+      SaveGameManager::fingerprint(state, context);
+  json legacy = downgrade_to_v1(quick_start.document);
+  legacy["saved_at"] = legacy_saved_at;
+  const std::string game_data = legacy.dump();
+
+  uLongf packed_size = compressBound(static_cast<uLong>(game_data.size()));
+  std::string packed(packed_size, '\0');
+  REQUIRE(compress2(reinterpret_cast<Bytef*>(packed.data()), &packed_size,
+                    reinterpret_cast<const Bytef*>(game_data.data()),
+                    static_cast<uLong>(game_data.size()),
+                    Z_DEFAULT_COMPRESSION) == Z_OK);
+  packed.resize(packed_size);
+  std::string bytes = "PLSAVE";
+  put_le(bytes, 1, 2);
+  put_le(bytes, game_data.size(), 8);
+  bytes += packed;
+
+  // Only a file that loads back to the same game is worth keeping.
+  TempDir dir;
+  const fs::path check = dir.path() / "legacy_v1.plsave";
+  write_file(check, bytes);
+  CHECK(SaveGameManager::get_save_version(check.string()) == 1);
+  GameState loaded;
+  std::string error;
+  REQUIRE(SaveGameManager::load(loaded, context, check.string(), &error));
+  const save::StateFingerprint reloaded =
+      SaveGameManager::fingerprint(loaded, context);
+  require_same_game(quick_start, reloaded);
+  REQUIRE(reloaded.hash == quick_start.hash);
+
+  const fs::path target = fs::path(__FILE__).parent_path() / "fixtures" /
+                          "saves" / "legacy_v1.plsave";
+  const util::AtomicWriteResult written =
+      util::write_file_atomically(target, bytes);
+  INFO(written.error);
+  REQUIRE(written);
+  WARN("Wrote " << target.string() << " (" << bytes.size()
+                << " bytes); commit it");
+#else
+  SKIP("Recording the fixture needs zlib.h");
+#endif
 }
