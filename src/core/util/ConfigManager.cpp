@@ -130,6 +130,9 @@ const auto option_defs = std::to_array({
     enum_option<&GameOptions::render_fps, &fps_option_from_config_value>(
         "render_fps", {}, "30, 60 or 120"),
     bool_option<&GameOptions::vsync>("vsync"),
+    bool_option<&GameOptions::smooth_motion>(
+        "smooth_motion", {},
+        "Walking characters glide between steps instead of jumping"),
     bool_option<&GameOptions::software_cursor>("software_cursor"),
     enum_option<&GameOptions::smoothing, &smoothing_from_config_value>(
         "smoothing", {},

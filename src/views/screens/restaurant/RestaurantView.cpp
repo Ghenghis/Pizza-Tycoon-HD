@@ -623,6 +623,10 @@ void RestaurantView::advance(uint32_t dt_ms) {
   if (attack_.active()) {
     attack_.advance(dt_ms);
   }
+  else if (state_.options().smooth_motion && walk_scene_.in_motion()) {
+    // Redraw every frame, not only on steps, so the walker glides.
+    mark_dirty();
+  }
 }
 
 void RestaurantView::tick() {

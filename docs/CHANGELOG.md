@@ -9,6 +9,13 @@ Unreleased
   `PLEGACY_CPU_COMPOSE=1` keeps the CPU path as a fallback.
 * Fix: semi-transparent HD texels were blended twice on all but the first
   texel row of each pixel, so soft sprite edges came out too strong.
+* Smooth motion (option `smooth_motion`, on by default; also in the options
+  menu): walking guests and waiters glide between steps at the screen's
+  frame rate instead of jumping 12 pixels four times a second. Only the
+  drawing changes: the full game-state fingerprint after 2,000 ticks is
+  byte-for-byte the same with it on and off.
+* Fix: `GameState::game_mode_` was left uninitialized until a game was set
+  up, which made state fingerprints differ between identical runs.
 * `bench [frames]` console command: frame times of the current screen,
   worst case (everything redrawn every frame).
 * `--exec` batch runs keep their window hidden.

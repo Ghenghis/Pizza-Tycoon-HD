@@ -13,6 +13,9 @@ struct GameClock {
   uint64_t now_ms{0}; // monotonic game time in ms
   uint32_t dt_ms{0};  // last frame's delta in ms (clamped)
   uint64_t frame{0};  // frame index
+  // How far the next simulation tick is along, 0..1, for drawing things
+  // between their last two positions (smooth motion). Set before drawing.
+  float tick_alpha{0.0f};
 
   // Tunables
   uint32_t max_dt_ms{50}; // clamp for tab-outs / breakpoints

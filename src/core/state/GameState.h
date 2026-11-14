@@ -563,7 +563,7 @@ private:
   InterruptionPhase interruption_phase_{InterruptionPhase::QueuedEvents};
   int pending_screen_charge_blocks_{0};
   std::optional<core::RestaurantId> active_restaurant_;
-  GameMode game_mode_;
+  GameMode game_mode_{GameMode::FREEMODE};
   std::optional<core::mission::MissionTarget> mission_target_;
   std::optional<init::Config> initializer_;
   int difficulty_level_{1};

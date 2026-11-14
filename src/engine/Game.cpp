@@ -597,6 +597,10 @@ int Game::run() {
     if (tick_accumulator_ms >= simulation_tick_ms) {
       tick_accumulator_ms = 0;
     }
+    context.clock.tick_alpha = view_frozen()
+                                   ? 0.0f
+                                   : static_cast<float>(tick_accumulator_ms) /
+                                         static_cast<float>(simulation_tick_ms);
 
     if (loop_state.screenshot_requested) {
       renderer.with_current_frame([](SDL_Surface* surface) {

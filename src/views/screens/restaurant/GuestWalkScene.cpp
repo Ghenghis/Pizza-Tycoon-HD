@@ -6,7 +6,9 @@
 
 #include "views/screens/restaurant/GuestWalkScene.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -94,6 +96,7 @@ void GuestWalkScene::walking_tick() {
     return;
   }
   walker.anim_tick = 0;
+  walker.previous = walker.position;
 
   while (walker.path_index >= static_cast<int>(walker.path.size())) {
     if (!advance_leg(walker)) {
@@ -452,6 +455,30 @@ void GuestWalkScene::render_debug_full_grid() {
 }
 #endif
 
+bool GuestWalkScene::in_motion() const {
+  return walking_guest_ && walking_guest_->previous &&
+         *walking_guest_->previous != walking_guest_->position;
+}
+
+WorldPoint GuestWalkScene::drawn_position(const WalkingGuest& walker) const {
+  if (!state_.options().smooth_motion || !walker.previous) {
+    return walker.position;
+  }
+  // anim_tick counts the ticks since the last step; the step after next
+  // happens at WALKER_MOVE_INTERVAL, so this reaches the current position
+  // exactly when the walker would take its next step.
+  const float t = std::clamp(
+      (static_cast<float>(walker.anim_tick) + context_.clock.tick_alpha) /
+          static_cast<float>(WALKER_MOVE_INTERVAL),
+      0.0f, 1.0f);
+  const WorldPoint from = *walker.previous;
+  auto lerp = [t](int a, int b) {
+    return a + static_cast<int>(std::lround(static_cast<float>(b - a) * t));
+  };
+  return WorldPoint{lerp(from.x, walker.position.x),
+                    lerp(from.y, walker.position.y)};
+}
+
 void GuestWalkScene::render_walking_guest() {
   if (!walking_guest_ || view_.kitchen_view_) {
     return;
@@ -461,8 +488,9 @@ void GuestWalkScene::render_walking_guest() {
   const auto& guest_bob =
       context_.bob->get(compat::format("bob/walk{}.bob", walker.guest_type));
   const int frame = walk_frame_for(walker.direction, walker.walk_cycle);
-  const ViewPoint blit_pos{walker.position.x - walker.sprite_blit_offset_x,
-                           walker.position.y - walker.sprite_blit_offset_y};
+  const WorldPoint at = drawn_position(walker);
+  const ViewPoint blit_pos{at.x - walker.sprite_blit_offset_x,
+                           at.y - walker.sprite_blit_offset_y};
 
   const WorldRect sprite_rect{
       blit_pos.x, blit_pos.y, guest_bob.width(static_cast<std::size_t>(frame)),

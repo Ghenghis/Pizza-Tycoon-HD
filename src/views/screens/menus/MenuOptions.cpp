@@ -215,6 +215,15 @@ void MenuOptions::build_graphics(GameState& state) {
                     }))
       .help_text("Synchronize drawing with the screen's refresh rate to prevent"
                  " tearing.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Smooth motion", state.options().smooth_motion,
+                    [&state, this] {
+                      state.options().smooth_motion =
+                          !state.options().smooth_motion;
+                      mark_dirty();
+                    }))
+      .help_text("Walking guests and waiters glide from step to step instead "
+                 "of jumping. Only the picture changes, not the game.");
   add_menu_item(std::make_unique<EnumMenuItem<Smoothing>>(
                     context_, "Smoothing", state.options().smoothing,
                     std::vector{Smoothing::Off, Smoothing::Text,

@@ -36,6 +36,9 @@ struct WalkingGuest {
   enum class Phase { SCRIPTED_IN, NAVIGATING, SCRIPTED_OUT };
 
   WorldPoint position;
+  // Where the walker stood before its last step, for drawing it on the way
+  // (smooth motion); unset until it first moves.
+  std::optional<WorldPoint> previous;
   Orientation direction{Orientation::N};
   WalkerKind kind{WalkerKind::GUEST};
   Phase phase{Phase::SCRIPTED_IN};
@@ -81,6 +84,10 @@ public:
   // Draw the walker (and walk debug overlays) onto the view background.
   void render();
 
+  // True while a walker is between two cells, so the view redraws every
+  // frame to show it gliding.
+  [[nodiscard]] bool in_motion() const;
+
   // Drop the walking guest or waiter.
   void reset() { walking_guest_.reset(); }
 
@@ -117,6 +124,9 @@ private:
   const PlacedFurniture* get_guest_destination_chair();
   const PlacedFurniture* find_unserved_guest_chair();
   void render_walking_guest();
+  // Where to draw the walker: its position, or on the way from its previous
+  // one when smooth motion is on.
+  [[nodiscard]] WorldPoint drawn_position(const WalkingGuest& walker) const;
 #ifndef NDEBUG
   void render_debug_full_grid();
 #endif

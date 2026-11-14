@@ -353,6 +353,9 @@ static const OptionDef option_defs[] = {
      .member = &GameOptions::render_fps,
      .description = "30, 60 or 120; the simulation stays at 30Hz"},
     {.name = "vsync", .member = &GameOptions::vsync, .description = "Vsync"},
+    {.name = "smooth_motion",
+     .member = &GameOptions::smooth_motion,
+     .description = "Walking characters glide between steps"},
     {.name = "software_cursor",
      .member = &GameOptions::software_cursor,
      .description = "Draw the cursor rather than letting the system do it",
@@ -395,28 +398,28 @@ static std::string option_value(const GameOptions& options,
                                 const GameRules& rules,
                                 const OptionDef& option) {
   return std::visit(
-      overloaded{[&](bool GameRules::* member) -> std::string {
+      overloaded{[&](bool GameRules::*member) -> std::string {
                    return rules.*member ? "on" : "off";
                  },
-                 [&](WinCondition GameRules::* member) -> std::string {
+                 [&](WinCondition GameRules::*member) -> std::string {
                    return std::string(to_config_value(rules.*member));
                  },
-                 [&](PizzaJudging GameRules::* member) -> std::string {
+                 [&](PizzaJudging GameRules::*member) -> std::string {
                    return std::string(to_config_value(rules.*member));
                  },
-                 [&](bool GameOptions::* member) -> std::string {
+                 [&](bool GameOptions::*member) -> std::string {
                    return options.*member ? "on" : "off";
                  },
-                 [&](int GameOptions::* member) -> std::string {
+                 [&](int GameOptions::*member) -> std::string {
                    return std::to_string(options.*member);
                  },
-                 [&](float GameOptions::* member) -> std::string {
+                 [&](float GameOptions::*member) -> std::string {
                    return compat::format("{:.2f}", options.*member);
                  },
-                 [&](FpsOption GameOptions::* member) -> std::string {
+                 [&](FpsOption GameOptions::*member) -> std::string {
                    return std::string(to_config_value(options.*member));
                  },
-                 [&](AutosaveFrequency GameOptions::* member) -> std::string {
+                 [&](AutosaveFrequency GameOptions::*member) -> std::string {
                    return std::string(to_config_value(options.*member));
                  }},
       option.member);
@@ -445,9 +448,9 @@ static std::optional<std::string> set_option(GameOptions& options,
   };
   std::visit(
       overloaded{
-          [&](bool GameOptions::* member) { parse_bool(options.*member); },
-          [&](bool GameRules::* member) { parse_bool(rules.*member); },
-          [&](int GameOptions::* member) {
+          [&](bool GameOptions::*member) { parse_bool(options.*member); },
+          [&](bool GameRules::*member) { parse_bool(rules.*member); },
+          [&](int GameOptions::*member) {
             int parsed = 0;
             auto [ptr, ec] = std::from_chars(
                 value.data(), value.data() + value.size(), parsed);
@@ -461,7 +464,7 @@ static std::optional<std::string> set_option(GameOptions& options,
               options.*member = parsed;
             }
           },
-          [&](float GameOptions::* member) {
+          [&](float GameOptions::*member) {
             try {
               size_t consumed = 0;
               float parsed = std::stof(value, &consumed);
@@ -479,7 +482,7 @@ static std::optional<std::string> set_option(GameOptions& options,
               failure = compat::format("Expected a number, got '{}'", value);
             }
           },
-          [&](WinCondition GameRules::* member) {
+          [&](WinCondition GameRules::*member) {
             if (auto parsed = win_condition_from_config_value(value)) {
               rules.*member = *parsed;
             }
@@ -488,7 +491,7 @@ static std::optional<std::string> set_option(GameOptions& options,
                   "Expected paris, any_city or all_cities, got '{}'", value);
             }
           },
-          [&](PizzaJudging GameRules::* member) {
+          [&](PizzaJudging GameRules::*member) {
             if (auto parsed = pizza_judging_from_config_value(value)) {
               rules.*member = *parsed;
             }
@@ -497,7 +500,7 @@ static std::optional<std::string> set_option(GameOptions& options,
                                        value);
             }
           },
-          [&](FpsOption GameOptions::* member) {
+          [&](FpsOption GameOptions::*member) {
             if (auto parsed = fps_option_from_config_value(value)) {
               options.*member = *parsed;
             }
@@ -506,7 +509,7 @@ static std::optional<std::string> set_option(GameOptions& options,
                   compat::format("Expected 30, 60 or 120, got '{}'", value);
             }
           },
-          [&](AutosaveFrequency GameOptions::* member) {
+          [&](AutosaveFrequency GameOptions::*member) {
             if (auto parsed = autosave_frequency_from_config_value(value)) {
               options.*member = *parsed;
             }

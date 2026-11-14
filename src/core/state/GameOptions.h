@@ -183,6 +183,9 @@ struct GameOptions {
   int hd_scale = 1;
   std::string hd_pack;
   FpsOption render_fps = FpsOption::Fps60;
+  // Draw walking characters gliding between steps instead of jumping a whole
+  // step at a time. Only the drawing changes, never the game.
+  bool smooth_motion = true;
   bool vsync = true;
 
   bool load_list_sort_by_date = true;
