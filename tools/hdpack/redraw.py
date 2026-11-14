@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import sys
 import tempfile
 import time
@@ -151,7 +152,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("maps", help="folder from depthmaps.py (has depth/)")
     p.add_argument("out")
     p.add_argument("--server", default="http://127.0.0.1:8188")
-    p.add_argument("--item", nargs=2, action="append", required=True, metavar=("FILE", "DESCRIPTION"))
+    p.add_argument("--item", nargs=2, action="append", default=[], metavar=("FILE", "DESCRIPTION"))
+    p.add_argument(
+        "--items-json",
+        help='list of {"file", "description", "seed"}; frames of one object share a seed so its views match',
+    )
+    p.add_argument("--sheet-limit", type=int, default=12, help="rows on the comparison sheet")
+    p.add_argument("--skip-done", action="store_true", help="skip files already in <out>/<denoise>/")
     p.add_argument("--denoise", type=float, nargs="+", default=[0.55, 0.7])
     p.add_argument("--control-strength", type=float, default=0.85)
     p.add_argument("--checkpoint", default="juggernautXL_v9.safetensors")
@@ -160,10 +167,18 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     pack, maps, out = Path(args.pack), Path(args.maps), Path(args.out)
+    items: list[tuple[str, str, int]] = [(f, d, args.seed + n) for n, (f, d) in enumerate(args.item)]
+    if args.items_json:
+        for e in json.loads(Path(args.items_json).read_text(encoding="utf-8")):
+            items.append((e["file"], e["description"], int(e.get("seed", args.seed))))
+    if not items:
+        p.error("give --item or --items-json")
     client = hdpack.ComfyClient(args.server, timeout=60)
     rows: list[tuple[str, list[Image.Image]]] = []
     with tempfile.TemporaryDirectory() as tmp:
-        for n, (rel, description) in enumerate(args.item):
+        for n, (rel, description, seed) in enumerate(items):
+            if args.skip_done and all((out / f"{d:.2f}" / rel).exists() for d in args.denoise):
+                continue
             with Image.open(pack / rel) as im:
                 sprite = im.convert("RGBA")
             with Image.open(maps / "depth" / rel) as dm:
@@ -185,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
                     "negative": NEGATIVE,
                     "input_image": in_name,
                     "depth_image": depth_name,
-                    "seed": args.seed + n,
+                    "seed": seed,
                     "denoise": denoise,
                     "control_strength": args.control_strength,
                 }
@@ -197,10 +212,11 @@ def main(argv: list[str] | None = None) -> int:
                 result.save(target)
                 pics.append(result)
                 print(
-                    f"[{n + 1}/{len(args.item)}] {rel} denoise {denoise} in {time.monotonic() - started:.1f}s",
+                    f"[{n + 1}/{len(items)}] {rel} denoise {denoise} in {time.monotonic() - started:.1f}s",
                     flush=True,
                 )
-            rows.append((f"{rel}: {description}", pics))
+            if len(rows) < args.sheet_limit:
+                rows.append((f"{rel}: {description}", pics))
     sheet(rows, ["current (pixel-art scaler)"] + [f"redraw, denoise {d}" for d in args.denoise], out / "sheet.png")
     print(f"sheet: {out / 'sheet.png'}")
     return 0
