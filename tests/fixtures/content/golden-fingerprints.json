@@ -1,15 +1,123 @@
 {
-  "format": "pthd.content-golden",
   "about": "Expected Expanded fingerprints per checkpoint and platform, written by tests/ContentGoldenTests.cpp from the run of data/review/north-pole-slice.exec. Record only with PLEGACY_UPDATE_GOLDEN=1 on the reference build; never edit by hand. Separate from the Classic golden file.",
   "checkpoints": {
-    "first-week/day-1": {},
-    "first-week/day-2": {},
-    "first-week/day-3": {},
-    "first-week/day-4": {},
-    "first-week/day-5": {},
-    "first-week/day-6": {},
-    "first-week/day-7": {},
-    "first-week/reloaded": {},
-    "first-week/started": {}
-  }
+    "first-week/day-1": {
+      "linux-gcc-x64": {
+        "cash_cents": 56930,
+        "cities_built": 1,
+        "date": "1995-03-02",
+        "fingerprint": "588aae93dd060107",
+        "pizzas_sold": 0,
+        "restaurants": 9,
+        "revenue_cents": 0,
+        "rng_state": 278175901,
+        "time_blocks": 198
+      }
+    },
+    "first-week/day-2": {
+      "linux-gcc-x64": {
+        "cash_cents": 56930,
+        "cities_built": 1,
+        "date": "1995-03-03",
+        "fingerprint": "8204c0267f7e9494",
+        "pizzas_sold": 0,
+        "restaurants": 9,
+        "revenue_cents": 0,
+        "rng_state": 2628703790,
+        "time_blocks": 342
+      }
+    },
+    "first-week/day-3": {
+      "linux-gcc-x64": {
+        "cash_cents": 72130,
+        "cities_built": 1,
+        "date": "1995-03-04",
+        "fingerprint": "6afc8b5f566d6302",
+        "pizzas_sold": 19,
+        "restaurants": 11,
+        "revenue_cents": 15200,
+        "rng_state": 846223831,
+        "time_blocks": 486
+      }
+    },
+    "first-week/day-4": {
+      "linux-gcc-x64": {
+        "cash_cents": 91330,
+        "cities_built": 1,
+        "date": "1995-03-05",
+        "fingerprint": "1117ae116e2df767",
+        "pizzas_sold": 43,
+        "restaurants": 12,
+        "revenue_cents": 34400,
+        "rng_state": 3204649368,
+        "time_blocks": 630
+      }
+    },
+    "first-week/day-5": {
+      "linux-gcc-x64": {
+        "cash_cents": 92130,
+        "cities_built": 1,
+        "date": "1995-03-06",
+        "fingerprint": "ee1a6f9274565bae",
+        "pizzas_sold": 44,
+        "restaurants": 12,
+        "revenue_cents": 35200,
+        "rng_state": 2733725757,
+        "time_blocks": 774
+      }
+    },
+    "first-week/day-6": {
+      "linux-gcc-x64": {
+        "cash_cents": 92930,
+        "cities_built": 1,
+        "date": "1995-03-07",
+        "fingerprint": "399a0a1fc4625578",
+        "pizzas_sold": 45,
+        "restaurants": 12,
+        "revenue_cents": 36000,
+        "rng_state": 1632209074,
+        "time_blocks": 918
+      }
+    },
+    "first-week/day-7": {
+      "linux-gcc-x64": {
+        "cash_cents": 13930,
+        "cities_built": 1,
+        "date": "1995-03-08",
+        "fingerprint": "7b91ff4a4dfe3604",
+        "pizzas_sold": 45,
+        "restaurants": 12,
+        "revenue_cents": 36000,
+        "rng_state": 3427336880,
+        "time_blocks": 1062
+      }
+    },
+    "first-week/reloaded": {
+      "linux-gcc-x64": {
+        "cash_cents": 13930,
+        "cities_built": 1,
+        "date": "1995-03-08",
+        "fingerprint": "7b91ff4a4dfe3604",
+        "pizzas_sold": 45,
+        "restaurants": 12,
+        "revenue_cents": 36000,
+        "rng_state": 3427336880,
+        "time_blocks": 1062
+      }
+    },
+    "first-week/started": {
+      "linux-gcc-x64": {
+        "cash_cents": 56930,
+        "cities_built": 1,
+        "date": "1995-03-01",
+        "fingerprint": "6c2b67dec092a9b1",
+        "pizzas_sold": 0,
+        "restaurants": 8,
+        "revenue_cents": 0,
+        "rng_state": 3326231648,
+        "time_blocks": 86
+      }
+    }
+  },
+  "format": "pthd.content-golden"
 }
