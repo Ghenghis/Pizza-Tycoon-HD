@@ -145,6 +145,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/factories/ActorViewFactory.cpp
     src/views/factories/ViewFactory.cpp
     src/views/hd/CityMapHd.cpp
+    src/views/hd/LocationArt.cpp
     src/views/hd/HdRestore.cpp
     src/views/hd/MediumMapHd.cpp
     src/views/hd/WaterCycleHd.cpp
@@ -776,6 +777,7 @@ set(PLEGACY_HEADERS
     src/views/factories/ViewFactory.h
     src/views/hd/BackgroundJob.h
     src/views/hd/CityMapHd.h
+    src/views/hd/LocationArt.h
     src/views/hd/HdRestore.h
     src/views/hd/MediumMapHd.h
     src/views/hd/PictureCache.h

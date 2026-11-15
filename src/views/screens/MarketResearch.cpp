@@ -23,6 +23,7 @@
 #include "resources/BlitmapManager.h"
 #include "resources/Upscaling.h"
 #include "views/base/ViewDefs.h"
+#include "views/hd/LocationArt.h"
 #include "views/ui/PageDecoration.h"
 
 #include <algorithm>
@@ -108,7 +109,9 @@ void MarketResearch::render_bar_chart(
   constexpr int icon_size =
       LegacyConstants::BASE_MAP_TILE_WIDTH * BASE_MAP_ZOOM_MULTIPLIER;
 
-  const auto& landsym = context_.vga->get("gfx/landsym");
+  const auto& landsym = views::hd::city_atlas(*context_.vga, state_.roster(),
+                                              state_.active_city_id(),
+                                              views::hd::CityAtlas::Tiles);
   const auto players = state_.players();
 
   for (int i = 0; i < NUMBER_OF_PLAYERS; ++i) {

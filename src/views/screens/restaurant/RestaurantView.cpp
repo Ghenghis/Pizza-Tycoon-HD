@@ -43,6 +43,7 @@
 #include "engine/ui/InteractionEvent.h"
 #include "views/base/BobRenderer.h"
 #include "views/base/ViewDefs.h"
+#include "views/hd/LocationArt.h"
 #include "views/screens/city_view/ZoomConfig.h"
 #include "views/screens/restaurant/GuestPicker.h"
 #include "views/screens/restaurant/RestaurantStats.h"
@@ -59,12 +60,30 @@ using namespace views::base;
 using namespace views::screens::restaurant;
 using namespace LegacyConstants;
 
+namespace {
+
+// A floor or wall picture for this restaurant: its location's (and
+// district's) when the HD pack has one, else the 1994 picture
+// (views/hd/LocationArt.h). The 1994 picture for a Classic city.
+const Surface& interior_art(GameContext& context, const GameState& state,
+                            const Restaurant& restaurant,
+                            std::string_view key) {
+  const Property& premise = restaurant.property();
+  return views::hd::interior_picture(*context.vga, state.roster(),
+                                     premise.city().id(),
+                                     premise.district().index().value, key);
+}
+
+} // namespace
+
 static constexpr int screen_charge_blocks = 1;
 static constexpr int staff_screen_charge_blocks = 2;
 
 RestaurantView::RestaurantView(GameContext& context, GameState& state,
                                RestaurantViewState r_state)
-    : MainPanelView(context, state), k0_(context_.vga->get("gfx/k0")),
+    : MainPanelView(context, state),
+      k0_(interior_art(context, state, *state.restaurant(r_state.id),
+                       "gfx/k0")),
       furniture_renderer_(BobRenderer("bob/moebel.bob", context_.bob)),
       oven_renderer_(BobRenderer("bob/kuebobs.bob", context_.bob)),
       pizza_bob_(context_.bob->get("bob/moebel.bob")),
@@ -985,7 +1004,8 @@ void RestaurantView::draw_floor_tiles(ViewRect interior) {
   const auto pattern = restaurant_->layout()->floor_pattern();
   const std::string k_filename =
       compat::format("gfx/k{}", pattern.vendor_id + 1);
-  const Surface& pattern_sheet = context_.vga->get(k_filename);
+  const Surface& pattern_sheet =
+      interior_art(context_, state_, *restaurant_, k_filename);
 
   auto blit_tile = [this](const Surface& src, const ViewRect& src_rect, int x,
                           int y) {
@@ -1414,7 +1434,8 @@ void RestaurantView::render_top_wall_and_floor() {
   const auto pattern = restaurant_->layout()->floor_pattern();
   const std::string k_filename =
       compat::format("gfx/k{}", pattern.vendor_id + 1);
-  const auto& floor_surface = context_.vga->get(k_filename);
+  const auto& floor_surface =
+      interior_art(context_, state_, *restaurant_, k_filename);
 
   // World coordinates: walls start at (0, 0), interior at (tile_w, tile_h)
 

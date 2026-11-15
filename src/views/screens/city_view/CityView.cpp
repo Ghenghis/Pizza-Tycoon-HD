@@ -51,6 +51,7 @@
 #include "engine/ui/ICursorManager.h"
 #include "views/base/ViewDefs.h"
 #include "views/hd/CityMapHd.h"
+#include "views/hd/LocationArt.h"
 #include "views/hd/MediumMapHd.h"
 #include "views/hd/WaterCycleHd.h"
 #include "views/screens/StatusDisplay.h"
@@ -113,9 +114,12 @@ static constexpr int side_menu_charge_blocks = 1;
 
 CityView::CityView(GameContext& context, GameState& state, core::CityId id)
     : MainPanelView(context, state),
-      tiles_medium_(context_.vga->get("gfx/med1")), zoom_(ZoomLevel::FAR),
-      zoom_selector_(false), show_cell_borders_(false), show_cell_type_(false),
-      stanbobs_(context_.bob->get("bob/stanbobs.bob")),
+      // The city's own atlases (views/hd/LocationArt.h); the 1994 ones for
+      // a Classic city.
+      tiles_medium_(views::hd::city_atlas(*context_.vga, state.roster(), id,
+                                          views::hd::CityAtlas::Medium)),
+      zoom_(ZoomLevel::FAR), zoom_selector_(false), show_cell_borders_(false),
+      show_cell_type_(false), stanbobs_(context_.bob->get("bob/stanbobs.bob")),
       zoom_box_far_(create_zoom_box_cursor(
           ZOOM_BOX_WIDTH_FAR, ZOOM_BOX_HEIGHT_FAR, ZOOM_BOX_BORDER_WIDTH)),
       zoom_box_medium_(create_zoom_box_cursor(ZOOM_BOX_WIDTH_MEDIUM,
@@ -915,7 +919,8 @@ void CityView::render_map_zoom_close(const RenderContext& ctx) {
   const int tiles_x = (visible.w / tile_w) + 2;
   const int tiles_y = (visible.h / tile_h) + 2;
 
-  const auto& landsym = context_.vga->get("gfx/landsym");
+  const auto& landsym = views::hd::city_atlas(
+      *context_.vga, state_.roster(), city_->id(), views::hd::CityAtlas::Tiles);
 
   // HD: the water follows the palette cycle (views/hd/WaterCycleHd.h). The
   // pictures are built once, on a worker; until they are there the water
@@ -1013,8 +1018,10 @@ void CityView::render_map_zoom_medium(const RenderContext& ctx) {
     // worker; it replaces this one when ready (poll_hd_jobs).
     if (gfx::hd_scale() > 1) {
       if (auto input = views::hd::medium_map_input(
-              tiles_medium_, context_.vga->get("gfx/landsym"), types,
-              MAP_TILES_PER_ROW, MAP_TILES_PER_COLUMN, palette_)) {
+              tiles_medium_,
+              views::hd::city_atlas(*context_.vga, state_.roster(), city_->id(),
+                                    views::hd::CityAtlas::Tiles),
+              types, MAP_TILES_PER_ROW, MAP_TILES_PER_COLUMN, palette_)) {
         views::hd::start_medium_map(medium_hd_job_, std::move(*input));
       }
     }

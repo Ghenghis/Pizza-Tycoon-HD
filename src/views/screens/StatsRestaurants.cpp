@@ -16,13 +16,16 @@
 #include "engine/gfx/Draw.h"
 #include "resources/FontManager.h"
 #include "views/base/ViewDefs.h"
+#include "views/hd/LocationArt.h"
 #include "views/ui/PageDecoration.h"
 
 StatsRestaurants::StatsRestaurants(GameContext& context, GameState& state,
                                    core::PlayerId player_id)
     : MainPanelView(context, state), player_id_(player_id),
       stanbobs_(context_.bob->get("bob/stanbobs.bob")),
-      tiles_medium_(context_.vga->get("gfx/med1")) {
+      tiles_medium_(views::hd::city_atlas(*context_.vga, state.roster(),
+                                          state.active_city_id(),
+                                          views::hd::CityAtlas::Medium)) {
   create_buttons();
 }
 
