@@ -259,6 +259,13 @@ public:
   void
   restore_scenario(core::content::Roster roster,
                    std::shared_ptr<const core::content::Scenario> scenario);
+  // An explicit expansion of an established game (a new area entered with
+  // `nav area`, WORLD-BUILDER-EXPANSION.md): the place becomes the next
+  // CityId. Every existing place, its id and the scenario and its goal stay
+  // as they are; saves embed the new entry like the others. False, with
+  // why, when the per-city arrays are full or the entry breaks a roster rule
+  // (a key already in the roster, a Classic entry).
+  bool expand_roster(core::content::RosterEntry entry, std::string* why);
   core::CityId active_city_id() const;
   ViewPoint city_position() const;
   std::optional<int> last_clicked_property_index() const;

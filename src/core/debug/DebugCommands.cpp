@@ -19,6 +19,7 @@
 #include "core/debug/commands/RestaurantCommands.h"
 #include "core/debug/commands/StaffCommands.h"
 #include "core/debug/commands/TutorialCommands.h"
+#include "core/debug/commands/WorldCommands.h"
 #include "core/util/GameContext.h"
 
 void register_core_commands(debug::command::CommandRegistry& registry) {
@@ -38,6 +39,7 @@ void register_core_commands(debug::command::CommandRegistry& registry) {
   registry.register_command(debug::commands::make_staff_commands());
   registry.register_command(debug::commands::make_armsdealer_commands());
   registry.register_command(debug::commands::make_tutorial_commands());
+  registry.register_command(debug::commands::make_world_commands());
 
   // Register top-level convenience commands
   registry.register_command(debug::commands::make_dump_command());

@@ -23,6 +23,7 @@
 #include "core/save/CheckpointTimer.h"
 #include "core/save/SaveVersions.h"
 #include "core/save/Session.h"
+#include "core/save/UserAreaStore.h"
 #include "core/util/Constants.h"
 
 class GameState;
@@ -332,6 +333,18 @@ public:
   // and nothing is deleted.
   static std::optional<ResumeOffer>
   take_resume_offer(const GameState& like, const GameContext& context);
+
+  // The game's user areas (World Builder) whose admitted document in the
+  // store is gone or differs from the copy the save holds. The game always
+  // plays its own copy; this is for telling the player.
+  static std::vector<AreaDifference>
+  area_differences(const GameState& state, const UserAreaStore& store);
+
+  // The recovery path for those: puts the save's own copy of each into the
+  // store, as a new admitted area if the store has none of that key, else
+  // as a new draft of it, so the player's edits are never overwritten.
+  // Returns how many were kept.
+  static int keep_area_copies(const GameState& state, UserAreaStore& store);
 
   // Deletes a save: its file and every version of it.
   static bool delete_save(const std::string& filename,

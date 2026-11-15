@@ -117,7 +117,10 @@ void apply_retention(SlotManifest& manifest);
 // A slot's file and the folder of versions beside it.
 class SaveSlot {
 public:
-  explicit SaveSlot(std::filesystem::path slot_file);
+  // Version files end in extension: ".plsave" for saves, ".json" for the
+  // documents of the user-area store.
+  explicit SaveSlot(std::filesystem::path slot_file,
+                    std::string extension = ".plsave");
 
   [[nodiscard]] const std::filesystem::path& file() const { return file_; }
   [[nodiscard]] std::filesystem::path folder() const;
@@ -147,11 +150,13 @@ public:
 
 private:
   std::filesystem::path file_;
+  std::string extension_;
 };
 
 // The sequence number in a version file's name, "v000013.plsave".
 [[nodiscard]] std::optional<std::uint64_t>
-version_sequence(std::string_view file_name);
+version_sequence(std::string_view file_name,
+                 std::string_view extension = ".plsave");
 
 // Whether a folder in the saves folder holds a slot's versions.
 [[nodiscard]] bool is_versions_folder_name(std::string_view name);

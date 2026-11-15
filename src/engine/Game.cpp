@@ -20,10 +20,12 @@
 #include <thread>
 
 #include "core/common/Ids.h"
+#include "core/content/AreaCatalog.h"
 #include "core/debug/DebugCommands.h"
 #include "core/debug/DebugConsole.h"
 #include "core/restaurant/StaffEventData.h"
 #include "core/save/SaveGameManager.h"
+#include "core/save/UserAreaStore.h"
 #include "core/state/GameOptions.h"
 #include "core/state/TurnOrchestrator.h"
 #include "core/state/UIState.h"
@@ -185,6 +187,38 @@ int Game::run() {
   // What the last run left decides whether the main menu offers to resume
   // it; this run is recorded as not yet ended cleanly.
   save::SaveGameManager::begin_session();
+  // Areas players add (World Builder) are kept in the user content folder:
+  // the catalog writes drafts and admissions through this store.
+  static save::UserAreaStore area_store;
+  core::content::area_catalog().hooks(core::content::AreaStoreHooks{
+      .save_draft = [](const nlohmann::json& document,
+                       std::optional<std::string> id,
+                       std::string* error) -> std::optional<std::string> {
+        save::StoreResult r = area_store.save_draft(document, std::move(id));
+        if (!r.ok) {
+          if (error)
+            *error = r.error;
+          return std::nullopt;
+        }
+        return r.id;
+      },
+      .admit =
+          [](const std::string& id, core::content::Findings* findings) {
+            save::StoreResult r = area_store.admit(id);
+            if (!r.ok && findings)
+              *findings = r.findings;
+            return r.ok;
+          },
+      .installation_namespace =
+          [] { return area_store.installation_namespace(); },
+      .rename =
+          [](const std::string& id, std::string_view name, std::string* error) {
+            save::StoreResult r = area_store.rename(id, name);
+            if (!r.ok && error)
+              *error = r.error;
+            return r.ok;
+          },
+  });
   ConfigManager configManager(effective_config);
 
   // Load config if present

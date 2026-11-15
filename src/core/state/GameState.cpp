@@ -631,6 +631,32 @@ void GameState::restore_scenario(
   scenario_goal_settled_ = false;
 }
 
+bool GameState::expand_roster(core::content::RosterEntry entry,
+                              std::string* why) {
+  const auto fail = [why](std::string message) {
+    if (why) {
+      *why = std::move(message);
+    }
+    return false;
+  };
+  if (roster_.size() >= static_cast<std::size_t>(NUMBER_OF_CITIES)) {
+    return fail("this game already has " + std::to_string(roster_.size()) +
+                " places; this build plays at most " +
+                std::to_string(NUMBER_OF_CITIES));
+  }
+  if (entry.source != core::content::RosterSource::Definition) {
+    return fail("only a new area can be added to a game");
+  }
+  std::vector<core::content::RosterEntry> entries = roster_.entries();
+  entries.push_back(std::move(entry));
+  auto expanded = core::content::Roster::from_entries(std::move(entries));
+  if (!expanded) {
+    return fail("the area is already in this game or breaks a roster rule");
+  }
+  roster_ = std::move(*expanded);
+  return true;
+}
+
 void GameState::suspend_clock() {
   if (!clock_suspended_) {
     Logger::debug("Clock suspended at {:02d}:{:02d}, second {} of the block",

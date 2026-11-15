@@ -11,6 +11,7 @@
 #include "core/common/Ids.h"
 #include "core/content/Regions.h"
 #include "core/debug/command/CommonArgs.h"
+#include "core/debug/commands/WorldCommands.h"
 #include "core/food/IngredientCategoryType.h"
 #include "core/food/StandardPizza.h"
 #include "core/restaurant/Restaurant.h"
@@ -125,6 +126,54 @@ Examples:
         ctx.state.ui().replace_top<CityViewState>(CityViewState{city_id.value});
         return CommandResult::success().add_message(
             compat::format("Navigated to city view (city {})", city_id.value));
+      },
+  };
+}
+
+static CommandDef make_nav_area() {
+  return CommandDef{
+      .name = "area",
+      .description = "Go to an area of a territory",
+      .help_text = R"(Usage: nav area <id>
+
+Opens the city view of an area, by its id (from `world areas`) or its
+location key. An admitted area that this game does not have yet joins the
+game first (the game's other places, money and goal stay as they are); a
+draft is refused with the list of what it still needs.
+
+Examples:
+  nav area area-000001
+  nav area pthd:santas-pizza-village
+)",
+      .args =
+          {
+              ArgSpec{.name = "id",
+                      .type = ArgType::String,
+                      .optional = false,
+                      .default_provider = DefaultProvider::None,
+                      .description = "Area id or location key"},
+          },
+      .handler = [](const CommandContext& ctx) -> CommandResult {
+        std::string why;
+        bool added = false;
+        const auto city_id =
+            enter_area(ctx.state, ctx.context, ctx.string_arg(0), &why, &added);
+        if (!city_id) {
+          return CommandResult::error(why);
+        }
+        ctx.state.active_city(*city_id);
+        if (auto* player = ctx.state.active_player()) {
+          ctx.state.on_city_entered(*city_id, *player);
+        }
+        ctx.state.ui().replace_top<CityViewState>(
+            CityViewState{city_id->value});
+        CommandResult out = CommandResult::success();
+        if (added) {
+          out.add_message(compat::format("{} joined this game as place {}",
+                                         ctx.string_arg(0), city_id->value));
+        }
+        return out.add_message(
+            compat::format("Navigated to city view (city {})", city_id->value));
       },
   };
 }
@@ -567,6 +616,7 @@ CommandDef make_nav_commands() {
 
       // Views with arguments
       .add_subcommand(make_nav_cityview())
+      .add_subcommand(make_nav_area())
       .add_subcommand(make_nav_restaurant())
       .add_subcommand(make_nav_kitchen())
       .add_subcommand(make_nav_stats())

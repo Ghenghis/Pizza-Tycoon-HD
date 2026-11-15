@@ -39,7 +39,6 @@ constexpr std::string_view manifest_format = "plegacy-save-versions";
 constexpr std::string_view manifest_file_name = "manifest.json";
 constexpr std::string_view versions_suffix = ".versions";
 constexpr std::string_view version_prefix = "v";
-constexpr std::string_view version_extension = ".plsave";
 constexpr std::size_t version_digits = 6;
 constexpr std::string_view checksum_prefix = "crc32:";
 
@@ -448,7 +447,8 @@ void apply_retention(SlotManifest& manifest) {
   manifest.versions = std::move(kept);
 }
 
-SaveSlot::SaveSlot(fs::path slot_file) : file_(std::move(slot_file)) {}
+SaveSlot::SaveSlot(fs::path slot_file, std::string extension)
+    : file_(std::move(slot_file)), extension_(std::move(extension)) {}
 
 fs::path SaveSlot::folder() const {
   fs::path name = file_.filename();
@@ -466,7 +466,7 @@ fs::path SaveSlot::version_path(std::uint64_t sequence) const {
     digits.insert(0, version_digits - digits.size(), '0');
   }
   return folder() / (std::string(version_prefix) + digits +
-                     std::string(version_extension));
+                     extension_);
 }
 
 bool SaveSlot::has_versions() const {
@@ -525,8 +525,10 @@ std::vector<std::uint64_t> SaveSlot::version_files() const {
       continue;
     }
     const std::u8string name = it->path().filename().u8string();
-    if (const auto sequence = version_sequence(std::string_view(
-            reinterpret_cast<const char*>(name.data()), name.size()))) {
+    if (const auto sequence = version_sequence(
+            std::string_view(reinterpret_cast<const char*>(name.data()),
+                             name.size()),
+            extension_)) {
       found.push_back(*sequence);
     }
   }
@@ -534,7 +536,8 @@ std::vector<std::uint64_t> SaveSlot::version_files() const {
   return found;
 }
 
-std::optional<std::uint64_t> version_sequence(std::string_view file_name) {
+std::optional<std::uint64_t> version_sequence(std::string_view file_name,
+                                              std::string_view version_extension) {
   if (!file_name.starts_with(version_prefix) ||
       !file_name.ends_with(version_extension)) {
     return std::nullopt;

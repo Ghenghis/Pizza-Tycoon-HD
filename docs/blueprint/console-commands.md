@@ -63,6 +63,7 @@ Common trailing arguments come from `src/core/debug/command/CommonArgs.h`:
 | `staff` | `st` | Staff management and event testing commands | `make_staff_commands()` in `src/core/debug/commands/StaffCommands.cpp` |
 | `armsdealer` |  | Arms dealer commands | `make_armsdealer_commands()` in `src/core/debug/commands/ActorCommands.cpp` |
 | `tutorial` |  | Tutorial commands | `make_tutorial_commands()` in `src/core/debug/commands/TutorialCommands.cpp` |
+| `world` |  | Territories and their areas | `make_world_commands()` in `src/core/debug/commands/WorldCommands.cpp` |
 | `dump` |  | Dump debugging information (alias for 'debug dump') | `make_dump_command()` in `src/core/debug/commands/DebugCommands.cpp` |
 | `help` |  | Show help for commands | `make_help_command()` in `src/core/debug/commands/DebugCommands.cpp` |
 | `screenshot` |  | Write the current screen to a PNG | `make_screen_commands()` in `src/engine/debug/ScreenCommands.cpp` |
@@ -384,6 +385,7 @@ Defined by `make_nav_commands()` in `src/core/debug/commands/NavCommands.cpp`.
 |---|---|---|---|
 | `nav` | `ns` | - | Navigation commands (group) |
 | `nav advertising` | `ad` | - | advertising |
+| `nav area` |  | `<id:String>` | Go to an area of a territory |
 | `nav cityview` | `city`, `cv` | `[city_id:CityId]` | Navigate to city view |
 | `nav demographics` |  | - | Furniture & customers page of the active restaurant |
 | `nav depot` |  | `[category:String]` | Navigate to the central depot |
@@ -417,6 +419,7 @@ Argument details:
 
 | Command | Argument | Type | Required | Constraints | Description |
 |---|---|---|---|---|---|
+| `nav area` | `id` | String | yes |  | Area id or location key |
 | `nav cityview` | `city_id` | CityId | no | min 0; max NUMBER_OF_CITIES - 1; default: ActiveCity | City ID (@ for active city) |
 | `nav depot` | `category` | String | no | one of: `vegetables`, `meat`, `fruit`, `cheese` | vegetables, meat, fruit or cheese |
 | `nav globalstats` | `screen` | Int | no | min 0; max 7 | Which statistics screen to open |
@@ -433,6 +436,7 @@ Argument details:
 
 Usage lines from the help text:
 
+* `nav area <id>`
 * `nav cityview <city_id>`
 * `nav depot [category]`
 * `nav globalstats [screen]`
@@ -826,6 +830,43 @@ Usage lines from the help text:
 * `tutorial skip`
 * `tutorial start [seed]`
 * `tutorial status`
+
+### `world`
+
+Defined by `make_world_commands()` in `src/core/debug/commands/WorldCommands.cpp`.
+
+| Command | Aliases | Arguments | Description |
+|---|---|---|---|
+| `world` |  | - | Territories and their areas (group) |
+| `world add-area` |  | `<territory:String>` `<name:String>` `[seed:String]` `[mode:String]` | Add an area to a territory, in its style |
+| `world area-rename` |  | `<id:String>` `<name:String>` | Rename an area |
+| `world areas` |  | `<territory:String>` | List a territory's areas, in page order |
+
+Argument details:
+
+| Command | Argument | Type | Required | Constraints | Description |
+|---|---|---|---|---|---|
+| `world add-area` | `territory` | String | yes |  | Territory id (north-pole) |
+| `world add-area` | `name` | String | yes |  | Area name (quote it with spaces) |
+| `world add-area` | `seed` | String | no |  | Seed, or the mode |
+| `world add-area` | `mode` | String | no |  | auto or empty |
+| `world area-rename` | `id` | String | yes |  | Area id (area-000001) |
+| `world area-rename` | `name` | String | yes |  | New name (quote it with spaces) |
+| `world areas` | `territory` | String | yes |  | Territory id (north-pole) |
+
+Usage lines from the help text:
+
+* `world add-area <territory> <name> [seed] [auto|empty]`
+* `world area-rename <id> <name>`
+* `world areas <territory>`
+
+Add Area takes the territory's home location as its style (kit, districts,
+suppliers, art by atlas reference). `auto` generates, validates and admits a
+playable area; `empty` lists a draft and what it still needs before Play. A
+failed add changes nothing. Neither changes the game in progress: `nav area`
+appends an admitted area to the game's roster (existing places keep their ids;
+the scenario and its goal stay pinned) and refuses a draft with its missing
+requirements.
 
 ### `dump`
 

@@ -19,6 +19,8 @@ set(GAME_PLEGACY_SOURCES
     src/core/city/MayorOffice.cpp
     src/core/city/PizzaCharts.cpp
     src/core/city/Property.cpp
+    src/core/content/AreaCatalog.cpp
+    src/core/content/AreaGenerator.cpp
     src/core/content/DefinitionCitySource.cpp
     src/core/content/JsonShape.cpp
     src/core/content/LocationReader.cpp
@@ -60,6 +62,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/debug/commands/RestaurantCommands.cpp
     src/core/debug/commands/StaffCommands.cpp
     src/core/debug/commands/TutorialCommands.cpp
+    src/core/debug/commands/WorldCommands.cpp
     src/core/economy/WeaponMarket.cpp
     src/core/events/CareerLog.cpp
     src/core/factories/CharacterFactory.cpp
@@ -108,6 +111,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/restaurant/RestaurantStats.cpp
     src/core/restaurant/StaffEventDialogs.cpp
     src/core/restaurant/StaffEvents.cpp
+    src/core/save/AreaLayout.cpp
     src/core/save/CheckpointTimer.cpp
     src/core/save/RecoveryBrowser.cpp
     src/core/save/SaveGameCharacter.cpp
@@ -117,6 +121,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/save/SaveGameRestaurant.cpp
     src/core/save/SaveVersions.cpp
     src/core/save/Session.cpp
+    src/core/save/UserAreaStore.cpp
     src/core/state/CompetitionCoordinator.cpp
     src/core/state/GameRules.cpp
     src/core/state/GameState.cpp
@@ -422,6 +427,8 @@ set(PLEGACY_HEADERS
     src/core/city/PizzaCharts.h
     src/core/city/Property.h
     src/core/common/Ids.h
+    src/core/content/AreaCatalog.h
+    src/core/content/AreaGenerator.h
     src/core/content/ClassicCities.h
     src/core/content/ContentKey.h
     src/core/content/DefinitionCitySource.h
@@ -483,6 +490,7 @@ set(PLEGACY_HEADERS
     src/core/debug/commands/RestaurantCommands.h
     src/core/debug/commands/StaffCommands.h
     src/core/debug/commands/TutorialCommands.h
+    src/core/debug/commands/WorldCommands.h
     src/core/economy/WeaponMarket.h
     src/core/events/CareerLog.h
     src/core/events/MilestoneId.h
@@ -561,6 +569,7 @@ set(PLEGACY_HEADERS
     src/core/restaurant/StaffEventData.h
     src/core/restaurant/StaffEventDialogs.h
     src/core/restaurant/StaffEvents.h
+    src/core/save/AreaLayout.h
     src/core/save/CheckpointTimer.h
     src/core/save/RecoveryBrowser.h
     src/core/save/SaveGameCharacter.h
@@ -572,6 +581,7 @@ set(PLEGACY_HEADERS
     src/core/save/SaveGameRestaurant.h
     src/core/save/SaveVersions.h
     src/core/save/Session.h
+    src/core/save/UserAreaStore.h
     src/core/settings/BankSettings.h
     src/core/settings/InsuranceSettings.h
     src/core/settings/MafiaSettings.h

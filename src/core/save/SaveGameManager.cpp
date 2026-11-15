@@ -1993,6 +1993,23 @@ bool SaveGameManager::load_slot(GameState& state, GameContext& context,
           }
         }
       }
+      // A game in user areas plays the copies the save holds; say so when
+      // the player's areas no longer match them.
+      if (!state.roster().is_classic()) {
+        const std::vector<AreaDifference> differences =
+            area_differences(state, UserAreaStore());
+        for (const AreaDifference& d : differences) {
+          const std::string told =
+              d.missing ? "This save uses its own copy of " + d.name +
+                              ", which is no longer among your areas."
+                        : "This save uses its own copy of " + d.name +
+                              "; your edited version is kept apart.";
+          Logger::warn("{}", told);
+          if (notice != nullptr) {
+            *notice = notice->empty() ? told : *notice + " " + told;
+          }
+        }
+      }
       Logger::info("Load completed successfully");
       return true;
     }
@@ -3625,6 +3642,40 @@ SaveGameManager::take_resume_offer(const GameState& like,
       .time = compat::format("{:02d}:{:02d}", in_day / 6, (in_day % 6) * 10),
       .game_date = v->game_date,
   };
+}
+
+namespace {
+std::vector<std::shared_ptr<const core::content::LocationDefinition>>
+user_definitions(const GameState& state) {
+  std::vector<std::shared_ptr<const core::content::LocationDefinition>> out;
+  for (const core::content::RosterEntry& e : state.roster().entries()) {
+    if (e.source == core::content::RosterSource::Definition && e.definition) {
+      out.push_back(e.definition);
+    }
+  }
+  return out;
+}
+} // namespace
+
+std::vector<AreaDifference>
+SaveGameManager::area_differences(const GameState& state,
+                                  const UserAreaStore& store) {
+  return save::area_differences(user_definitions(state), store);
+}
+
+int SaveGameManager::keep_area_copies(const GameState& state,
+                                      UserAreaStore& store) {
+  int kept = 0;
+  const auto definitions = user_definitions(state);
+  for (const AreaDifference& d : save::area_differences(definitions, store)) {
+    for (const auto& definition : definitions) {
+      if (definition->key.str() == d.location_key &&
+          store.keep_copy(*definition).ok) {
+        ++kept;
+      }
+    }
+  }
+  return kept;
 }
 
 } // namespace save
