@@ -270,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skip-done", action="store_true", help="skip files already in <out>/<denoise>/")
     p.add_argument("--denoise", type=float, nargs="+", default=[0.55, 0.7])
     p.add_argument("--control-strength", type=float, default=0.85)
+    p.add_argument("--style", default=STYLE, help="appended to every description (default: the restaurant prop style)")
+    p.add_argument("--negative", default=NEGATIVE, help="negative prompt (default: the restaurant prop one)")
     p.add_argument("--checkpoint", default="juggernautXL_v9.safetensors")
     p.add_argument("--controlnet", default="diffusers_xl_depth_full.safetensors")
     p.add_argument("--seed", type=int, default=1994)
@@ -384,8 +386,8 @@ def main(argv: list[str] | None = None) -> int:
                 values = {
                     "checkpoint": args.checkpoint,
                     "controlnet": args.controlnet,
-                    "positive": f"{description}, {STYLE}",
-                    "negative": NEGATIVE,
+                    "positive": f"{description}, {args.style}",
+                    "negative": args.negative,
                     "input_image": in_name,
                     "depth_image": depth_name,
                     "seed": seed,
