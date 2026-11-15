@@ -341,6 +341,7 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/audio/VocDecoder.cpp
     src/engine/debug/RecordCommands.cpp
     src/engine/debug/ScreenCommands.cpp
+    src/engine/fx/Ambient.cpp
     src/engine/fx/DayNight.cpp
     src/engine/fx/Grade.cpp
     src/engine/fx/Look.cpp
@@ -660,6 +661,7 @@ set(PLEGACY_HEADERS
     src/engine/audio/VocDecoder.h
     src/engine/debug/RecordCommands.h
     src/engine/debug/ScreenCommands.h
+    src/engine/fx/Ambient.h
     src/engine/fx/DayNight.h
     src/engine/fx/Grade.h
     src/engine/fx/Look.h
@@ -871,6 +873,7 @@ set(PLEGACY_HEADERS
     src/views/screens/restaurant/RestaurantMenu.h
     src/views/screens/restaurant/RestaurantStats.h
     src/views/screens/restaurant/RestaurantSoundCues.h
+    src/views/screens/restaurant/JukeboxAudio.h
     src/views/screens/restaurant/RestaurantView.h
     src/views/screens/restaurant/SeatedCharacterRenderer.h
     src/views/screens/restaurant/Walk.h

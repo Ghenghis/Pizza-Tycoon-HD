@@ -82,25 +82,6 @@
 
 namespace {
 
-// Which area's picture preset applies to the screen on top (fx::LookSettings).
-fx::Area picture_area(const GameState& gs) {
-  const UIStateStack& ui = gs.ui();
-  if (const auto* r = ui.top_as<RestaurantViewState>()) {
-    return r->kitchen_view ? fx::Area::Kitchen : fx::Area::Restaurant;
-  }
-  if (ui.is_top<PizzaDesignState>()) {
-    return fx::Area::Kitchen;
-  }
-  if (ui.is_top<CityViewState>()) {
-    return fx::Area::City;
-  }
-  if (const auto* tag = ui.top_as<ScreenTag>();
-      tag && tag->kind == ScreenTag::Kind::MenuNorthPole) {
-    return fx::Area::NorthPole;
-  }
-  return fx::Area::Other;
-}
-
 // Screens get the StatusDisplay from the context, but for headless runs there
 // is no StatusDisplay yet, so create a temporary one.
 class TemporaryStatusPanel {
@@ -729,11 +710,10 @@ int Game::run() {
     lighting::set_enabled(state.options().lighting && !classic_look_);
     // The picture settings of the area on screen (the renderer drops them
     // in the 1994 look).
-    const float hours =
-        static_cast<float>(state.time().current_hour()) +
-        static_cast<float>(state.time().current_minute()) / 60.0f;
-    fx::set_frame_look(state.options().picture,
-                       {.area = picture_area(state), .hours = hours});
+    // Area, time of day, game-time animation clock, location and map
+    // viewport (fx::frame_context), so the same game time draws the same
+    // frame.
+    fx::set_frame_look(state.options().picture, fx::frame_context(state));
     resources::HdTypefaces::set_enabled(state.options().hd_text &&
                                         !classic_look_);
     renderer.classic_look(classic_look_);

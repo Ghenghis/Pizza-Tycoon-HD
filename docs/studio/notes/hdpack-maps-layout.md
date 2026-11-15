@@ -220,3 +220,10 @@ Parameters (`--luma-ratio`, `--radius`, class strengths, the 20% limit) go into 
 * `HdCompositor::draw_emissive` adds the glow only where the art is visible, with later pictures covering it.
 * The Renderer adds the glow over the lit frame, scaled by the night factor, when "Day and night" is on in a preset other than Classic.
 * With no `_maps` folder, nothing changes.
+
+### Emissive at run time (2026-11-14, rendering lane)
+
+* **Formats.** RGBA straight alpha (alpha = strength) and the plan's RGB8 (glow × mask, black elsewhere) both work. An RGB8 map loads opaque, and black adds nothing.
+* **Location pictures.** A location picture from `views/hd/LocationArt` (`<pack>/locations/<ns>/gfx/k3.png`) has its own asset id, `locations/<ns>/gfx/k3`. Its maps go in `<pack>/_maps/locations/<ns>/gfx/k3/`.
+* **Strength.** The night factor is the game clock's night (0 by day, ramping at dawn and dusk) times the preset's glow: Natural 0.85, Vivid and Cinematic 1.0, Studio 0.7, Classic 0. It applies on the city map, in the restaurant and in the kitchen. It does not need the "Day and night" option.
+* **Feather.** From hd_scale 6 up, maps are feathered on load: two box blurs of k/2 texels in premultiplied space. This hides the original's pixel grid, the blocky edges seen at 12×. `emissive.py` may still feather at pack scale. The runtime feather comes on top.

@@ -84,6 +84,51 @@ std::string to_string(Weather w) {
   return "None";
 }
 
+std::string to_string(AmbientMotion m) {
+  switch (m) {
+  case AmbientMotion::Off:
+    return "Off";
+  case AmbientMotion::Static:
+    return "Static";
+  case AmbientMotion::Reduced:
+    return "Reduced";
+  case AmbientMotion::Full:
+    return "Full";
+  }
+  return "Full";
+}
+
+std::string_view to_config_value(AmbientMotion m) {
+  switch (m) {
+  case AmbientMotion::Off:
+    return "off";
+  case AmbientMotion::Static:
+    return "static";
+  case AmbientMotion::Reduced:
+    return "reduced";
+  case AmbientMotion::Full:
+    return "full";
+  }
+  return "full";
+}
+
+std::optional<AmbientMotion>
+ambient_motion_from_config_value(std::string_view v) {
+  for (AmbientMotion m : all_ambient_motion) {
+    if (to_config_value(m) == v) {
+      return m;
+    }
+  }
+  return std::nullopt;
+}
+
+AmbientMotion LookSettings::effective_motion() const {
+  if (reduced_motion && ambient_motion == AmbientMotion::Full) {
+    return AmbientMotion::Reduced;
+  }
+  return ambient_motion;
+}
+
 std::string_view to_config_value(Weather w) {
   switch (w) {
   case Weather::None:
@@ -249,6 +294,7 @@ Grade preset_grade(Preset p) {
   case Preset::Classic:
     break;
   case Preset::Natural:
+    g.glow = 0.85f;
     g.contrast = 1.04f;
     g.saturation = 1.04f;
     g.warmth = 0.06f;
@@ -257,6 +303,7 @@ Grade preset_grade(Preset p) {
     g.bloom_threshold = 0.75f;
     break;
   case Preset::Vivid:
+    g.glow = 1.0f;
     g.exposure = 1.04f;
     g.contrast = 1.10f;
     g.saturation = 1.25f;
@@ -268,6 +315,7 @@ Grade preset_grade(Preset p) {
     g.shadow_depth = 0.90f;
     break;
   case Preset::Cinematic:
+    g.glow = 1.0f;
     g.exposure = 0.97f;
     g.contrast = 1.12f;
     g.saturation = 0.92f;
@@ -283,6 +331,7 @@ Grade preset_grade(Preset p) {
     g.shadow_depth = 1.20f;
     break;
   case Preset::Studio:
+    g.glow = 0.7f;
     g.contrast = 1.02f;
     g.warmth = -0.04f;
     g.lift = {0.02f, 0.02f, 0.02f};
@@ -337,8 +386,45 @@ FrameState resolve_frame(const LookSettings& settings,
   const bool clocked = context.area == Area::City ||
                        context.area == Area::Restaurant ||
                        context.area == Area::Kitchen;
-  if (settings.day_night && clocked &&
-      settings.preset_for(context.area) != Preset::Classic) {
+  const bool classic = settings.preset_for(context.area) == Preset::Classic;
+  if (clocked && !classic && f.grade.glow > 0.0f) {
+    f.emissive =
+        std::clamp(day_night(context.hours).night * f.grade.glow, 0.0f, 1.0f);
+  }
+  // The North Pole's ambient effects: its own location only, never a
+  // Classic city, never in the 1994 look (the renderer drops the state).
+  const AmbientMotion motion = settings.effective_motion();
+  if (context.location == "north-pole" && motion != AmbientMotion::Off) {
+    const float sky_night = day_night(context.hours).night;
+    f.map_rect = context.map_rect;
+    if (context.area == Area::City && context.map_rect[2] > 0) {
+      f.aurora = sky_night;
+    }
+    f.twinkle = motion == AmbientMotion::Full;
+    const double speed = motion == AmbientMotion::Full      ? 1.0
+                         : motion == AmbientMotion::Reduced ? 0.25
+                                                            : 0.0;
+    if (speed == 0.0) {
+      f.anim_seconds = 0.0; // Static: always the same picture
+    }
+    else if (context.anim_seconds >= 0.0) {
+      f.anim_seconds = context.anim_seconds * speed;
+    }
+    // Its own snowfall on the city map unless a weather was chosen.
+    if (context.area == Area::City && !settings.weather.contains(Area::City)) {
+      f.weather = Weather::LightSnow;
+    }
+    if (motion != AmbientMotion::Full) {
+      f.reduced_motion = true;
+    }
+    // The music accent: the glow follows the music's level a little.
+    if (settings.music_accent && motion == AmbientMotion::Full &&
+        f.emissive > 0.0f) {
+      f.emissive =
+          std::clamp(f.emissive * (1.0f + 0.25f * music_level()), 0.0f, 1.0f);
+    }
+  }
+  if (settings.day_night && clocked && !classic) {
     const DayNight dn = day_night(context.hours);
     f.night = dn.night;
     f.sun_hours = context.hours;
@@ -358,6 +444,7 @@ FrameState resolve_frame(const LookSettings& settings,
 namespace {
 
 FrameState g_frame;
+float g_music_level = 0.0f;
 
 struct AreaKey {
   std::string_view preset_key;
@@ -401,6 +488,9 @@ const std::array switch_keys{
     SwitchKey{"picture_screenshots",
               [](const LookSettings& s) { return s.graded_screenshots; },
               [](LookSettings& s, bool v) { s.graded_screenshots = v; }},
+    SwitchKey{"picture_music_accent",
+              [](const LookSettings& s) { return s.music_accent; },
+              [](LookSettings& s, bool v) { s.music_accent = v; }},
 };
 
 } // namespace
@@ -421,6 +511,8 @@ const std::vector<std::string_view>& setting_keys() {
       k.push_back(a.weather_key);
     }
     k.push_back("picture_screenshots");
+    k.push_back("picture_ambient_motion");
+    k.push_back("picture_music_accent");
     return k;
   }();
   return keys;
@@ -430,6 +522,13 @@ std::optional<std::string> apply_setting(LookSettings& settings,
                                          std::string_view key,
                                          std::string_view value) {
   const std::string v(value);
+  if (key == "picture_ambient_motion") {
+    if (auto m = ambient_motion_from_config_value(value)) {
+      settings.ambient_motion = *m;
+      return std::nullopt;
+    }
+    return "Expected off, static, reduced or full, got '" + v + "'";
+  }
   if (key == "picture_preset") {
     if (auto p = preset_from_config_value(value)) {
       settings.preset = *p;
@@ -499,6 +598,9 @@ std::optional<std::string> apply_setting(LookSettings& settings,
 }
 
 std::string setting_value(const LookSettings& settings, std::string_view key) {
+  if (key == "picture_ambient_motion") {
+    return std::string(to_config_value(settings.ambient_motion));
+  }
   if (key == "picture_preset") {
     return std::string(to_config_value(settings.preset));
   }
@@ -539,6 +641,12 @@ void set_frame_grade(const Grade& grade) {
 }
 
 void set_frame_state(const FrameState& state) { g_frame = state; }
+
+void set_music_level(float level) {
+  g_music_level = std::clamp(level, 0.0f, 1.0f);
+}
+
+float music_level() { return g_music_level; }
 
 const Grade& frame_grade() { return g_frame.grade; }
 

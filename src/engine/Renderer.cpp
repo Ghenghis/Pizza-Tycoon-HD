@@ -18,6 +18,7 @@
 #include "engine/Renderable.h"
 #include "engine/SDL_include.h"
 #include "engine/adapters/SDLRectAdapter.h"
+#include "engine/fx/Ambient.h"
 #include "engine/fx/DayNight.h"
 #include "engine/fx/Look.h"
 #include "engine/fx/MapStore.h"
@@ -225,7 +226,8 @@ fx::FrameState Renderer::frame_state() const {
 }
 
 void Renderer::add_glow(Renderable* view, const Surface& surface,
-                        const SDL_FRect& dest, float strength) {
+                        const SDL_FRect& dest, float strength,
+                        double twinkle_time) {
   SDL_Renderer* r = sdl_.renderer.get();
   if (!glow_ready_.contains(view)) {
     if (!gpu_->has_emissive(surface)) {
@@ -260,10 +262,71 @@ void Renderer::add_glow(Renderable* view, const Surface& surface,
   }
   SDL_Texture* glow = it->second;
   SDL_SetTextureBlendMode(glow, SDL_BLENDMODE_ADD_PREMULTIPLIED);
-  SDL_SetTextureColorModFloat(glow, strength, strength, strength);
-  SDL_RenderTexture(r, glow, nullptr, &dest);
-  SDL_SetTextureColorModFloat(glow, 1.0f, 1.0f, 1.0f);
+  if (twinkle_time >= 0.0) {
+    // Each cluster of lit windows at its own brightness: one grid of quads.
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    fx::twinkle_mesh(dest, strength, twinkle_time,
+                     static_cast<float>(fx::twinkle_cluster_px * scale_),
+                     vertices, indices);
+    SDL_SetTextureColorModFloat(glow, 1.0f, 1.0f, 1.0f);
+    SDL_RenderGeometry(r, glow, vertices.data(),
+                       static_cast<int>(vertices.size()), indices.data(),
+                       static_cast<int>(indices.size()));
+  }
+  else {
+    SDL_SetTextureColorModFloat(glow, strength, strength, strength);
+    SDL_RenderTexture(r, glow, nullptr, &dest);
+    SDL_SetTextureColorModFloat(glow, 1.0f, 1.0f, 1.0f);
+  }
   SDL_SetTextureBlendMode(glow, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+}
+
+double Renderer::animation_time(const fx::FrameState& look) {
+  return look.anim_seconds >= 0.0
+             ? look.anim_seconds
+             : static_cast<double>(SDL_GetTicks()) / 1000.0;
+}
+
+void Renderer::draw_overlays(const fx::FrameState& look, int w, int h,
+                             int split) const {
+  SDL_Renderer* r = sdl_.renderer.get();
+  const SDL_Rect right{split, 0, w - split, h};
+  if (look.aurora > 0.0f && look.map_rect[2] > 0) {
+    // Over the city map's viewport only; additive, so the same before or
+    // after the glow under it.
+    const float kx = static_cast<float>(w) /
+                     static_cast<float>(DisplayConstants::SCREEN_WIDTH);
+    const float ky = static_cast<float>(h) /
+                     static_cast<float>(DisplayConstants::SCREEN_HEIGHT);
+    const SDL_FRect map{static_cast<float>(look.map_rect[0]) * kx,
+                        static_cast<float>(look.map_rect[1]) * ky,
+                        static_cast<float>(look.map_rect[2]) * kx,
+                        static_cast<float>(look.map_rect[3]) * ky};
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    fx::aurora_mesh(map, animation_time(look), look.aurora, vertices, indices);
+    if (!indices.empty()) {
+      const SDL_Rect map_clip{static_cast<int>(map.x), static_cast<int>(map.y),
+                              static_cast<int>(map.w), static_cast<int>(map.h)};
+      SDL_Rect clip{};
+      if (!SDL_GetRectIntersection(&map_clip, &right, &clip)) {
+        clip = {};
+      }
+      if (clip.w > 0 && clip.h > 0) {
+        SDL_SetRenderClipRect(r, &clip);
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
+        SDL_RenderGeometry(r, nullptr, vertices.data(),
+                           static_cast<int>(vertices.size()), indices.data(),
+                           static_cast<int>(indices.size()));
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+        SDL_SetRenderClipRect(r, nullptr);
+      }
+    }
+  }
+  if (snow_) {
+    snow_->draw(split > 0 ? &right : nullptr);
+  }
 }
 
 LightPass::Strength Renderer::light_strength() const {
@@ -457,7 +520,10 @@ void Renderer::render_gpu() {
     lighting::Scene scene;
     const bool lit =
         lighting::enabled() && view->lighting(scene) && scene.active();
-    const bool relight = lit && scene.animated();
+    // Twinkling glow is drawn again every frame, like a flickering light.
+    const bool twinkling =
+        look.twinkle && look.emissive > 0.0f && glow_ready_.contains(view);
+    const bool relight = (lit && scene.animated()) || twinkling;
 
     const bool rerender = view->is_dirty() || !gpu_cached_.contains(view);
     const bool recomposite = rerender || below_changed || relight;
@@ -531,9 +597,10 @@ void Renderer::render_gpu() {
         SDL_RenderTexture(r, shown, nullptr, &dest);
       }
       // Emissive art glows at night, over the lighting.
-      if (look.night > 0.0f) {
+      if (look.emissive > 0.0f) {
         add_glow(view, *layer_surface, dest,
-                 look.night * (view->ignore_fade() ? 1.0f : fade_factor_));
+                 look.emissive * (view->ignore_fade() ? 1.0f : fade_factor_),
+                 look.twinkle ? animation_time(look) : -1.0);
       }
       frame_changed = true;
       below_changed |= rerender || relight;
@@ -558,8 +625,17 @@ void Renderer::render_gpu() {
     }
     snow_->snowfall().configure(look.weather, look.reduced_motion,
                                 frame_width(), frame_height());
-    snow_->snowfall().step(weather_dt);
+    // Game time when known, so the same time draws the same snow.
+    if (look.anim_seconds >= 0.0) {
+      snow_->snowfall().set_time(look.anim_seconds);
+    }
+    else {
+      snow_->snowfall().step(weather_dt);
+    }
     frame_changed = true;
+  }
+  if (look.aurora > 0.0f) {
+    frame_changed = true; // the aurora drifts
   }
   if (!frame_changed && !cursor_changed) {
     SDL_SetRenderTarget(r, nullptr);
@@ -576,12 +652,9 @@ void Renderer::render_gpu() {
   // the window.
   SDL_SetRenderTarget(r, sdl_.texture.get());
   SDL_RenderTexture(r, back_tex_, nullptr, nullptr);
-  if (snow_) {
-    // Not on the 1994 side of the comparison.
-    const int split = compare_x_ ? *compare_x_ * scale_ : 0;
-    const SDL_Rect right{split, 0, frame_width() - split, frame_height()};
-    snow_->draw(compare_x_ ? &right : nullptr);
-  }
+  // The aurora and the snow; not on the 1994 side of the comparison.
+  draw_overlays(look, frame_width(), frame_height(),
+                compare_x_ ? *compare_x_ * scale_ : 0);
   if (compare_x_) {
     draw_compare_divider();
   }
@@ -1021,10 +1094,7 @@ SDL_Surface_unique_ptr Renderer::graded_frame(SDL_Texture* frame) const {
   SDL_SetTextureBlendMode(frame, blend);
   const int split =
       compare_x_ ? *compare_x_ * w / DisplayConstants::SCREEN_WIDTH : 0;
-  if (snow_) {
-    const SDL_Rect right{split, 0, w - split, h};
-    snow_->draw(compare_x_ ? &right : nullptr);
-  }
+  draw_overlays(look, w, h, split);
   // 2. Through the picture pass, as present_display_texture() draws it.
   SDL_SetRenderTarget(r, out);
   SDL_SetRenderDrawColor(r, 0, 0, 0, 255);

@@ -660,8 +660,8 @@
       "properties": {
         "key": {
           "type": "string",
-          "pattern": "^(classic:gfx/[a-z0-9_]{1,16}|bundle:[A-Za-z0-9._/-]{1,200})$",
-          "description": "classic:gfx/landsym = the user's original atlas (AssetMetadata.cpp:82), HD pack applies as today. bundle: = indexed art shipped in the location bundle."
+          "pattern": "^(classic:gfx/[a-z0-9_]{1,16}|bundle:[A-Za-z0-9._/-]{1,200}|[a-z0-9_-]{1,32}:gfx/(landsym|med1|k[a-z0-9_]{1,15}|back[a-z0-9_]{0,12}))$",
+          "description": "classic:gfx/landsym = the user's original atlas (AssetMetadata.cpp:82), HD pack applies as today. <namespace>:gfx/<picture> = the location's own art for one of the original pictures (landsym, med1, k*, back*), found under locations/<namespace>/ in the HD pack (views/hd/LocationArt). bundle: = indexed art shipped in the location bundle."
         },
         "fallback": { "enum": ["classic", "placeholder"] }
       }

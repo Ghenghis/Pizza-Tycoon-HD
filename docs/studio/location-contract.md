@@ -814,7 +814,7 @@ available, no date lock. Fixtures: `tests/fixtures/locations/scenarios/`.
 | Sandbox (no goals) | free mode | 2 EASY | none: an empty goal never announces and can only continue (SCN-3) | none |
 
 Shipped in `data/scenarios/` (`north-pole-*.json`, and the review game `review-world-tour.json`),
-all pinned to revision 3 of
+all pinned to revision 4 of
 `data/locations/north-pole/santas-pizza-village.json`, whose six districts follow
 NORTH-POLE-FLAGSHIP.md: Village Square (business, centre), Candy Cane Market (shopping),
 Toy Workshop Quarter (industrial), Reindeer Ridge (leisure), Frosty's Snow Gardens
@@ -830,7 +830,10 @@ ponds and a hay field on Reindeer Ridge, pairs of houses on lawns with garden ro
 Snow Gardens, and a quay and frozen harbour in Aurora Harbor. Properties, districts and the
 road network are those of revision 2; only tiles changed. A test checks that each district's
 most common tile, leaving out grass, roads and buildings with a role, is its own. The
-per-district atlas key comes with the art (`assets.tile_atlas` stays `classic:gfx/landsym`).
+per-district atlas key comes with the art. Revision 4 changes only the asset keys, to the
+location's own art in the classic layout: `north-pole:gfx/landsym` and `north-pole:gfx/med1`
+(`<namespace>:gfx/<picture>`, where the picture is one the original game has: landsym, med1, k*,
+back*; views/hd/LocationArt looks for it under `locations/<namespace>/` in the HD pack).
 
 Difficulty acts through the existing levels (`NewGameConfig.h:27-33`), for example supplier price
 factors 0.6..1.9 (`docs/blueprint/content-data.md` 3.2). The village definition must allow these

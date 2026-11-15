@@ -144,6 +144,8 @@ TEST_CASE("the picture keys are the settings file's keys", "[fx][review]") {
       {"weather_kitchen", "snow"},
       {"weather_north_pole", "snow"},
       {"picture_screenshots", "on"},
+      {"picture_ambient_motion", "reduced"},
+      {"picture_music_accent", "on"},
   };
   REQUIRE(values.size() == fx::setting_keys().size());
   for (const auto& [key, value] : values) {

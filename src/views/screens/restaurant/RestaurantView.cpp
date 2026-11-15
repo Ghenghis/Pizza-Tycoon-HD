@@ -46,6 +46,7 @@
 #include "views/hd/LocationArt.h"
 #include "views/screens/city_view/ZoomConfig.h"
 #include "views/screens/restaurant/GuestPicker.h"
+#include "views/screens/restaurant/JukeboxAudio.h"
 #include "views/screens/restaurant/RestaurantStats.h"
 #include "views/screens/restaurant/WalkNavigation.h"
 #include "views/ui/PopupManager.h"
@@ -189,13 +190,15 @@ RestaurantView::RestaurantView(GameContext& context, GameState& state,
 
   // Through the music owner, so a restaurant never stops or replaces the
   // player's music; in Original mode it is the same FM call as ever.
+  // The saved choice plays again, while the jukebox stands.
+  jukebox_present_ = views::screens::restaurant::has_jukebox(*restaurant_);
+  const int heard = jukebox_present_ ? restaurant_->jukebox_music() : 0;
   if (context_.music) {
-    context_.music->playback().on_restaurant_enter(
-        restaurant_->jukebox_music());
+    context_.music->playback().on_restaurant_enter(heard);
     ambience_suppressed_ = context_.music->playback().ambience_suppressed();
   }
-  else if (const auto music = restaurant_->jukebox_music(); music > 0) {
-    context_.audio->play_music(static_cast<audio::MusicId>(music - 1));
+  else if (heard > 0) {
+    context_.audio->play_music(static_cast<audio::MusicId>(heard - 1));
   }
 
   update_restaurant_noise();
@@ -244,7 +247,8 @@ void RestaurantView::update_restaurant_noise() {
   // No noise when closed, in kitchen view, or when jukebox is playing
   const bool jukebox = context_.music
                            ? context_.music->playback().ambience_suppressed()
-                           : restaurant_->jukebox_music() > 0;
+                           : views::screens::restaurant::audible_jukebox_choice(
+                                 *restaurant_) > 0;
   if (kitchen_view_ || !restaurant_->is_open(state_.time().time_of_day()) ||
       jukebox) {
     return;
@@ -648,7 +652,8 @@ bool RestaurantView::dining_sounds_on() const {
   }
   const bool jukebox = context_.music
                            ? context_.music->playback().ambience_suppressed()
-                           : restaurant_->jukebox_music() > 0;
+                           : views::screens::restaurant::audible_jukebox_choice(
+                                 *restaurant_) > 0;
   return !jukebox;
 }
 
@@ -677,7 +682,8 @@ void RestaurantView::on_pizza_served(WorldPoint table) {
 void RestaurantView::update_kitchen_bed() {
   const bool jukebox = context_.music
                            ? context_.music->playback().ambience_suppressed()
-                           : restaurant_->jukebox_music() > 0;
+                           : views::screens::restaurant::audible_jukebox_choice(
+                                 *restaurant_) > 0;
   sound_cues_.kitchen_bed(views::screens::restaurant::kitchen_bed_for(
       context_.audio && state_.options().restaurant_fx && !jukebox,
       kitchen_view_, restaurant_->is_open(state_.time().time_of_day()),
@@ -902,6 +908,26 @@ void RestaurantView::tick() {
   }
   scroll_smoother_.on_tick(camera_);
 
+  // The jukebox picked up, sold or burnt stops its song; put back, it plays
+  // again. Its jukebox_music (gameplay) stays as it is.
+  // (A new choice in the jukebox popup is played by the popup itself.)
+  if (const bool present =
+          views::screens::restaurant::has_jukebox(*restaurant_);
+      present != jukebox_present_) {
+    jukebox_present_ = present;
+    const int heard = present ? restaurant_->jukebox_music() : 0;
+    if (context_.music) {
+      context_.music->playback().on_restaurant_jukebox(heard);
+    }
+    else if (heard > 0) {
+      context_.audio->play_music(static_cast<audio::MusicId>(heard - 1));
+    }
+    else {
+      context_.audio->stop_music();
+    }
+    update_restaurant_noise();
+  }
+
   // A music mode change (the jukebox mode starting or stopping) changes
   // whether the restaurant's ambience plays.
   if (context_.music) {
@@ -939,7 +965,14 @@ void RestaurantView::handle_furniture_click(const PlacedFurniture* pf) {
     const auto role = pf->furniture()->role();
     if (role == FurnitureRole::Jukebox) {
       context_.popup->origin({66, 72});
-      context_.popup->create<JukeboxPopup>(restaurant_);
+      // At the North Pole the jukebox also leads to the player's own music.
+      const core::CityId city = restaurant_->property().city().id();
+      const auto& roster = state_.roster();
+      const bool north_pole =
+          roster.contains(city) && roster.entry(city).definition &&
+          roster.entry(city).definition->bonus_route == "north-pole";
+      context_.popup->create<JukeboxPopup>(restaurant_, north_pole,
+                                           &state_.options());
     }
     else if (role == FurnitureRole::Tv) {
       context_.popup->origin({66, 72});

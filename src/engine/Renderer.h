@@ -172,8 +172,15 @@ private:
   std::unordered_map<Renderable*, SDL_Texture*> glow_tex_;
   std::unordered_set<Renderable*> glow_ready_;
   // Adds the layer's night glow onto the current target at `dest`.
+  // With twinkle_time >= 0 the glow flickers per cluster (fx::twinkle).
   void add_glow(Renderable* view, const Surface& surface, const SDL_FRect& dest,
-                float strength);
+                float strength, double twinkle_time = -1.0);
+  // Over the current target (a w x h frame): the aurora over the city map
+  // and the falling snow, right of `split` texels (the 1994 side of the
+  // comparison stays clear).
+  void draw_overlays(const fx::FrameState& look, int w, int h, int split) const;
+  // The animation time of `look`: its game time, else the wall clock.
+  [[nodiscard]] static double animation_time(const fx::FrameState& look);
   // Normal-map lighting (SDL's GPU driver, pictures with normal maps).
   std::unique_ptr<fx::NormalLightPass> normal_;
   fx::NormalLights normal_lights_;

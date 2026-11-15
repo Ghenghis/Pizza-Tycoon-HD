@@ -6,9 +6,12 @@
 
 #include "engine/fx/MapStore.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <string_view>
 #include <system_error>
+#include <vector>
 #include "engine/Logger.h"
 #include "engine/gfx/Png.h"
 #include "resources/HdPack.h"
@@ -96,6 +99,81 @@ const MapStore::Named* MapStore::named(const gfx::HdImage* picture) {
   return &it->second;
 }
 
+namespace {
+
+// One box pass along rows (dx = 1) or columns, edges repeated; `in` and
+// `out` are premultiplied 0xRRGGBBAA texels.
+void box_pass(const std::vector<uint32_t>& in, std::vector<uint32_t>& out,
+              int w, int h, int radius, bool rows) {
+  const int len = rows ? w : h;
+  const int lines = rows ? h : w;
+  const int n = 2 * radius + 1;
+  std::vector<int> line(static_cast<std::size_t>(len));
+  for (int l = 0; l < lines; ++l) {
+    auto at = [&](int i) -> std::size_t {
+      return rows ? static_cast<std::size_t>(l) * static_cast<std::size_t>(w) +
+                        static_cast<std::size_t>(i)
+                  : static_cast<std::size_t>(i) * static_cast<std::size_t>(w) +
+                        static_cast<std::size_t>(l);
+    };
+    std::array<uint32_t, 4> result_shift{24, 16, 8, 0};
+    std::vector<uint32_t> result(static_cast<std::size_t>(len), 0);
+    for (const uint32_t shift : result_shift) {
+      for (int i = 0; i < len; ++i) {
+        line[static_cast<std::size_t>(i)] =
+            static_cast<int>((in[at(i)] >> shift) & 0xFF);
+      }
+      auto value = [&](int i) {
+        return line[static_cast<std::size_t>(std::clamp(i, 0, len - 1))];
+      };
+      int sum = 0;
+      for (int i = -radius; i <= radius; ++i) {
+        sum += value(i);
+      }
+      for (int i = 0; i < len; ++i) {
+        const auto v = static_cast<uint32_t>((sum + n / 2) / n);
+        result[static_cast<std::size_t>(i)] |= v << shift;
+        sum += value(i + radius + 1) - value(i - radius);
+      }
+    }
+    for (int i = 0; i < len; ++i) {
+      out[at(i)] = result[static_cast<std::size_t>(i)];
+    }
+  }
+}
+
+} // namespace
+
+void feather(gfx::HdImage& image, int radius) {
+  if (radius <= 0 || image.width <= 0 || image.height <= 0) {
+    return;
+  }
+  const int w = image.width;
+  const int h = image.height;
+  std::vector<uint32_t> a(image.pixels.size());
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    const uint32_t t = image.pixels[i];
+    const uint32_t al = gfx::alpha(t);
+    auto pm = [al](uint32_t c) { return (c * al + 127) / 255; };
+    a[i] = gfx::pack_rgba(pm(gfx::red(t)), pm(gfx::green(t)), pm(gfx::blue(t)),
+                          al);
+  }
+  std::vector<uint32_t> b(a.size());
+  for (int pass = 0; pass < 2; ++pass) {
+    box_pass(a, b, w, h, radius, true);
+    box_pass(b, a, w, h, radius, false);
+  }
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    const uint32_t t = a[i];
+    const uint32_t al = gfx::alpha(t);
+    auto un = [al](uint32_t c) {
+      return al == 0 ? 0u : std::min(255u, (c * 255 + al / 2) / al);
+    };
+    image.pixels[i] = gfx::pack_rgba(un(gfx::red(t)), un(gfx::green(t)),
+                                     un(gfx::blue(t)), al);
+  }
+}
+
 std::shared_ptr<const gfx::HdImage>
 MapStore::load(const std::string& id, const char* file,
                const gfx::HdImage& picture) {
@@ -118,11 +196,14 @@ MapStore::load(const std::string& id, const char* file,
                  id, file);
     return nullptr;
   }
-  if (image->width != picture.width || image->height != picture.height) {
-    return std::make_shared<const gfx::HdImage>(
-        gfx::resample(*image, picture.width, picture.height));
+  gfx::HdImage map =
+      image->width != picture.width || image->height != picture.height
+          ? gfx::resample(*image, picture.width, picture.height)
+          : std::move(*image);
+  if (std::string_view(file) == "emissive.png") {
+    feather(map, emissive_feather_radius(gfx::hd_scale()));
   }
-  return std::make_shared<const gfx::HdImage>(std::move(*image));
+  return std::make_shared<const gfx::HdImage>(std::move(map));
 }
 
 std::shared_ptr<const gfx::HdImage>

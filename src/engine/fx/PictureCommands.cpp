@@ -18,6 +18,8 @@
 #include "engine/fx/MapStore.h"
 #include "engine/fx/PostFx.h"
 #include "engine/fx/RendererSelect.h"
+#include "views/base/ViewDefs.h"
+#include "views/hd/LocationArt.h"
 
 namespace fx {
 
@@ -45,6 +47,20 @@ FrameContext frame_context(const GameState& state) {
   }
   c.hours = static_cast<float>(state.time().current_hour()) +
             static_cast<float>(state.time().current_minute()) / 60.0f;
+  // Animation time from the game clock alone: its ten-minute blocks (eleven
+  // seconds each), the second in the block and the PIT tick in the second.
+  // The same game time draws the same frame.
+  c.anim_seconds =
+      static_cast<double>(state.time().time_blocks()) * 11.0 +
+      static_cast<double>(state.second_in_block()) +
+      static_cast<double>(state.pit_tick_in_second()) / pit_ticks_per_second;
+  c.location = views::hd::art_scope(state.roster(), state.active_city_id()).ns;
+  if (c.area == Area::City) {
+    c.map_rect = {views::base::TABBED_VIEW_OFFSET_X,
+                  views::base::TABBED_VIEW_OFFSET_Y,
+                  views::base::TABBED_VIEWPORT_WIDTH,
+                  views::base::TABBED_VIEWPORT_HEIGHT};
+  }
   return c;
 }
 

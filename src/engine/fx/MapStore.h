@@ -29,6 +29,19 @@
 // is null and costs a hash lookup.
 namespace fx {
 
+// Softens an emissive map's edges: two box blurs of `radius` texels (close
+// to a tent of 4 * radius + 1) in premultiplied space, so a glow never
+// bleeds the colour of transparent texels. Radius 0 leaves it as it is.
+// Masks are cut on the original's pixel grid; at hd_scale 6 and more that
+// grid shows as blocky glow edges, so maps are feathered on load by
+// emissive_feather_radius(hd_scale()).
+void feather(gfx::HdImage& image, int radius);
+// k / 2 texels from hd_scale 6 up (half an original pixel at engine scale
+// 2), none below.
+[[nodiscard]] constexpr int emissive_feather_radius(int k) {
+  return k >= 6 ? k / 2 : 0;
+}
+
 class MapStore {
 public:
   static MapStore& instance();

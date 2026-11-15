@@ -488,8 +488,9 @@ void MenuOptions::build_graphics(GameState& state) {
                       changed();
                     }))
       .help_text("HD only: the game clock colours the city map through the "
-                 "day (dawn, day, dusk, night), and at night lit windows, "
-                 "signs and lamps glow. Not in the Classic preset. Only the "
+                 "day (dawn, day, dusk, night) and lights its street lamps "
+                 "at night. Not in the Classic preset. (Lit windows, signs and "
+                 "ovens glow at night in every preset but Classic.) Only the "
                  "picture changes, not the game.");
   for (const fx::Area area : fx::overridable_areas) {
     add_menu_item(std::make_unique<EnumMenuItem<fx::Weather>>(
@@ -509,6 +510,24 @@ void MenuOptions::build_graphics(GameState& state) {
                       changed();
                     }))
       .help_text("Fewer snowflakes, falling slowly and straight down.");
+  add_menu_item(
+      std::make_unique<EnumMenuItem<fx::AmbientMotion>>(
+          context_, "Ambient motion", look.ambient_motion,
+          std::vector<fx::AmbientMotion>(fx::all_ambient_motion.begin(),
+                                         fx::all_ambient_motion.end()),
+          changed, face))
+      .help_text("HD only, at the North Pole: the aurora over the city map, "
+                 "twinkling windows and falling snow. Full: all of it. "
+                 "Reduced: slow, no twinkle. Static: still. Off: none. "
+                 "Reduced motion above caps it at Reduced.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Music accent", look.music_accent,
+                    [&look, changed] {
+                      look.music_accent = !look.music_accent;
+                      changed();
+                    }))
+      .help_text("At the North Pole, lit windows pulse a little with the "
+                 "music. Only with Ambient motion Full.");
   add_menu_item(std::make_unique<ToggleMenuItem>(
                     context_, "Screenshots as shown", look.graded_screenshots,
                     [&look, changed] {

@@ -59,6 +59,16 @@ enum class Weather : uint8_t { None, Snow, LightSnow };
 inline constexpr std::array all_weather{Weather::None, Weather::Snow,
                                         Weather::LightSnow};
 
+// The North Pole's ambient effects (fx/Ambient.h): the aurora over the city
+// map, the twinkle of lit windows, its default snowfall and the music
+// accent. Off draws none of them; Static draws them without motion (a
+// fixed aurora, still flakes, no twinkle); Reduced moves them slowly, with
+// no twinkle; Full is everything.
+enum class AmbientMotion : uint8_t { Off, Static, Reduced, Full };
+inline constexpr std::array all_ambient_motion{
+    AmbientMotion::Off, AmbientMotion::Static, AmbientMotion::Reduced,
+    AmbientMotion::Full};
+
 // Which SDL render driver the game asks for. Auto is SDL's choice
 // (Direct3D 11 on Windows); Gpu is SDL's GPU driver (Direct3D 12, Vulkan or
 // Metal), the only one that runs the post-FX shader.
@@ -70,6 +80,7 @@ enum class RendererChoice : uint8_t { Auto, Gpu };
 [[nodiscard]] std::string to_string(RendererChoice c);
 [[nodiscard]] std::string to_string(Area a);
 [[nodiscard]] std::string to_string(Weather w);
+[[nodiscard]] std::string to_string(AmbientMotion m);
 
 // settings.conf values: classic, natural, vivid, cinematic, studio; same;
 // auto, gpu.
@@ -77,6 +88,9 @@ enum class RendererChoice : uint8_t { Auto, Gpu };
 [[nodiscard]] std::string_view to_config_value(AreaPreset p);
 [[nodiscard]] std::string_view to_config_value(RendererChoice c);
 [[nodiscard]] std::string_view to_config_value(Weather w);
+[[nodiscard]] std::string_view to_config_value(AmbientMotion m);
+[[nodiscard]] std::optional<AmbientMotion>
+    ambient_motion_from_config_value(std::string_view);
 [[nodiscard]] std::optional<Weather>
     weather_from_config_value(std::string_view);
 [[nodiscard]] std::optional<Preset> preset_from_config_value(std::string_view);
@@ -115,6 +129,13 @@ struct LookSettings {
   // weather included) instead of the composited frame underneath. Off by
   // default: the compare views and their tests read the frame itself.
   bool graded_screenshots = false;
+  // The North Pole's ambient effects; "Reduced motion" caps it at Reduced.
+  AmbientMotion ambient_motion = AmbientMotion::Full;
+  // Lit windows pulse a little with the music (Full only).
+  bool music_accent = false;
+
+  // ambient_motion, capped by reduced_motion.
+  [[nodiscard]] AmbientMotion effective_motion() const;
 
   [[nodiscard]] Preset preset_for(Area area) const;
   [[nodiscard]] Weather weather_for(Area area) const;
@@ -145,6 +166,9 @@ struct Grade {
   float crt = 0.0f; // 0..1
   float light_strength = 1.0f;
   float shadow_depth = 1.0f;
+  // How strongly emissive art (lit windows, ovens, lanterns: the HD pack's
+  // emissive maps) glows at full night, 0..1. 0 in Classic.
+  float glow = 0.0f;
 
   // True when the pass would not change a single texel.
   [[nodiscard]] bool identity() const;
@@ -170,18 +194,39 @@ struct FrameContext {
   Area area = Area::Other;
   // The game clock's time of day, 0..24 (12 = noon: day, no tint).
   float hours = 12.0f;
+  // Seconds of game time for animation (the clock's blocks, seconds and PIT
+  // ticks, fx::frame_context), so the same game time draws the same frame;
+  // < 0 when unknown (the renderer then times what moves by the wall clock).
+  double anim_seconds = -1.0;
+  // The location of the city on screen (views/hd/LocationArt namespace, e.g.
+  // "north-pole"); empty for a Classic city or no city.
+  std::string location;
+  // The city map's viewport in engine pixels (x, y, w, h); w = 0 for none.
+  std::array<int, 4> map_rect{};
 };
 
 // Everything the renderer needs for a frame, resolved from the settings.
 struct FrameState {
-  Grade grade;          // day/night tint included
-  float night = 0.0f;   // emissive glow and street lamps, 0..1
+  Grade grade;        // day/night tint included
+  float night = 0.0f; // street lamps, 0..1 (the "Day and night" option)
+  // Emissive maps drawn over their pictures: the night of the game clock
+  // times the preset's glow (Grade::glow), 0..1. Places with a clock only
+  // (city map, restaurant, kitchen); 0 in Classic; independent of the
+  // "Day and night" option, which tints the sky and lights the lamps.
+  float emissive = 0.0f;
   float sun_hours = -1; // time of day for the sun, < 0 = no sun
   Weather weather = Weather::None;
   bool reduced_motion = false;
   Area area = Area::Other;
   // Screenshots through the picture pass (LookSettings::graded_screenshots).
   bool graded_capture = false;
+  // The North Pole's ambient effects (fx/Ambient.h), resolved:
+  float aurora = 0.0f;  // the aurora's strength over the city map, 0..1
+  bool twinkle = false; // lit windows flicker per cluster (Full only)
+  // Animation time: anim_seconds scaled by the motion (Reduced slow, Static
+  // 0); < 0 when unknown.
+  double anim_seconds = -1.0;
+  std::array<int, 4> map_rect{};
   bool operator==(const FrameState&) const = default;
 };
 [[nodiscard]] FrameState resolve_frame(const LookSettings& settings,
@@ -209,6 +254,11 @@ void set_frame_look(const LookSettings& settings, const FrameContext& context);
 void set_frame_look(const LookSettings& settings, Area area);
 void set_frame_grade(const Grade& grade);
 void set_frame_state(const FrameState& state);
+// The music's level (RMS, 0..1) for the music accent, set by whoever
+// measures it (the audio lane, from its own meter; this lane never reads
+// the audio). Stays 0 when nobody does, so the accent then does nothing.
+void set_music_level(float level);
+[[nodiscard]] float music_level();
 [[nodiscard]] const Grade& frame_grade();
 [[nodiscard]] const FrameState& frame_state();
 

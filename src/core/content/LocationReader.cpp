@@ -12,6 +12,7 @@
 #include <limits>
 #include <set>
 #include <sstream>
+#include <string>
 
 #include "core/content/JsonShape.h"
 #include "core/content/Sha256.h"
@@ -116,38 +117,87 @@ bool kit_id(std::string_view text) {
          community(text.substr(4));
 }
 
-// ^(classic:gfx/[a-z0-9_]{1,16}|bundle:[A-Za-z0-9._/-]{1,200})$
-bool asset_key(std::string_view text) {
+// The pictures of the original game a location may bind as its own art:
+// its two map atlases, the kitchens (gfx/k*) and the backgrounds
+// (gfx/back*). ^(landsym|med1|k[a-z0-9_]{1,15}|back[a-z0-9_]{0,12})$
+bool classic_picture_name(std::string_view name) {
+  if (name.empty() || name.size() > 16) {
+    return false;
+  }
+  for (const char c : name) {
+    if (!lower_or_digit(c) && c != '_') {
+      return false;
+    }
+  }
+  return name == "landsym" || name == "med1" ||
+         (name.size() > 1 && name.front() == 'k') || name.starts_with("back");
+}
+
+// Why text cannot be an asset key, or empty when it can. The forms:
+//   classic:gfx/<name>     the user's original picture ([a-z0-9_]{1,16});
+//   <ns>:gfx/<picture>     a location's own art for one of the original
+//                          pictures (classic_picture_name), ns
+//                          [a-z0-9_-]{1,32} (views/hd/LocationArt);
+//   bundle:<path>          indexed art shipped in the location bundle.
+// The schema's pattern:
+// ^(classic:gfx/[a-z0-9_]{1,16}|bundle:[A-Za-z0-9._/-]{1,200}|
+//   [a-z0-9_-]{1,32}:gfx/(landsym|med1|k[a-z0-9_]{1,15}|back[a-z0-9_]{0,12}))$
+std::string asset_key_problem(std::string_view text) {
   constexpr std::string_view classic_prefix = "classic:gfx/";
   constexpr std::string_view bundle_prefix = "bundle:";
   if (text.starts_with(classic_prefix)) {
     const auto rest = text.substr(classic_prefix.size());
     if (rest.empty() || rest.size() > 16) {
-      return false;
+      return "classic:gfx/ needs a picture name of 1 to 16 characters";
     }
     for (const char c : rest) {
       if (!lower_or_digit(c) && c != '_') {
-        return false;
+        return "a classic picture name is a-z, 0-9 and _ only";
       }
     }
-    return true;
+    return {};
   }
   if (text.starts_with(bundle_prefix)) {
     const auto rest = text.substr(bundle_prefix.size());
     if (rest.empty() || rest.size() > 200) {
-      return false;
+      return "bundle: needs a path of 1 to 200 characters";
     }
     for (const char c : rest) {
       const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
                       (c >= '0' && c <= '9') || c == '.' || c == '_' ||
                       c == '/' || c == '-';
       if (!ok) {
-        return false;
+        return "a bundle path is A-Z, a-z, 0-9, '.', '_', '/' and '-' only";
       }
     }
-    return true;
+    return {};
   }
-  return false;
+  const auto colon = text.find(':');
+  constexpr std::string_view forms =
+      "use classic:gfx/<picture>, <namespace>:gfx/<picture> or "
+      "bundle:<path>";
+  if (colon == std::string_view::npos) {
+    return "not an asset key: " + std::string(forms);
+  }
+  const auto ns = text.substr(0, colon);
+  const auto rest = text.substr(colon + 1);
+  if (!rest.starts_with("gfx/")) {
+    return "only pictures (gfx/) can be bound: " + std::string(forms);
+  }
+  if (ns.empty() || ns.size() > 32) {
+    return "the namespace before ':' must be 1 to 32 characters";
+  }
+  for (const char c : ns) {
+    if (!lower_or_digit(c) && c != '_' && c != '-') {
+      return "the namespace before ':' is a-z, 0-9, _ and - only";
+    }
+  }
+  if (!classic_picture_name(rest.substr(4))) {
+    return std::string(rest) +
+           " is not a picture of the original game a location can bind "
+           "(gfx/landsym, gfx/med1, gfx/k*, gfx/back*)";
+  }
+  return {};
 }
 
 // ^[a-z][a-z0-9.-]{2,63}$ for template ids is patterns::dotted_id.
@@ -842,8 +892,13 @@ private:
 
   void binding(const json& v, Ptr p, std::string& key_out) {
     shape_.object(v, p, {}, {"key", "fallback"});
-    key_out =
-        shape_.text_at(v, p, "key", 1, 300, false, asset_key).value_or("");
+    key_out = shape_.text_at(v, p, "key", 1, 300, false).value_or("");
+    if (!key_out.empty()) {
+      if (std::string problem = asset_key_problem(key_out); !problem.empty()) {
+        shape_.fail(at(p, "key"), "'" + key_out + "': " + problem);
+        key_out.clear();
+      }
+    }
     shape_.choice_at(v, p, "fallback", {"classic", "placeholder"});
   }
 

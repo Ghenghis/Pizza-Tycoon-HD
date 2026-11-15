@@ -19,8 +19,10 @@
 namespace fx {
 
 struct Flake {
-  float x = 0.0f; // frame texels, centre (before sway)
+  float x = 0.0f; // frame texels, centre (before sway), at time()
   float y = 0.0f;
+  float x0 = 0.0f; // where it starts (time 0); the rest follows from time
+  float y0 = 0.0f;
   float size = 1.0f;  // texels across
   float speed = 0.0f; // texels per second, down
   float sway = 0.0f;  // texels side to side
@@ -44,12 +46,17 @@ public:
   // Moves every flake on by `seconds` (clamped to a tenth of a second, so a
   // stall never makes the snow jump).
   void step(float seconds);
+  // Puts every flake where it is at `seconds` (game time, fx::FrameState::
+  // anim_seconds): a pure function of the time, so the same time gives the
+  // same snow. A flake that leaves the bottom comes back at the top, each
+  // time at another place across.
+  void set_time(double seconds);
 
   [[nodiscard]] Weather weather() const noexcept { return weather_; }
   [[nodiscard]] const std::vector<Flake>& flakes() const noexcept {
     return flakes_;
   }
-  [[nodiscard]] float time() const noexcept { return time_; }
+  [[nodiscard]] double time() const noexcept { return time_; }
   // Where a flake is drawn now (sway included).
   [[nodiscard]] float drawn_x(const Flake& f) const;
 
@@ -64,7 +71,7 @@ public:
 
 private:
   float next(); // 0..1
-  void respawn(Flake& f, bool anywhere);
+  void spawn(Flake& f);
 
   uint32_t seed_;
   uint32_t state_ = 1;
@@ -72,7 +79,7 @@ private:
   bool reduced_ = false;
   int w_ = 0;
   int h_ = 0;
-  float time_ = 0.0f;
+  double time_ = 0.0;
   std::vector<Flake> flakes_;
 };
 

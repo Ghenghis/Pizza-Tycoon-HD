@@ -13,6 +13,8 @@
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Draw.h"
 #include "engine/music/MusicSystem.h"
+#include "views/ui/PopupManager.h"
+#include "views/ui/popups/MusicPlayerPopup.h"
 
 static constexpr std::array<const char*, 7> music_titles = {
     "-------- OFF --------",
@@ -27,9 +29,26 @@ static constexpr std::array<const char*, 7> music_titles = {
 // Popup-local rect for row i (0=OFF, 1-6=music tracks).
 ViewRect JukeboxPopup::row_rect(int i) { return {46, 44 + (i * 20), 220, 22}; }
 
-JukeboxPopup::JukeboxPopup(const GameContext& ctx, Restaurant* restaurant)
+JukeboxPopup::JukeboxPopup(const GameContext& ctx, Restaurant* restaurant,
+                           bool north_pole, GameOptions* options)
     : BasePopup(ctx), restaurant_(restaurant), audio_(ctx.audio),
-      music_(ctx.music), selected_music_(restaurant->jukebox_music()) {}
+      music_(ctx.music), selected_music_(restaurant->jukebox_music()),
+      north_pole_(north_pole), options_(options), popups_(ctx.popup),
+      more_({196, 194, 76, 22}, "More...", [this] {
+        // The player's own music; the song chosen here stays as it is.
+        PopupManager* popups = popups_;
+        GameOptions* options = options_;
+        popups->create<MusicPlayerPopup>(options);
+        finished();
+      }) {
+  more_.id("jukebox_more");
+  more_.tooltip("Your own music: folders, collections and playlists, in the "
+                "music player. The song chosen here plays on for the guests.");
+}
+
+bool JukeboxPopup::offers_more() const {
+  return north_pole_ && music_ && popups_;
+}
 
 void JukeboxPopup::add_interactions(views::ui::InteractionContext ictx,
                                     ViewPoint origin) {
@@ -76,6 +95,9 @@ void JukeboxPopup::add_interactions(views::ui::InteractionContext ictx,
           }
         });
   }
+  if (offers_more()) {
+    more_.add_interactions(ictx, origin);
+  }
 }
 
 void JukeboxPopup::render(Surface& surface, ViewPoint origin) {
@@ -91,8 +113,9 @@ void JukeboxPopup::render(Surface& surface, ViewPoint origin) {
   gfx::draw::box(surface, outer.inset(6, 6), c3, 2);
 
   const PxOffset title_offset{box_size.w / 2, 18};
-  font_->render_line_onto(surface, "Music Selection", origin + title_offset,
-                          FontFace::ASTANDAR, 240, TextAnchor::Middle);
+  font_->render_line_onto(
+      surface, north_pole_ ? "North Pole Jukebox" : "Music Selection",
+      origin + title_offset, FontFace::ASTANDAR, 240, TextAnchor::Middle);
 
   for (int i = 0; i < static_cast<int>(music_titles.size()); ++i) {
     const ViewRect local = row_rect(i);
@@ -117,4 +140,9 @@ void JukeboxPopup::render(Surface& surface, ViewPoint origin) {
   font_->render_line_onto(surface, "Please select...",
                           origin + please_select_offset, FontFace::PIZ_NUMB,
                           14);
+  if (offers_more()) {
+    // Drawn on its own surface, as the kit's buttons are, then placed.
+    auto button = text_button("More...", 76, 22, false);
+    surface.blit_raw(button, origin + PxOffset{196, 194});
+  }
 }

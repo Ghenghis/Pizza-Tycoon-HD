@@ -32,6 +32,7 @@
 #include "core/content/LocationValidator.h"
 #include "core/content/Roster.h"
 #include "core/content/Scenario.h"
+#include "core/content/ScenarioSave.h"
 #include "core/content/Sha256.h"
 #include "core/content/ShippedScenarios.h"
 #include "core/events/MilestoneId.h"
@@ -247,6 +248,80 @@ TEST_CASE("The reader reports shape errors with their JSON pointer",
   }
 }
 
+TEST_CASE("Asset keys: classic, a location's own art, or a bundle",
+          "[content][definition][assets]") {
+  const auto with_key = [](const std::string& key) {
+    json doc = editable_harbor_bay();
+    doc["assets"]["tile_atlas"]["key"] = key;
+    return doc;
+  };
+  for (const char* good :
+       {"classic:gfx/landsym", "classic:gfx/anything_16_char",
+        "bundle:art/x.png", "north-pole:gfx/landsym", "north-pole:gfx/med1",
+        "np_2:gfx/k0", "harbor-bay:gfx/back12", "a:gfx/kitchen",
+        "classic:gfx/med1"}) {
+    INFO(good);
+    const auto read = read_location(with_key(good));
+    INFO(describe(read.findings));
+    REQUIRE(read.definition);
+    CHECK(read.definition->tile_atlas == good);
+    CHECK_FALSE(
+        has_finding_at(read.findings, "SCHEMA-1", "/assets/tile_atlas/key"));
+  }
+  for (const char* bad :
+       {"gfx/landsym",            // no namespace
+        "North-Pole:gfx/landsym", // capitals
+        "north pole:gfx/med1",    // a space
+        "north-pole:sfx/med1",    // not a picture
+        "north-pole:gfx/",        // no picture
+        "north-pole:gfx/menu",    // not a picture a location can bind
+        "north-pole:gfx/k",       // k* needs more
+        "north-pole:gfx/landsym2", "north-pole:gfx/../landsym", ":gfx/landsym",
+        "abcdefghijklmnopqrstuvwxyz0123456:gfx/landsym", "classic:gfx/",
+        "classic:gfx/Landsym", "bundle:", "bundle:a b"}) {
+    INFO(bad);
+    const auto findings = check(with_key(bad));
+    CHECK(has_finding_at(findings, "SCHEMA-1", "/assets/tile_atlas/key"));
+    // The message names the key and what is wrong with it.
+    const auto it = std::ranges::find_if(findings, [](const Finding& f) {
+      return f.pointer == "/assets/tile_atlas/key";
+    });
+    REQUIRE(it != findings.end());
+    CHECK(it->message.find(bad) != std::string::npos);
+  }
+}
+
+TEST_CASE("A location's own art key survives the save's embedded definition",
+          "[content][definition][assets][save]") {
+  const auto definition = village();
+  REQUIRE(definition->tile_atlas == "north-pole:gfx/landsym");
+  // The canonical document read back is the same definition.
+  const auto again = read_location(json::parse(definition->canonical_document));
+  INFO(describe(again.findings));
+  REQUIRE(again.definition);
+  CHECK(again.definition->tile_atlas == definition->tile_atlas);
+  CHECK(again.definition->medium_atlas == definition->medium_atlas);
+  CHECK(again.definition->sha256 == definition->sha256);
+
+  // Through a version 4 save's scenario block and back.
+  auto roster =
+      Roster::from_entries({RosterEntry{.key = definition->key,
+                                        .source = RosterSource::Definition,
+                                        .classic_number = std::nullopt,
+                                        .definition = definition}});
+  REQUIRE(roster);
+  const json block = save_scenario_block(*roster, nullptr);
+  std::string error;
+  const auto saved = read_scenario_block(json::parse(block.dump()), error);
+  INFO(error);
+  REQUIRE(saved);
+  const auto& entry = saved->roster.entry(core::CityId{0});
+  REQUIRE(entry.definition);
+  CHECK(entry.definition->tile_atlas == "north-pole:gfx/landsym");
+  CHECK(entry.definition->medium_atlas == "north-pole:gfx/med1");
+  CHECK(entry.definition->sha256 == definition->sha256);
+}
+
 TEST_CASE("The semantic rules catch what the schema cannot",
           "[content][definition]") {
   SECTION("QA content is never built") {
@@ -356,7 +431,9 @@ TEST_CASE("Santa's Pizza Village is a valid location",
   CHECK_FALSE(v.geo.has_value());
   REQUIRE(v.tiles.size() == static_cast<std::size_t>(grid_tiles));
   CHECK(v.declared_sha256 == v.sha256);
-  CHECK(v.tile_atlas == "classic:gfx/landsym");
+  // The village's own art, in the classic layout (views/hd/LocationArt).
+  CHECK(v.tile_atlas == "north-pole:gfx/landsym");
+  CHECK(v.medium_atlas == "north-pole:gfx/med1");
 
   int business = 0;
   int depots = 0;

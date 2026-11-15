@@ -370,6 +370,27 @@ const auto option_defs = std::to_array({
               {},
               "screenshots show the picture as the window does (preset, "
               "weather); off writes the frame underneath"},
+    OptionDef{"picture_ambient_motion",
+              [](const GameOptions& o) {
+                return std::string(
+                    fx::to_config_value(o.picture.ambient_motion));
+              },
+              [](GameOptions& o, const std::string& s) {
+                if (auto parsed = fx::ambient_motion_from_config_value(s)) {
+                  o.picture.ambient_motion = *parsed;
+                }
+              },
+              {},
+              "off, static, reduced or full: the North Pole's aurora, "
+              "twinkling windows and snowfall"},
+    OptionDef{
+        "picture_music_accent",
+        [](const GameOptions& o) { return from_bool(o.picture.music_accent); },
+        [](GameOptions& o, const std::string& s) {
+          o.picture.music_accent = to_bool(s);
+        },
+        {},
+        "North Pole: lit windows pulse a little with the music"},
 });
 
 // Where the original game lives.

@@ -2,7 +2,7 @@
   "format": "pthd.location",
   "schema_version": "1.0.0",
   "location_key": "pthd:santas-pizza-village",
-  "revision": 3,
+  "revision": 4,
   "display": {
     "name": "Santa's Pizza Village",
     "short_name": "North Pole",
@@ -1865,11 +1865,11 @@
   "assets": {
     "kit": null,
     "tile_atlas": {
-      "key": "classic:gfx/landsym",
+      "key": "north-pole:gfx/landsym",
       "fallback": "placeholder"
     },
     "medium_atlas": {
-      "key": "classic:gfx/med1",
+      "key": "north-pole:gfx/med1",
       "fallback": "placeholder"
     },
     "thumbnail": null,
@@ -1883,6 +1883,6 @@
   },
   "integrity": {
     "canonicalization": "jcs-rfc8785",
-    "definition_sha256": "523ecf4a3c4727b077e68c78846ec17bfe281606a2acadc2a59f73dbee643320"
+    "definition_sha256": "2beaa99bf452cf4628c8c594f7a9ba9f8354b6e52d47a394698a634d8d8422cf"
   }
 }

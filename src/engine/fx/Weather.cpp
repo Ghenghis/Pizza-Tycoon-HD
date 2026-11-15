@@ -32,7 +32,7 @@ float Snowfall::next() {
   return static_cast<float>(state_ >> 8) / static_cast<float>(1u << 24);
 }
 
-void Snowfall::respawn(Flake& f, bool anywhere) {
+void Snowfall::spawn(Flake& f) {
   const float k = static_cast<float>(h_) / 400.0f; // texels per engine pixel
   // Near flakes are bigger, faster and brighter.
   const float depth = next();
@@ -41,8 +41,10 @@ void Snowfall::respawn(Flake& f, bool anywhere) {
   f.sway = reduced_ ? 0.0f : k * (1.0f + 3.0f * next());
   f.phase = next() * 6.2831853f;
   f.alpha = 0.45f + 0.5f * depth;
-  f.x = next() * static_cast<float>(w_);
-  f.y = anywhere ? next() * static_cast<float>(h_) : -f.size;
+  f.x0 = next() * static_cast<float>(w_);
+  f.y0 = next() * (static_cast<float>(h_) + 2.0f * f.size);
+  f.x = f.x0;
+  f.y = f.y0 - f.size;
 }
 
 void Snowfall::configure(Weather weather, bool reduced_motion, int w, int h) {
@@ -53,31 +55,41 @@ void Snowfall::configure(Weather weather, bool reduced_motion, int w, int h) {
   reduced_ = reduced_motion;
   w_ = w;
   h_ = h;
-  time_ = 0.0f;
+  time_ = 0.0;
   state_ = seed_ ? seed_ : 1u;
   flakes_.assign(flake_count(weather, reduced_motion, w, h), Flake{});
   for (Flake& f : flakes_) {
-    respawn(f, true);
+    spawn(f);
+  }
+  set_time(0.0);
+}
+
+void Snowfall::set_time(double seconds) {
+  time_ = std::max(0.0, seconds);
+  const auto w = static_cast<double>(w_);
+  for (Flake& f : flakes_) {
+    // Falling through a loop of the frame's height plus the flake.
+    const double span = static_cast<double>(h_) + 2.0 * f.size;
+    const double pos = static_cast<double>(f.y0) + f.speed * time_;
+    const double laps = std::floor(pos / span);
+    f.y = static_cast<float>(pos - laps * span) - f.size;
+    // Each lap at another place across (golden-ratio steps).
+    const double across = static_cast<double>(f.x0) / std::max(w, 1.0) +
+                          laps * 0.6180339887498949;
+    f.x = static_cast<float>((across - std::floor(across)) * w);
   }
 }
 
 void Snowfall::step(float seconds) {
-  const float dt = std::clamp(seconds, 0.0f, 0.1f);
-  time_ += dt;
-  // Keep the clock small so sin() stays precise over a long session.
-  if (time_ > 3600.0f) {
-    time_ -= 3600.0f;
-  }
-  for (Flake& f : flakes_) {
-    f.y += f.speed * dt;
-    if (f.y - f.size > static_cast<float>(h_)) {
-      respawn(f, false);
-    }
-  }
+  set_time(time_ + static_cast<double>(std::clamp(seconds, 0.0f, 0.1f)));
 }
 
 float Snowfall::drawn_x(const Flake& f) const {
-  return f.x + f.sway * std::sin(f.phase + time_ * 1.3f);
+  // The sway's angle wrapped to one turn, so it stays precise however long
+  // the game runs.
+  const double turn = std::fmod(time_ * 1.3, 6.283185307179586);
+  return f.x + f.sway * static_cast<float>(
+                            std::sin(static_cast<double>(f.phase) + turn));
 }
 
 void Snowfall::build(std::vector<SDL_Vertex>& vertices,

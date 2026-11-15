@@ -17,7 +17,9 @@ class GameState;
 
 namespace fx {
 
-// The area and time of day of the screen on top, for set_frame_look().
+// What the game loop knows about the frame, for set_frame_look(): the area
+// and time of day of the screen on top, the animation time from the game
+// clock, the city's location and the city map's viewport.
 [[nodiscard]] FrameContext frame_context(const GameState& state);
 
 // The `picture` console commands (review captures and benches, see
