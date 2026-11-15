@@ -44,23 +44,10 @@ using IngredientPrices = core::food::IngredientArray<Money>;
 #include "core/util/Constants.h"
 #include "engine/Size.h"
 
-#define NUMBER_OF_TYPES 256
 #define NUMBER_OF_ACTOR_TYPES 5
 
 // Every city opens on this rate and drifts from there.
 constexpr int starting_interest_rate = 8;
-
-enum class MapTileType {
-  TILE_TYPE_SPECIAL = 0,
-  TILE_TYPE_NATURE,
-  TILE_TYPE_WATER,
-  TILE_TYPE_BUILDING,
-  TILE_TYPE_PATH,
-  TILE_TYPE_ROAD,
-  TILE_TYPE_VILLA,
-  TILE_TYPE_RESIDENTIAL_BUILDING,
-  TILE_TYPE_OTHER,
-};
 
 struct PropertyInfo {
   std::string description{"BUILDING"};
@@ -95,9 +82,7 @@ public:
   bool is_business_premise_by_index(int index) const;
   static bool is_business_premise_by_type(uint8_t type);
   static bool is_property_by_type(uint8_t type);
-  MapTileType tile_category(int index) const;
   bool is_road_tile(int index) const;
-  std::string description(int index) const;
   std::string building_name(int index) const;
   std::string building_type_name(int index) const;
   std::string building_specific_name(int index) const;
@@ -137,9 +122,6 @@ public:
   void suppliers_without_stock(std::vector<std::unique_ptr<FoodSupplier>> s) {
     suppliers_ = std::move(s);
   }
-  void types(const std::array<uint8_t, NUMBER_OF_TYPES>& types);
-  void
-  type_names(const std::array<std::string, /*NUMBER_OF_TYPES*/ 10>& type_names);
   void district_bez(std::array<uint8_t, 300>);
   void
   bank_settings(std::unordered_map<core::ActorId, BankSettings> bank_settings) {
@@ -396,8 +378,6 @@ private:
   std::map<int, std::string> named_buildings_;
   std::array<std::array<std::string, 24>, 8> building_names_;
   std::array<int, 8> building_name_count_{};
-  std::array<std::string, /*NUMBER_OF_TYPES*/ 10> type_names_{};
-  std::array<uint8_t, NUMBER_OF_TYPES> types_{};
   std::vector<std::unique_ptr<District>> districts_;
   std::map<int, std::unique_ptr<Property>> properties_;
   std::array<uint8_t, 300> district_bez_{};

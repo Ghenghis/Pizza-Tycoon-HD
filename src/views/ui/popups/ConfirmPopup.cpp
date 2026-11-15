@@ -8,7 +8,8 @@
 #include "views/base/RawRenderer.h"
 
 ConfirmPopup::ConfirmPopup(const GameContext& ctx, std::string text,
-                           callback_t cb, const RawRenderable* renderable)
+                           callback_t cb, const RawRenderable* renderable,
+                           std::string yes_label, std::string no_label)
     : BasePopup(ctx), text_(std::move(text)), cb_(std::move(cb)),
       renderable_(renderable),
       btn_yes_(
@@ -19,7 +20,7 @@ ConfirmPopup::ConfirmPopup(const GameContext& ctx, std::string text,
                   (renderable->picture_height() * 2))
                : 80,
            74, 38},
-          "Yes", [this] { confirm(true); }),
+          std::move(yes_label), [this] { confirm(true); }),
       btn_no_(
           {240,
            renderable
@@ -28,7 +29,7 @@ ConfirmPopup::ConfirmPopup(const GameContext& ctx, std::string text,
                   (renderable->picture_height() * 2))
                : 80,
            74, 38},
-          "No", [this] { confirm(false); }) {
+          std::move(no_label), [this] { confirm(false); }) {
   add_shortcut(input::Action::ConfirmYes, &btn_yes_);
   add_shortcut(input::Action::SubmitInput, &btn_yes_);
   add_shortcut(input::Action::ConfirmNo, &btn_no_);

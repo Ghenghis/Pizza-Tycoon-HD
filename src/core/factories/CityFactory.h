@@ -43,10 +43,6 @@ public:
   // (location-contract.md section 4).
   static void initialise_new_city(City& city, bool fix_legacy_bugs);
 
-  // The tile categories and their names, as every city gets them.
-  static void tile_types(std::array<uint8_t, /*NUMBER_OF_TILES*/ 256>& types,
-                         std::array<std::string, 10>& type_names);
-
   // The colour district i is drawn in on the district map.
   static uint8_t district_color(std::size_t index);
 
@@ -69,8 +65,6 @@ private:
   std::array<std::array<uint32_t, MAX_ACTOR_PER_TYPE>, NUMBER_OF_ACTOR_TYPES>
       phone_numbers_{};
   std::array<uint8_t, NUMBER_OF_ACTOR_TYPES * MAX_ACTOR_PER_TYPE> heads_{};
-  std::array<std::string, /*NUMBER_OF_TYPES*/ 10> type_names_{};
-  std::array<uint8_t, /*NUMBER_OF_TILES */ 256> types_{};
   std::array<uint8_t, UNIQUE_DISTRICT_COLORS> district_color_list_;
   std::vector<std::unique_ptr<District>> districts_;
   std::map<int, std::unique_ptr<Property>> properties_;
@@ -104,7 +98,6 @@ private:
 
   void build_city_object(City& city, int id, bool fix_legacy_bugs);
   static void seed_ingredient_trends(City& city);
-  void populate_types();
   void load_color_definition();
   static uint32_t transform_phone_number(uint32_t);
   static uint32_t invert_transform_phone_number(uint32_t);

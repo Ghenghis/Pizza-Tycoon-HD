@@ -4,7 +4,8 @@
 
 It reads an --exec script and answers the commands the gates send:
 screenshot (a synthetic picture), dump fingerprint, bench, --version; every
-other command is accepted silently. Like the game, it names each failed
+other command is accepted silently. With --hd-pack it writes hd_warm.txt
+next to its --config, as the game does. Like the game, it names each failed
 command on stderr ("error: command failed: <line>") and exits 1 after them.
 
 FAKE_COVERAGE  JSON: the flat share each screen's screenshot has, keyed by
@@ -65,6 +66,14 @@ def main(argv: list[str]) -> int:
             print("bench: 300 frames at 3840x2400 (direct3d11): avg 3.0 ms, p99 4.4 ms, first frame 14.4 ms")
         elif words[0] == "nav":
             current = line
+    if "--hd-pack" in argv and "--config" in argv:
+        # Like the game: the pack files the session used, next to its settings.
+        warm = Path(argv[argv.index("--config") + 1]).parent / "hd_warm.txt"
+        warm.write_text(
+            "# Pizza Tycoon HD: pack files used last session, decoded early\n"
+            "640 400 gfx/bo.png restaurant\n56 44 bob/moebel/0116.png restaurant\n",
+            encoding="utf-8",
+        )
     return 1 if failures else 0
 
 

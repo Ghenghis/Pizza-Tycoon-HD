@@ -249,6 +249,23 @@ None of them deletes anything. Every control has help text.
 Browsing only reads the folder, and a menu stops the game's clock. The tests check that the game's
 fingerprint, its random state and every file in the folder stay as they were.
 
+## Resume after a crash: `begin_session`, `take_resume_offer`
+
+At start-up, `begin_session` reads `session.json` in the saves folder. The file holds when the last
+run began, whether it ended cleanly, and when the player last saved by hand. `choose_resume` then
+picks the newest working version in `AUTOCHK` that the last run made after its last manual save.
+It picks nothing after a clean exit or when there is no record.
+
+`CHECKPNT` versions don't count: they hold a game that was replaced, not the one last played. The
+new run is then recorded as begun and not yet ended. Every manual save notes its time in the
+record, and `end_session` marks a clean exit.
+
+The main menu calls `take_resume_offer` once, and it gives nothing if called again. It checks the
+version again: the integrity check, then a build apart from the game. Then it asks "Resume where
+you left off: day N, HH:MM?" with Resume and Not now. Resume goes through `load_version`. Nothing
+loads by itself and nothing is deleted. A "Not now" stays quiet after that, because the next
+start's record is this run, which made no newer checkpoint.
+
 ## Fault tests
 
 `tests/SaveVersionTests.cpp` uses `util::testing::ScopedAtomicFault`, a test-only seam in

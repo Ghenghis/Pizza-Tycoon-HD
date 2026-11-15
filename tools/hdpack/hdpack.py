@@ -12,6 +12,9 @@ Workflow:
        * with ComfyUI:      hdpack.py comfy export/ pack/ --workflow ...
   3. Check it:            hdpack.py validate export/ pack/ [--provenance]
                           (or just the sidecars: hdpack.py provenance pack/)
+     Ship a warm list:    hdpack.py warm-list pack/ <session>/hd_warm.txt
+                          (a reference session's list, so a player's first
+                          session decodes the art before each screen opens)
   4. Play it:             plegacy --hd-scale 3 --hd-pack pack/
                           (or put the pack in a folder called "hd" next to
                           the program and set hd_scale in the settings)
@@ -858,6 +861,75 @@ def comfy_pack(
 HERE = Path(__file__).resolve().parent
 
 
+# --------------------------------------------------------------------------
+# Warm list
+# --------------------------------------------------------------------------
+
+WARM_LIST = "hd_warm.txt"
+WARM_HEADER = (
+    "# Pizza Tycoon HD: this pack's reference warm list (hdpack.py warm-list).\n"
+    "# The game decodes these in the background at start-up, before the screen\n"
+    "# named last on each line opens. Same format as the player's hd_warm.txt:\n"
+    "# <engine width> <engine height> <pack file> [screen]\n"
+)
+
+
+@dataclass
+class WarmListResult:
+    kept: int = 0
+    dropped: list[str] = field(default_factory=list)
+
+
+def install_warm_list(pack_dir: Path, source: Path) -> WarmListResult:
+    """Writes pack/hd_warm.txt from a session's warm list (the game writes one
+    next to its settings), keeping only the lines the engine would accept
+    whose picture is in this pack. Each line once, in the session's order."""
+    if not pack_dir.is_dir():
+        raise HdPackError(f"{pack_dir} is not a folder")
+    try:
+        text = source.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HdPackError(f"cannot read the warm list {source}: {exc}") from exc
+    result = WarmListResult()
+    lines: list[str] = []
+    seen: set[tuple[str, int, int]] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        try:
+            if len(fields) not in (3, 4):
+                raise ValueError("expected 3 or 4 fields")
+            w, h = int(fields[0]), int(fields[1])
+            if w <= 0 or h <= 0:
+                raise ValueError("sizes must be positive")
+            rel = check_relative(fields[2])
+            if not contained_path(pack_dir, rel).is_file():
+                raise ValueError("not in the pack")
+        except (ValueError, HdPackError) as exc:
+            result.dropped.append(f"{line} ({exc})")
+            continue
+        key = (rel, w, h)
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(" ".join([str(w), str(h), rel, *fields[3:4]]))
+    provenance.write_bytes_atomic(
+        pack_dir / WARM_LIST, (WARM_HEADER + "".join(f"{x}\n" for x in lines)).encode("utf-8")
+    )
+    result.kept = len(lines)
+    return result
+
+
+def cmd_warm_list(args: argparse.Namespace) -> int:
+    result = install_warm_list(Path(args.pack), Path(args.list))
+    for d in result.dropped:
+        print("dropped:", d)
+    print(f"wrote {Path(args.pack) / WARM_LIST}: {result.kept} pictures, {len(result.dropped)} lines dropped")
+    return 0
+
+
 def _print_counts(counts: Counts) -> int:
     print(f"written {counts.written}, skipped {counts.skipped} (already in pack), failed {counts.failed}")
     if counts.unrecorded:
@@ -1012,6 +1084,11 @@ def build_parser() -> argparse.ArgumentParser:
     va.add_argument("--json", action="store_true")
     va.add_argument("--provenance", action="store_true", help="also require a matching provenance sidecar per picture")
     va.set_defaults(func=cmd_validate)
+
+    wl = sub.add_parser("warm-list", help="ship a session's warm list with the pack (pack/hd_warm.txt)")
+    wl.add_argument("pack", help="HD pack folder")
+    wl.add_argument("list", help="a session's hd_warm.txt (next to the game's settings)")
+    wl.set_defaults(func=cmd_warm_list)
 
     pr = sub.add_parser("provenance", help="check that every picture under a folder has a matching sidecar")
     pr.add_argument("folder", help="a pack, or a maps/depth output folder")

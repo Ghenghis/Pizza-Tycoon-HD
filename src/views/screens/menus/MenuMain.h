@@ -14,4 +14,9 @@ public:
 
 protected:
   Surface background() const override;
+
+private:
+  // After a run that did not end cleanly: offers, once, to resume its last
+  // verified timed checkpoint. The player chooses; nothing loads by itself.
+  void offer_resume();
 };

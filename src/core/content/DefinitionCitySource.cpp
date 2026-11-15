@@ -250,11 +250,6 @@ void fill_static(City& city, const LocationDefinition& def, bool roll_stock) {
   city.named_buildings(named_buildings(def, names, counts));
   city.building_names(names, counts);
 
-  std::array<uint8_t, 256> types{};
-  std::array<std::string, 10> type_names{};
-  CityFactory::tile_types(types, type_names);
-  city.type_names(type_names);
-
   std::vector<std::unique_ptr<District>> districts;
   for (std::size_t i = 0; i < def.districts.size(); ++i) {
     auto district = make_district(static_cast<int>(i), def.districts[i]);
@@ -262,7 +257,6 @@ void fill_static(City& city, const LocationDefinition& def, bool roll_stock) {
     districts.push_back(std::move(district));
   }
   city.districts(std::move(districts));
-  city.types(types);
   std::array<uint8_t, cell_count> cells{};
   for (std::size_t i = 0; i < cells.size(); ++i) {
     cells[i] = def.district_cells[i];

@@ -1621,6 +1621,37 @@ void write_background_version(const fs::path& path, const NewVersion& version,
   }
 }
 
+// This run's session record, once begin_session has found the folder, and
+// what it found to offer. The game thread alone touches them.
+struct Session {
+  std::optional<fs::path> file;
+  fs::path folder;
+  std::optional<ResumeCandidate> offer;
+};
+
+Session& session() {
+  static Session current;
+  return current;
+}
+
+// A manual save goes into the record, so a checkpoint older than it is
+// never offered over it.
+void note_manual_save() {
+  Session& s = session();
+  if (!s.file) {
+    return;
+  }
+  std::string problem;
+  SessionRecord record =
+      read_session(*s.file, problem).value_or(SessionRecord{});
+  record.last_manual_save_at = utc_now();
+  if (const util::AtomicWriteResult written = write_session(*s.file, record);
+      !written) {
+    Logger::warn("Could not note the save in {}: {}", display(*s.file),
+                 written.error);
+  }
+}
+
 // The background autosaves still running or not yet promoted. The game
 // thread alone touches the list.
 std::vector<std::unique_ptr<CheckpointJob>>& background_autosaves() {
@@ -2078,6 +2109,9 @@ bool SaveGameManager::save_version(const GameState& state,
   activate(slot, staged.manifest, version.bytes);
   Logger::info("Save completed: version {} of {}, load-verified",
                staged.sequence, display(path));
+  if (made_for == "save") {
+    note_manual_save();
+  }
   return true;
 }
 
@@ -3484,6 +3518,113 @@ StateFingerprint SaveGameManager::fingerprint(const GameState& state,
   // same bytes.
   return StateFingerprint{.hash = fingerprint_hash(document.dump()),
                           .document = std::move(document)};
+}
+
+void SaveGameManager::begin_session(const fs::path& folder) {
+  Session& s = session();
+  s.folder = folder.empty() ? fs::path(platform_paths::saves_dir()) : folder;
+  s.file = s.folder / session_filename;
+  s.offer.reset();
+
+  std::string problem;
+  const std::optional<SessionRecord> previous = read_session(*s.file, problem);
+  if (!previous && !problem.empty()) {
+    Logger::warn("The last run's record can't be read: {}", problem);
+  }
+  const SaveSlot::ManifestRead timed =
+      SaveSlot(s.folder / timed_checkpoint_filename).read_manifest();
+  s.offer = choose_resume(previous, timed.manifest);
+  if (s.offer) {
+    Logger::info("The last run did not end cleanly; timed checkpoint {} can "
+                 "resume it",
+                 s.offer->sequence);
+  }
+
+  std::error_code ec;
+  fs::create_directories(s.folder, ec);
+  if (const util::AtomicWriteResult written = write_session(
+          *s.file, SessionRecord{.started_at = utc_now(),
+                                 .clean_exit = false,
+                                 .last_manual_save_at = ""});
+      !written) {
+    Logger::warn("Could not record this run in {}: {}", display(*s.file),
+                 written.error);
+  }
+}
+
+void SaveGameManager::end_session() {
+  Session& s = session();
+  if (!s.file) {
+    return;
+  }
+  std::string problem;
+  SessionRecord record =
+      read_session(*s.file, problem).value_or(SessionRecord{});
+  record.clean_exit = true;
+  if (record.started_at.empty()) {
+    record.started_at = utc_now();
+  }
+  if (const util::AtomicWriteResult written = write_session(*s.file, record);
+      !written) {
+    Logger::warn("Could not record the clean exit in {}: {}",
+                 display(*s.file), written.error);
+  }
+  s.file.reset();
+  s.offer.reset();
+}
+
+std::optional<ResumeCandidate> SaveGameManager::pending_resume() {
+  return session().offer;
+}
+
+std::optional<ResumeOffer>
+SaveGameManager::take_resume_offer(const GameState& like,
+                                   const GameContext& context) {
+  Session& s = session();
+  const std::optional<ResumeCandidate> candidate = std::exchange(s.offer, {});
+  if (!candidate) {
+    return std::nullopt;
+  }
+  const SaveSlot slot(s.folder / timed_checkpoint_filename);
+  const SaveSlot::ManifestRead read = slot.read_manifest();
+  const SaveVersion* v =
+      read.manifest ? read.manifest->find(candidate->sequence) : nullptr;
+  if (v == nullptr || v->status != VersionStatus::Working) {
+    return std::nullopt;
+  }
+  // Checked again: the integrity check, then built apart from the game.
+  const fs::path file = slot.version_path(v->sequence);
+  std::string reason;
+  const std::optional<std::string> bytes = check_integrity(
+      file, FileDigest{.size = v->size, .checksum = v->checksum}, reason);
+  if (bytes) {
+    if (std::optional<std::string> why = verify_build(
+            *bytes, display(file), v->fingerprint, like.options(), context)) {
+      reason = std::move(*why);
+    }
+  }
+  if (!reason.empty()) {
+    Logger::warn("Not offering to resume version {} of {}: {}", v->sequence,
+                 display(slot.file()), reason);
+    return std::nullopt;
+  }
+
+  // Its day and time, from the game data.
+  LoadProblem problem;
+  const std::optional<json> document =
+      read_save_document(*bytes, display(file), problem);
+  int blocks = 0;
+  if (document) {
+    blocks = document->at("time").value("blocks_since_start", 0);
+  }
+  const int in_day = blocks % GameTime::BLOCKS_PER_DAY;
+  return ResumeOffer{
+      .slot_file = slot.file().string(),
+      .sequence = v->sequence,
+      .day = blocks / GameTime::BLOCKS_PER_DAY + 1,
+      .time = compat::format("{:02d}:{:02d}", in_day / 6, (in_day % 6) * 10),
+      .game_date = v->game_date,
+  };
 }
 
 } // namespace save

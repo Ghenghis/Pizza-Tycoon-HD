@@ -264,9 +264,9 @@ public:
   static constexpr float DUCK_GAIN = 0.56234133f;
   static constexpr float DUCK_ATTACK_S = 0.08f;
   static constexpr float DUCK_RELEASE_S = 0.6f;
-  // A placed sound's gain is at most this (a pool's random gain may lift
-  // it above 1).
-  static constexpr float MAX_PLAY_GAIN = 2.0f;
+  // A placed sound's gain is at most this (a layer's gain_db, up to +12 dB,
+  // and its random gain lift it above 1).
+  static constexpr float MAX_PLAY_GAIN = 5.0f;
   // Headroom so music and several effects together rarely clip.
   static constexpr float MASTER_VOLUME = 0.8f;
 
@@ -341,9 +341,11 @@ public:
   // before they are handed over and never changed afterwards. A slot left
   // empty plays its original.
   struct EffectBank {
+    // A sound's samples are in one of the bank's buffers (pcm below):
+    // sounds that decode to the same samples share one.
     struct Sound {
-      std::vector<int16_t> samples; // interleaved stereo, 44100 Hz
-      std::size_t start_offset = 0; // where playback starts and loops back
+      std::span<const int16_t> samples; // interleaved stereo, 44100 Hz
+      std::size_t start_offset = 0;     // where playback starts and loops back
     };
     // One sound, or up to MAX_VARIANTS to pick from.
     struct Pool {
@@ -368,6 +370,7 @@ public:
       float min_pan = 0.0f;
       float max_pan = 0.0f;
       Rules rules;
+      float gain = 1.0f; // its gain_db, applied as it plays
       std::size_t max_voices = 0;
     };
     struct Scene {
@@ -378,6 +381,8 @@ public:
     std::array<std::optional<Priority>, MAX_EFFECTS> priorities{};
     std::array<Rules, MAX_EFFECTS> rules{};
     std::vector<Scene> scenes;
+    // The sample buffers the sounds point into, each kept once.
+    std::vector<std::unique_ptr<const std::vector<int16_t>>> pcm;
     uint64_t number = 0; // set by effect_bank()
   };
   // Game thread. Every slot changes over at once, at the next block: bank,

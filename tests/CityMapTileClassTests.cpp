@@ -6,12 +6,12 @@
 
 // The HD far map's tile classes follow the tile byte's low nibble (its
 // landsym row, City::tile_description) and the game's own road test
-// (City::is_road_tile). City::tile_category() reads the high nibble, so
-// using it put road smoothing on meadows and water smoothing on streets.
+// (City::is_road_tile). The old City::tile_category() read the high nibble,
+// which put road smoothing on meadows and water smoothing on streets; it had
+// no other user and is gone.
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -20,7 +20,6 @@
 
 #include "TestSupport.h"
 #include "core/city/City.h"
-#include "core/factories/CityFactory.h"
 #include "views/hd/CityMapHd.h"
 
 using views::hd::far_map_tile_class;
@@ -49,11 +48,7 @@ TEST_CASE("far map tile classes on the real cities", "[hd][city][game]") {
   if (!root) {
     SKIP("Set PLEGACY_TEST_GAME_PATH to the original game's folder");
   }
-  std::array<uint8_t, 256> types{};
-  std::array<std::string, 10> names{};
-  CityFactory::tile_types(types, names);
   int checked = 0;
-  int meadow_roads_before = 0;
   for (int id = 0; id < 10; ++id) {
     const std::string n = std::to_string(id);
     std::ifstream in(*root / "DAT" / ("MAP" + n + ".DAT"), std::ios::binary);
@@ -70,7 +65,6 @@ TEST_CASE("far map tile classes on the real cities", "[hd][city][game]") {
     City city(core::CityId{id});
     city.map_data(bytes);
     city.data_length(static_cast<int>(bytes.size()));
-    city.types(types);
     INFO("city " << id);
     int roads = 0;
     for (int i = 0; i < city.data_length(); ++i) {
@@ -89,8 +83,7 @@ TEST_CASE("far map tile classes on the real cities", "[hd][city][game]") {
       }
       if ((t & 0x0F) == 0x0) { // nature: meadows, trees, parks
         REQUIRE(cls == MapTileClass::Ground);
-        meadow_roads_before +=
-            city.tile_category(i) == MapTileType::TILE_TYPE_ROAD ? 1 : 0;
+        REQUIRE_FALSE(city.is_road_tile(i));
       }
       if ((t & 0x0F) == 0x3) {
         REQUIRE(cls == MapTileClass::Water);
@@ -99,8 +92,5 @@ TEST_CASE("far map tile classes on the real cities", "[hd][city][game]") {
     CHECK(roads > 1000); // every city has a street grid
     ++checked;
   }
-  // The old classification (tile_category, the high nibble) made roads of
-  // thousands of these meadows (MAP0.DAT alone: 1785).
-  CHECK(meadow_roads_before > 1000);
   CHECK(checked > 0);
 }

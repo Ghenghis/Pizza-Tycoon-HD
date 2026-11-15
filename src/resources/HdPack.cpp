@@ -103,6 +103,9 @@ void HdPack::configure(const std::filesystem::path& root) {
   cache_.clear();
   pending_.clear();
   used_.clear();
+  used_index_.clear();
+  queue_.clear();
+  screen_.clear();
   prefetched_.clear();
   stats_ = {};
   root_.clear();
@@ -274,6 +277,7 @@ void HdPack::record(const std::string& cache_key, const WarmEntry& entry,
   }
   cache_.emplace(cache_key, d.image);
   if (d.image) {
+    used_index_.emplace(cache_key, used_.size());
     used_.push_back(entry);
   }
 }
@@ -331,9 +335,16 @@ std::shared_ptr<const gfx::HdImage> HdPack::load(const std::string& relative,
       cache_key_for(relative, engine_size.w * k, engine_size.h * k);
   std::shared_future<ImagePtr> in_flight;
   std::optional<Claim> claim;
+  std::string screen;
   {
     const std::lock_guard lock(mutex_);
+    screen = screen_;
     if (auto it = cache_.find(key); it != cache_.end()) {
+      // Decoded ahead of use: the screen using it is learnt now.
+      if (auto u = used_index_.find(key);
+          u != used_index_.end() && used_[u->second].screen.empty()) {
+        used_[u->second].screen = screen_;
+      }
       return it->second;
     }
     if (auto it = pending_.find(key); it != pending_.end()) {
@@ -351,24 +362,30 @@ std::shared_ptr<const gfx::HdImage> HdPack::load(const std::string& relative,
   if (!d.warning.empty()) {
     Logger::warn("{}", d.warning);
   }
-  return claim->finish(d, WarmEntry{relative, engine_size},
+  return claim->finish(d, WarmEntry{relative, engine_size, std::move(screen)},
                        /*prefetched=*/false);
 }
 
-void HdPack::run_prefetch(const std::vector<WarmEntry>& entries,
-                          std::size_t budget_bytes,
+void HdPack::run_prefetch(std::size_t budget_bytes,
                           const std::stop_token& stop) {
   std::size_t bytes = 0;
-  for (const WarmEntry& e : entries) {
+  const int k = gfx::hd_scale();
+  while (true) {
     if (stop.stop_requested() || bytes >= budget_bytes) {
       return;
     }
-    const int k = gfx::hd_scale();
-    const std::string key =
-        cache_key_for(e.relative, e.engine_size.w * k, e.engine_size.h * k);
+    WarmEntry e;
+    std::string key;
     std::optional<Claim> claim;
     {
+      // The queue's front, which screen() may have just changed.
       const std::lock_guard lock(mutex_);
+      if (queue_.empty()) {
+        return;
+      }
+      e = std::move(queue_.front());
+      queue_.pop_front();
+      key = cache_key_for(e.relative, e.engine_size.w * k, e.engine_size.h * k);
       if (cache_.contains(key) || pending_.contains(key)) {
         continue;
       }
@@ -391,28 +408,59 @@ void HdPack::prefetch(std::vector<WarmEntry> entries,
   if (!enabled() || entries.empty()) {
     return;
   }
+  {
+    const std::lock_guard lock(mutex_);
+    queue_.assign(std::make_move_iterator(entries.begin()),
+                  std::make_move_iterator(entries.end()));
+    if (!screen_.empty()) {
+      front_load(queue_, screen_);
+    }
+  }
   try {
-    prefetcher_ = std::jthread([this, entries = std::move(entries),
-                                budget_bytes](const std::stop_token& stop) {
-      // An exception leaving a thread ends the program, so stop here and
-      // log it instead. Claims already resolved every file taken so far.
-      try {
-        run_prefetch(entries, budget_bytes, stop);
-      }
-      catch (const std::exception& e) {
-        note_prefetch_warning("HD pack: background loading stopped: ",
-                              e.what());
-      }
-      catch (...) {
-        note_prefetch_warning("HD pack: background loading stopped");
-      }
-    });
+    prefetcher_ =
+        std::jthread([this, budget_bytes](const std::stop_token& stop) {
+          // An exception leaving a thread ends the program, so stop here and
+          // log it instead. Claims already resolved every file taken so far.
+          try {
+            run_prefetch(budget_bytes, stop);
+          }
+          catch (const std::exception& e) {
+            note_prefetch_warning("HD pack: background loading stopped: ",
+                                  e.what());
+          }
+          catch (...) {
+            note_prefetch_warning("HD pack: background loading stopped");
+          }
+        });
   }
   catch (const std::system_error& e) {
     Logger::warn("HD pack: cannot start background loading ({}); pictures "
                  "load when first used",
                  e.what());
   }
+}
+
+void HdPack::front_load(std::deque<WarmEntry>& queue, std::string_view name) {
+  if (name.empty()) {
+    return;
+  }
+  std::stable_partition(queue.begin(), queue.end(), [name](const WarmEntry& e) {
+    return e.screen == name;
+  });
+}
+
+void HdPack::screen(std::string_view name) {
+  const std::lock_guard lock(mutex_);
+  if (name == screen_) {
+    return;
+  }
+  screen_ = name;
+  front_load(queue_, screen_);
+}
+
+std::vector<HdPack::WarmEntry> HdPack::queued() const {
+  const std::lock_guard lock(mutex_);
+  return {queue_.begin(), queue_.end()};
 }
 
 bool HdPack::save_warm_list(const std::filesystem::path& file,
@@ -423,8 +471,15 @@ bool HdPack::save_warm_list(const std::filesystem::path& file,
   }
   out << "# Pizza Tycoon HD: pack files used last session, decoded early\n";
   for (const WarmEntry& e : entries) {
-    out << e.engine_size.w << ' ' << e.engine_size.h << ' ' << e.relative
-        << '\n';
+    out << e.engine_size.w << ' ' << e.engine_size.h << ' ' << e.relative;
+    if (!e.screen.empty()) {
+      // One word: the reader splits on spaces.
+      std::string word = e.screen;
+      std::ranges::replace_if(
+          word, [](unsigned char c) { return std::isspace(c) != 0; }, '_');
+      out << ' ' << word;
+    }
+    out << '\n';
   }
   return static_cast<bool>(out);
 }
@@ -444,6 +499,10 @@ HdPack::load_warm_list(const std::filesystem::path& file) {
         e.engine_size.w > 0 && e.engine_size.h > 0 &&
         e.relative.find("..") == std::string::npos &&
         !std::filesystem::path(e.relative).is_absolute()) {
+      // Optional: the screen (lists written before it have three fields).
+      if (!(fields >> e.screen)) {
+        e.screen.clear();
+      }
       entries.push_back(std::move(e));
     }
   }

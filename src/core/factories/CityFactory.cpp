@@ -83,7 +83,6 @@ std::unique_ptr<City> CityFactory::create_city(
   factory.load_city_data(id);
   factory.load_district_bez(id);
   factory.load_map_data(id, fix_legacy_bugs);
-  factory.populate_types();
 
   auto city = std::make_unique<City>(cid);
   city->name(std::string(core::city_name(core::CityId{classic_number})));
@@ -105,14 +104,6 @@ void CityFactory::load_color_definition() {
 
 uint8_t CityFactory::district_color(std::size_t index) {
   return district_colors[index % district_colors.size()];
-}
-
-void CityFactory::tile_types(std::array<uint8_t, 256>& types,
-                             std::array<std::string, 10>& type_names) {
-  CityFactory factory;
-  factory.populate_types();
-  types = factory.types_;
-  type_names = factory.type_names_;
 }
 
 void CityFactory::load_map_data(int city_id, bool fix_legacy_bugs) {
@@ -508,14 +499,12 @@ void CityFactory::build_city_object(City& city, int id, bool fix_legacy_bugs) {
   city.map_data(map_data_);
   city.named_buildings(named_buildings_);
   city.building_names(building_names_, building_name_count_);
-  city.type_names(type_names_);
   // ensure each district has a pointer to the city, do this
   // before std::moving the districts to city:
   for (auto& district : districts_) {
     district->city(&city);
   }
   city.districts(std::move(districts_));
-  city.types(types_);
   city.district_bez(district_bez_);
   city.properties(std::move(properties_));
 
@@ -639,68 +628,6 @@ void CityFactory::seed_ingredient_trends(City& city) {
                                  .control = engine::random::rand_max_n(60) - 30,
                                  .duration = TrendDuration::Linear});
     }
-  }
-}
-
-void CityFactory::populate_types() {
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_SPECIAL)] = "Special";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_NATURE)] = "Nature";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_WATER)] = "Water";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_BUILDING)] = "Building";
-  // type_na_mes[static_cast<int>(MapTileType::TILE_TYPE_ROOF)] = "Building";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_PATH)] = "Path";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_ROAD)] = "Road";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_VILLA)] = "Villa";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_RESIDENTIAL_BUILDING)] =
-      "Residential building";
-  type_names_[static_cast<int>(MapTileType::TILE_TYPE_OTHER)] = "";
-
-  for (int i = 0; i < NUMBER_OF_TYPES; ++i) {
-    uint8_t col = static_cast<uint8_t>(i >> 4);
-    uint8_t row = static_cast<uint8_t>(i & 0x0F);
-
-    MapTileType type;
-    switch (col) {
-    case 0x00:
-    case 0x01:
-      type = MapTileType::TILE_TYPE_OTHER;
-      break;
-    case 0x02:
-      type = (row < 5) ? MapTileType::TILE_TYPE_OTHER
-                       : MapTileType::TILE_TYPE_WATER;
-      break;
-    case 0x03:
-      type = MapTileType::TILE_TYPE_WATER;
-      break;
-    case 0x04:
-      type = (row < 6) ? MapTileType::TILE_TYPE_SPECIAL
-                       : MapTileType::TILE_TYPE_BUILDING;
-      break;
-    case 0x05:
-      type = MapTileType::TILE_TYPE_PATH;
-      break;
-    case 0x06:
-    case 0x07:
-      type = MapTileType::TILE_TYPE_ROAD;
-      break;
-    case 0x08:
-      type = (row < 7) ? MapTileType::TILE_TYPE_SPECIAL
-                       : MapTileType::TILE_TYPE_BUILDING;
-      break;
-    case 0x09:
-      type = MapTileType::TILE_TYPE_VILLA;
-      break;
-    case 0x0A:
-      type = MapTileType::TILE_TYPE_SPECIAL;
-      break;
-    case 0x0B:
-      type = MapTileType::TILE_TYPE_RESIDENTIAL_BUILDING;
-      break;
-    default:
-      type = MapTileType::TILE_TYPE_OTHER;
-      break;
-    }
-    types_[i] = static_cast<uint8_t>(type);
   }
 }
 

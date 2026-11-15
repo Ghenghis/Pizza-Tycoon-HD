@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -379,5 +380,90 @@ TEST_CASE("Content golden: the North Pole slice script, its first week in "
     sold += r->stats().total_pizzas_sold;
   }
   CHECK(sold > 0);
+  // The mid-week restocks leave money in the till after the week's wages.
+  CHECK(game.state.player(core::PlayerId{0})->cash_balance() > Money{0});
   golden.finish();
+}
+
+namespace {
+
+// The slice script from a new game through day 7 with another seed: the
+// lines up to the save (the save, the load and the pictures add nothing to
+// the week). after(line) runs after each line that succeeded.
+void play_slice_week(content_test::TestGame& game,
+                     debug::command::CommandRegistry& console,
+                     std::uint32_t seed,
+                     const std::function<void(const std::string&)>& after) {
+  std::ifstream script(slice_script());
+  REQUIRE(script.good());
+  const std::string start = "game scenario north-pole-cozy-village ";
+  bool started = false;
+  std::string line;
+  while (std::getline(script, line)) {
+    line = trimmed(line);
+    if (line.empty() || line[0] == '#') {
+      continue;
+    }
+    if (line.starts_with("game save ")) {
+      break;
+    }
+    if (line.starts_with(start)) {
+      line = start + std::to_string(seed);
+      started = true;
+    }
+    INFO("seed " << seed << ", script line: " << line);
+    const auto result = console.execute(line, game.state, game.context);
+    INFO((result.error_message ? *result.error_message : std::string{}));
+    REQUIRE(result.status == debug::command::CommandStatus::Success);
+    after(line);
+  }
+  REQUIRE(started);
+}
+
+} // namespace
+
+TEST_CASE("The North Pole slice trades whatever the seed",
+          "[content][slice][game]") {
+  CONTENT_REQUIRE_GAME_DATA();
+  if (!fs::exists(core::content::shipped_data_dir() / "scenarios" /
+                  "north-pole-cozy-village.json")) {
+    SKIP("The game's data folder ("
+         << core::content::shipped_data_dir().string()
+         << ") has no scenarios; run from the build folder");
+  }
+  debug::command::CommandRegistry console;
+  register_core_commands(console);
+
+  // The seeds the slice was tried with; 23162 is the script's own. On it a
+  // cook blew up the only oven in the first version of the script, and the
+  // cheese gets destroyed on day 7 (both staff events of the original).
+  for (const std::uint32_t seed : {1u, 7u, 1224u, 23162u}) {
+    INFO("seed " << seed);
+    content_test::TestGame game;
+    std::optional<core::RestaurantId> shop;
+    int days = 0;
+    play_slice_week(game, console, seed, [&](const std::string& line) {
+      if (line.starts_with("city rent ")) {
+        REQUIRE(game.state.active_restaurant() != nullptr);
+        shop = game.state.active_restaurant()->id();
+      }
+      if (line.starts_with("game day")) {
+        ++days;
+        REQUIRE(shop.has_value());
+        const Restaurant* r = game.state.restaurant(*shop);
+        REQUIRE(r != nullptr);
+        INFO("day " << days);
+        // Never without a working oven.
+        CHECK(r->calculate_daily_oven_throughput() > 0);
+      }
+    });
+    CHECK(days == 7);
+    REQUIRE(shop.has_value());
+    const Restaurant* r = game.state.restaurant(*shop);
+    REQUIRE(r != nullptr);
+    CHECK(r->stats().total_pizzas_sold > 0);
+    CHECK(r->calculate_daily_oven_throughput() > 0);
+    // Still solvent on day 7, after the week's wages.
+    CHECK(game.state.player(core::PlayerId{0})->cash_balance() >= Money{0});
+  }
 }

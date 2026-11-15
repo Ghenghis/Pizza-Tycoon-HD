@@ -136,34 +136,10 @@ bool City::is_business_premise_by_index(int index) const {
   return is_business_premise_by_type(data_[index]);
 }
 
-MapTileType City::tile_category(int index) const {
-  unsigned char t = type(index);
-  return static_cast<MapTileType>(types_[static_cast<int>(t)]);
-}
-
 bool City::is_road_tile(int index) const {
   uint8_t t = type(index);
   uint8_t col = t & 0x0F;
   return (col == 0x06 || col == 0x07) && t != 0xF6 && t != 0xE6;
-}
-
-std::string City::description(int index) const {
-  unsigned char t = type(index);
-  uint8_t building_name_index = types_[(int)t];
-  // Logger::debug("Type is %x and type is {}", type, types[(int)type]);
-  if (building_name_index == 0) {
-    // Todo: something with our premises array.
-    // sprintf(name, "Business Premise %dx%d",
-    // business_premises[index]->width(),
-    // business_premises[index]->height());
-    return {};
-  }
-
-  if (building_name_index == 3) {
-    return building_type_name(index) + "|" + building_specific_name(index);
-  }
-
-  return type_names_[building_name_index];
 }
 
 int City::data_length() const { return data_length_; }
@@ -414,12 +390,6 @@ void City::districts(std::vector<std::unique_ptr<District>> d) {
 void City::suppliers(std::vector<std::unique_ptr<FoodSupplier>> s) {
   suppliers_ = std::move(s);
   init_supplier_stock_levels();
-}
-
-void City::types(const std::array<uint8_t, 256>& types) { types_ = types; }
-void City::type_names(
-    const std::array<std::string, /*NUMBER_OF_TYPES*/ 10>& type_names) {
-  type_names_ = type_names;
 }
 
 std::vector<const Actor*> City::actors(ActorType type) const {

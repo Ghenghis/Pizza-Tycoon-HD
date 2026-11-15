@@ -45,8 +45,8 @@ struct EffectLimits {
   std::size_t max_entries = 256;
   std::uint64_t max_file_bytes = std::uint64_t{16} << 20; // one file
   std::uint32_t max_seconds = 120;                        // one sound
-  // Decoded, all; pools that two scenes share count twice.
-  std::uint64_t max_pack_bytes = std::uint64_t{96} << 20;
+  // Decoded, all; samples that several sounds share count once.
+  std::uint64_t max_pack_bytes = std::uint64_t{64} << 20;
   std::size_t max_scenes = 8;          // ambience scenes
   std::size_t max_layers = 8;          // per scene
   std::uint32_t min_interval_ms = 250; // between one layer's one-shots

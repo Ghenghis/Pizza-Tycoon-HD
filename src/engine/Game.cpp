@@ -199,6 +199,9 @@ int Game::run() {
       config_path_.empty() ? platform_paths::config_file_path() : config_path_;
   // Temporary files that a crash or a power cut left behind mid-save.
   save::SaveGameManager::remove_stale_temp_files(effective_config);
+  // What the last run left decides whether the main menu offers to resume
+  // it; this run is recorded as not yet ended cleanly.
+  save::SaveGameManager::begin_session();
   ConfigManager configManager(effective_config);
 
   // Load config if present
@@ -648,6 +651,13 @@ int Game::run() {
         apply_window_size(w, h);
       }
 
+      // The screen being opened gets its HD art decoded first: the fade-out
+      // runs while it decodes (HdPack::screen front-loads its warm-list
+      // entries). Before the checks below, which take the UI's change flag.
+      if (resources::HdPack::instance().enabled()) {
+        resources::HdPack::instance().screen(fx::warm_screen_tag(state));
+      }
+
       if (pending_fade->requested() && !renderer.is_fading()) {
         // The midpoint may push a view while the screen is black, so a
         // transition can be coming even though the UI stack has not changed
@@ -780,6 +790,8 @@ int Game::run() {
   }
   // A checkpoint still being written is finished, not cut short.
   timed_checkpoints.finish();
+  // A clean exit: the next start offers nothing.
+  save::SaveGameManager::end_session();
   // --crt is a one-off that we don't want to update the config with the CRT
   // option on, so don't write the config if this flag was passed.
   if (!crt_mode_override_) {

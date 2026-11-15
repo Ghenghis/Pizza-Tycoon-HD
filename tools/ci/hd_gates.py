@@ -224,6 +224,8 @@ def gate_perf(args: argparse.Namespace, work: Path) -> str:
     extra = ["--hd-scale", "6", "--hd-pack", args.pack]
     # Twice: the first run writes the warm list, the second is a normal session.
     run_game(args, work, script, "perf_warm", extra)
+    if args.made_pack:
+        ship_warm_list(Path(args.pack), work / "hd_warm.txt")
     out = run_game(args, work, script, "perf", extra)
     line = next((ln for ln in out.splitlines() if "frames at" in ln), "")
     p99 = re.search(r"p99 ([\d.]+)", line)
@@ -504,6 +506,19 @@ GATES: dict[str, Callable[[argparse.Namespace, Path], str]] = {
     "perf": gate_perf,
     "coverage": gate_coverage,
 }
+
+
+def ship_warm_list(pack: Path, session_list: Path) -> None:
+    """A pack the gates built ships the perf_warm session's warm list as
+    pack/hd_warm.txt, so a player's first session decodes it at start-up."""
+    if not session_list.is_file():
+        raise GateError(f"the warm-up run wrote no warm list at {session_list}")
+    cmd = [sys.executable, str(HDPACK), "warm-list", str(pack), str(session_list)]
+    done = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False, **HIDDEN)
+    if done.returncode != 0:
+        raise GateError(
+            f"shipping the warm list failed: {' '.join(cmd)} exited {done.returncode}\n{done.stderr[-2000:]}"
+        )
 
 
 def make_pack(args: argparse.Namespace, scratch: Path) -> str:

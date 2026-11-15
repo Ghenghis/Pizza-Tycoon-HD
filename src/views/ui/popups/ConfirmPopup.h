@@ -14,8 +14,10 @@ class ConfirmPopup : public BasePopup {
 public:
   using callback_t = std::function<void(bool)>;
 
+  // The buttons say Yes and No unless told otherwise.
   ConfirmPopup(const GameContext& ctx, std::string text, callback_t cb = {},
-               const RawRenderable* renderable = nullptr);
+               const RawRenderable* renderable = nullptr,
+               std::string yes_label = "Yes", std::string no_label = "No");
   void add_interactions(views::ui::InteractionContext ictx,
                         ViewPoint origin) override;
   void render(Surface& surface, ViewPoint origin) override;

@@ -7,8 +7,11 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 #include <vector>
 #include "resources/HdPack.h"
+
+class GameState;
 
 // What the HD pack decodes in the background at start-up, so a screen's art
 // is ready when the screen first opens instead of being decoded on its first
@@ -49,5 +52,12 @@ session_warm_list(const std::filesystem::path& user_list,
                   const std::filesystem::path& pack_root,
                   const std::filesystem::path& game_root, int k,
                   std::size_t scan_budget = default_scan_budget);
+
+// The name a screen goes by in the warm list (WarmEntry::screen), for the
+// screen on top of the UI stack: "restaurant", "kitchen", "cityview",
+// "pizza", "euromap", "menu<kind>" for the menus and other full screens,
+// "ui<n>" for the rest (n = its place in UIState). Stable within a build;
+// a name that changes only costs the front-loading, never a picture.
+[[nodiscard]] std::string warm_screen_tag(const GameState& state);
 
 } // namespace fx

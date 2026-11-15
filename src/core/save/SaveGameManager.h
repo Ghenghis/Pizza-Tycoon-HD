@@ -22,6 +22,7 @@
 
 #include "core/save/CheckpointTimer.h"
 #include "core/save/SaveVersions.h"
+#include "core/save/Session.h"
 #include "core/util/Constants.h"
 
 class GameState;
@@ -101,6 +102,15 @@ constexpr int HIGH_SCORE_MAX_ENTRIES = 8;
 struct StateFingerprint {
   std::string hash; // 16 hex digits
   json document;    // the state we hashed, everything but the save timestamp
+};
+
+// What the main menu offers after a run that did not end cleanly.
+struct ResumeOffer {
+  std::string slot_file; // the timed checkpoint slot, as load_version takes it
+  std::uint64_t sequence = 0;
+  int day = 0;           // the game's day, from 1
+  std::string time;      // its time of day, "14:30"
+  std::string game_date; // as the load menu shows it
 };
 
 // One save slot as the Recovery Center shows it.
@@ -302,6 +312,26 @@ public:
   static bool undo_restore(const GameState& state, const GameContext& context,
                            const std::string& filename,
                            std::string* error = nullptr);
+
+  // At start-up, once the saves folder is known (the saves folder if folder
+  // is empty): reads what the last run left, works out whether to offer
+  // resuming it (choose_resume), and records this run as begun and not yet
+  // ended cleanly. Manual saves from here on are noted in the record.
+  static void begin_session(const std::filesystem::path& folder = {});
+  // When the game closes cleanly, after the background saves are done.
+  static void end_session();
+
+  // The offer worked out by begin_session, unchecked; for diagnostics and
+  // tests.
+  static std::optional<ResumeCandidate> pending_resume();
+
+  // The main menu asks once: the version to offer, checked again apart from
+  // the game (integrity and load check) and with its game day and time.
+  // Nothing if there is none or it fails its checks; asking again gives
+  // nothing either. Resuming is load_version on it; nothing loads by itself
+  // and nothing is deleted.
+  static std::optional<ResumeOffer>
+  take_resume_offer(const GameState& like, const GameContext& context);
 
   // Deletes a save: its file and every version of it.
   static bool delete_save(const std::string& filename,

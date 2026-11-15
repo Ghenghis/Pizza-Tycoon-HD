@@ -13,6 +13,8 @@
 #include <string>
 #include <system_error>
 #include <unordered_set>
+#include "core/state/GameState.h"
+#include "core/state/UIState.h"
 #include "engine/gfx/Png.h"
 #include "engine/gfx/Surface.h"
 #include "resources/util/FileUtils.h"
@@ -91,6 +93,26 @@ scan_pack_pictures(const std::filesystem::path& pack_root,
     return pa != pb ? pa > pb : a.relative < b.relative;
   });
   return out;
+}
+
+std::string warm_screen_tag(const GameState& state) {
+  const UIStateStack& ui = state.ui();
+  if (const auto* r = ui.top_as<RestaurantViewState>()) {
+    return r->kitchen_view ? "kitchen" : "restaurant";
+  }
+  if (ui.is_top<CityViewState>()) {
+    return "cityview";
+  }
+  if (ui.is_top<PizzaDesignState>()) {
+    return "pizza";
+  }
+  if (ui.is_top<EuroMapState>()) {
+    return "euromap";
+  }
+  if (const auto* tag = ui.top_as<ScreenTag>()) {
+    return "menu" + std::to_string(static_cast<int>(tag->kind));
+  }
+  return "ui" + std::to_string(ui.top().index());
 }
 
 std::vector<WarmEntry> session_warm_list(const std::filesystem::path& user_list,

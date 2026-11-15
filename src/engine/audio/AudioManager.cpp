@@ -1249,11 +1249,12 @@ void AudioManager::tick(uint32_t dt_ms) {
       }
       clock.last_variant = v;
       const float pan = ambience_random_.uniform(layer.min_pan, layer.max_pan);
-      float gain = 1.0f;
+      float gain = layer.gain;
       if (layer.rules.jitter_db > 0.0f) {
-        gain = std::pow(10.0f, ambience_random_.uniform(-layer.rules.jitter_db,
-                                                        layer.rules.jitter_db) /
-                                   20.0f);
+        gain *=
+            std::pow(10.0f, ambience_random_.uniform(-layer.rules.jitter_db,
+                                                     layer.rules.jitter_db) /
+                                20.0f);
       }
       // Each layer is its own pool for its voice limit.
       const auto pool =

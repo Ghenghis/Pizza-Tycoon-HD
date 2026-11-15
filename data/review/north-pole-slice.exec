@@ -74,7 +74,8 @@ restaurant open
 game date
 dump fingerprint
 
-# Seven days, a fingerprint each morning.
+# Seven days, a fingerprint each morning, restocking on the mornings of
+# days 4 and 6.
 game day
 #@checkpoint first-week/day-1
 game date
@@ -87,6 +88,12 @@ game day
 #@checkpoint first-week/day-3
 game date
 dump fingerprint
+# Mid-week restock, as a player at the order screens would: 3 kg more of
+# every ingredient the menu uses, from the usual suppliers, and 3 kg more of
+# tomatoes (ingredient 0), which every pizza uses most. Cheap enough that
+# the week's wages still leave money in the till.
+restaurant stock menu 3
+restaurant stock ingredient 0 3
 game day
 #@checkpoint first-week/day-4
 game date
@@ -95,6 +102,9 @@ game day
 #@checkpoint first-week/day-5
 game date
 dump fingerprint
+# The same restock, two days on.
+restaurant stock menu 3
+restaurant stock ingredient 0 3
 game day
 #@checkpoint first-week/day-6
 game date

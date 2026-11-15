@@ -5,6 +5,7 @@
  */
 
 #include "views/screens/menus/MenuMain.h"
+#include "core/save/SaveGameManager.h"
 #include "core/state/GameState.h"
 #include "engine/DisplayConstants.h"
 #include "engine/Logger.h"
@@ -14,6 +15,7 @@
 #include "views/screens/menus/MenuTheme.h"
 #include "views/ui/PopupManager.h"
 #include "views/ui/popups/AlertPopup.h"
+#include "views/ui/popups/ConfirmPopup.h"
 #include "views/ui/widgets/LabelMenuItem.h"
 #include "views/ui/widgets/PositionMarkerMenuItem.h"
 #include "views/ui/widgets/SpacerMenuItem.h"
@@ -76,6 +78,38 @@ MenuMain::MenuMain(GameContext& context, GameState& state)
 
   add_menu_item(std::make_unique<LabelMenuItem>(
       context, "User directory: " + base, FontFace::MINI, ts));
+
+  offer_resume();
+}
+
+void MenuMain::offer_resume() {
+  const std::optional<save::ResumeOffer> offer =
+      save::SaveGameManager::take_resume_offer(state_, context_);
+  if (!offer) {
+    return;
+  }
+  context_.popup->origin(ViewPoint{26, 40});
+  context_.popup->create<ConfirmPopup>(
+      compat::format("Resume where you left off: day {}, {}?", offer->day,
+                     offer->time),
+      [this, offer = *offer](bool resume) {
+        if (!resume) {
+          Logger::info("Not resuming the last run");
+          return;
+        }
+        std::string error;
+        std::string notice;
+        if (!save::SaveGameManager::load_version(state_, context_,
+                                                 offer.slot_file,
+                                                 offer.sequence, &error,
+                                                 &notice)) {
+          context_.popup->create<AlertPopup>(error);
+        }
+        else if (!notice.empty()) {
+          context_.popup->create<AlertPopup>(notice);
+        }
+      },
+      nullptr, "Resume", "Not now");
 }
 
 Surface MenuMain::background() const {

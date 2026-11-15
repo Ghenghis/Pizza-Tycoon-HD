@@ -162,7 +162,7 @@ def model(role: str, name: str, index: Mapping[str, Mapping[str, str]]) -> Model
 
 @dataclass
 class Record:
-    stage: str  # "comfy", "upscale", "depth+normal"
+    stage: str  # "comfy", "upscale", "depth+normal", "emissive"
     asset: dict[str, Any]
     input_file: str
     input_sha256: str
@@ -172,25 +172,33 @@ class Record:
     seed: int | None = None
     seed_inputs: dict[str, Any] | None = None
     parameters: dict[str, Any] = field(default_factory=dict)
+    # Stages with more than one input (emissive: the export picture and the
+    # HD picture) list them all here; "input" stays the main one.
+    inputs: list[dict[str, str]] | None = None
+    # Overrides the recorded scheme, e.g. "none" for a stage without seeds.
+    seed_scheme: str | None = None
 
     def to_json(self, now: dt.datetime | None = None) -> dict[str, Any]:
         when = (now or dt.datetime.now(dt.timezone.utc)).replace(microsecond=0).isoformat()
-        return {
+        scheme = self.seed_scheme or (SEED_SCHEME if self.seed is not None else None)
+        out: dict[str, Any] = {
             "schema": SCHEMA,
             "stage": self.stage,
             "asset": self.asset,
             "input": {"file": self.input_file, "sha256": self.input_sha256},
+            **({"inputs": self.inputs} if self.inputs is not None else {}),
             "outputs": [{"file": f, "sha256": s} for f, s in sorted(self.outputs.items())],
             "workflow": self.workflow,
             "models": [m.to_json() for m in self.models],
             "seed": self.seed,
-            "seed_scheme": SEED_SCHEME if self.seed is not None else None,
+            "seed_scheme": scheme,
             "seed_inputs": self.seed_inputs,
             "parameters": self.parameters,
             "tool": {"name": TOOL_NAME, "version": TOOL_VERSION, "python": platform.python_version()},
             "created_utc": when,
             "review": "pending",
         }
+        return out
 
 
 def write(root: Path, rel: str, record: Record) -> Path:

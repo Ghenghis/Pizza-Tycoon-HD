@@ -728,6 +728,90 @@ TEST_CASE("pool rules: a random gain in its range, a spacing, a voice limit "
   }
 }
 
+TEST_CASE("sounds that decode to the same samples share one buffer, counted "
+          "once against the budget",
+          "[audio][sfx][realism]") {
+  test_support::TempDir dir;
+  const fs::path pack = dir.path() / "pack";
+  const fs::path clink = level_wav(pack / "clink.wav", 0.5, 0.25);
+  // Another file with the same bytes: the same samples too.
+  const fs::path copy = pack / "copy.wav";
+  music_test::write_file(copy, music_test::read_file(clink));
+  const auto layer = [&](const std::string& name, double gain_db) {
+    return json{{"name", name},
+                {"variants", json::array({sound(pack, clink)})},
+                {"gain_db", gain_db},
+                {"interval_ms", json::array({1000, 2000})}};
+  };
+  const json effects = json::array(
+      {{{"event", "plate-served"},
+        {"variants", json::array({sound(pack, clink), sound(pack, copy)})}},
+       {{"event", "payment"},
+        {"file", "clink.wav"},
+        {"sha256", sha_of(clink)},
+        {"trim_end_ms", 100}}}); // other samples: a buffer of its own
+  const json ambience =
+      json::array({{{"with", "restaurant-noise-1"},
+                    {"layers", json::array({layer("near", 0.0)})}},
+                   {{"with", "restaurant-noise-2"},
+                    {"layers", json::array({layer("far", -6.0)})}}});
+  write_manifest(pack, 2, effects, ambience);
+  const std::uint64_t one = 22050 * 2 * sizeof(std::int16_t); // 0.5 s
+
+  SECTION("four uses of one sound fit the budget of one and a half") {
+    audio::EffectLimits limits;
+    limits.max_pack_bytes = one + one / 2;
+    std::string error;
+    const auto loaded = audio::load_effect_pack(pack, {}, limits, &error);
+    INFO(error);
+    REQUIRE(loaded);
+    const auto& bank = *loaded->bank;
+    const auto& plate =
+        *bank.slots[audio::pack_event_slot(audio::PackEvent::PLATE_SERVED)];
+    REQUIRE(plate.variants.size() == 2);
+    REQUIRE(bank.scenes.size() == 2);
+    const auto* pcm = plate.variants[0].samples.data();
+    CHECK(plate.variants[1].samples.data() == pcm);
+    CHECK(bank.scenes[0].layers[0].variants[0].samples.data() == pcm);
+    CHECK(bank.scenes[1].layers[0].variants[0].samples.data() == pcm);
+    // The layer's gain is kept apart from the samples, so they can be shared.
+    CHECK(bank.scenes[0].layers[0].gain == 1.0f);
+    CHECK(std::abs(bank.scenes[1].layers[0].gain - 0.50118723f) < 1e-6f);
+    // The trimmed one did not fit: it is other samples.
+    bool payment_refused = false;
+    for (const auto& o : loaded->outcomes) {
+      if (o.event == "payment") {
+        payment_refused =
+            !o.replaced && o.reason.find("memory budget") != std::string::npos;
+      }
+    }
+    CHECK(payment_refused);
+    CHECK(bank.pcm.size() == 1);
+  }
+  SECTION("with room for both, two buffers") {
+    std::string error;
+    const auto loaded =
+        audio::load_effect_pack(pack, {}, audio::EffectLimits{}, &error);
+    REQUIRE(loaded);
+    CHECK(loaded->bank->pcm.size() == 2);
+  }
+  SECTION("a layer's gain is heard") {
+    Game g;
+    if (!g.ok) {
+      SKIP("SDL has no dummy audio driver");
+    }
+    AudioManager& am = g.a.am;
+    am.effects_pack(pack);
+    REQUIRE(am.select_effects(EffectsSet::ENHANCED));
+    am.play_sound(SoundId::RESTAURANT_NOISE_2, audio::LoopMode::Loop);
+    am.tick(0);
+    am.tick(2000);
+    CHECK(near(level_now(am),
+               music_test::effect_level(static_cast<std::int16_t>(
+                   std::lround(g.original(1) + stored(0.25) * 0.50118723)))));
+  }
+}
+
 // Not run by default: it needs the original game and a private pack, neither
 // of which is in the repo.
 //

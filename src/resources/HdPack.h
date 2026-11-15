@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
 #include <filesystem>
 #include <future>
 #include <memory>
@@ -81,6 +82,10 @@ public:
   struct WarmEntry {
     std::string relative; // e.g. "gfx/bo.png"
     Size engine_size;
+    // The screen that first showed it ("restaurant", "cityview", ...), or
+    // empty when not known. Written as a fourth field of the warm list;
+    // lists without it (older ones) still load.
+    std::string screen = {};
   };
   // Pack files loaded so far this session, in the order first used.
   [[nodiscard]] std::vector<WarmEntry> used() const;
@@ -93,6 +98,17 @@ public:
   // instead of decoding it twice; that wait always ends, with null (the
   // original art) if the decode fails.
   void prefetch(std::vector<WarmEntry> entries, std::size_t budget_bytes);
+
+  // The screen now on top (see WarmEntry::screen). On a change, its
+  // entries still waiting in the prefetch queue move to its front (in their
+  // order), so a screen being opened gets its art first; pictures a screen
+  // loads are recorded with its name. Call once per frame, as early as the
+  // UI stack is known (it is cheap when nothing changed).
+  void screen(std::string_view name);
+  // Moves the entries for `name` to the front, keeping both groups' order.
+  static void front_load(std::deque<WarmEntry>& queue, std::string_view name);
+  // The entries still waiting to be decoded in the background (tests).
+  [[nodiscard]] std::vector<WarmEntry> queued() const;
   // Blocks until a running prefetch has finished (tests, benchmarks).
   void wait_for_prefetch();
   // Pictures the prefetch decoded since the last call, for the renderer to
@@ -134,8 +150,7 @@ private:
   ImagePtr load(const std::string& relative, Size engine_size);
   void stop_prefetch();
   // The prefetch thread's loop.
-  void run_prefetch(const std::vector<WarmEntry>& entries,
-                    std::size_t budget_bytes, const std::stop_token& stop);
+  void run_prefetch(std::size_t budget_bytes, const std::stop_token& stop);
   // Any thread: queues a warning for the game thread to log.
   void note_prefetch_warning(std::string_view text,
                              std::string_view detail = {}) noexcept;
@@ -147,6 +162,11 @@ private:
   std::unordered_map<std::string, ImagePtr> cache_;
   std::unordered_map<std::string, std::shared_future<ImagePtr>> pending_;
   std::vector<WarmEntry> used_;
+  // Cache key -> index in used_, so a later use can name the screen.
+  std::unordered_map<std::string, std::size_t> used_index_;
+  // Under mutex_: what the prefetch thread decodes next, front first.
+  std::deque<WarmEntry> queue_;
+  std::string screen_;
   std::vector<ImagePtr> prefetched_;
   std::vector<std::string> prefetch_warnings_;
   Stats stats_;

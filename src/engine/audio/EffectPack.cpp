@@ -11,6 +11,7 @@
 #include <cmath>
 #include <set>
 #include <system_error>
+#include <unordered_map>
 
 #include "core/content/Sha256.h"
 #include "engine/music/JsonStore.h"
@@ -147,6 +148,51 @@ std::optional<Mixer::EffectBank::Rules> rules_of(const json& j,
       .duck_gain = static_cast<float>(std::pow(10.0, -*duck / 20.0))};
 }
 
+// The bank's sample buffers as a pack loads: a sound that decodes to the
+// same samples as one before it (the same file in two scenes, or two files
+// with the same audio) shares its buffer, and only new buffers count against
+// the pack's memory budget.
+class PcmStore {
+public:
+  PcmStore(Mixer::EffectBank& bank, const EffectLimits& limits)
+      : bank_(bank), limits_(limits) {}
+
+  // The kept buffer with these samples, or nullopt (and why) over budget.
+  std::optional<std::span<const int16_t>> intern(std::vector<int16_t> pcm,
+                                                 std::string& why) {
+    const std::string_view bytes(reinterpret_cast<const char*>(pcm.data()),
+                                 pcm.size() * sizeof(int16_t));
+    const std::size_t key = std::hash<std::string_view>{}(bytes);
+    const auto [first, last] = by_hash_.equal_range(key);
+    for (auto it = first; it != last; ++it) {
+      if (*it->second == pcm) {
+        ++shared_;
+        return std::span<const int16_t>(*it->second);
+      }
+    }
+    if (bytes_ + bytes.size() > limits_.max_pack_bytes) {
+      why = "the pack is over its memory budget of " +
+            music::mib(limits_.max_pack_bytes);
+      return std::nullopt;
+    }
+    bytes_ += bytes.size();
+    auto kept = std::make_unique<const std::vector<int16_t>>(std::move(pcm));
+    const std::vector<int16_t>* raw = kept.get();
+    bank_.pcm.push_back(std::move(kept));
+    by_hash_.emplace(key, raw);
+    return std::span<const int16_t>(*raw);
+  }
+  [[nodiscard]] std::uint64_t bytes() const { return bytes_; }
+  [[nodiscard]] std::size_t shared() const { return shared_; }
+
+private:
+  Mixer::EffectBank& bank_;
+  const EffectLimits& limits_;
+  std::unordered_multimap<std::size_t, const std::vector<int16_t>*> by_hash_;
+  std::uint64_t bytes_ = 0;
+  std::size_t shared_ = 0;
+};
+
 // A sound's own field, else the entry's (the defaults of its variants).
 double field(const json& spec, const json& entry, const char* key,
              double fallback) {
@@ -156,8 +202,10 @@ double field(const json& spec, const json& entry, const char* key,
 // The sound spec names (an entry, or one of its variants, with the entry's
 // fields as defaults), or the reason it is refused.
 std::unique_ptr<Mixer::EffectBank::Sound>
+// own_gain_only: the entry's gain_db is applied when it plays (a layer's),
+// so the same file in two scenes decodes to the same samples.
 load_sound(const json& spec, const json& entry, const fs::path& file,
-           const EffectLimits& limits, std::uint64_t& pack_bytes,
+           const EffectLimits& limits, PcmStore& store, bool own_gain_only,
            std::string& why) {
   std::error_code ec;
   const std::uintmax_t size = fs::file_size(file, ec);
@@ -196,15 +244,15 @@ load_sound(const json& spec, const json& entry, const fs::path& file,
   }
   const std::size_t max_frames =
       static_cast<std::size_t>(limits.max_seconds) * rate;
-  auto sound = std::make_unique<Mixer::EffectBank::Sound>();
+  std::vector<int16_t> pcm;
   std::vector<int16_t> chunk(4096 * 2);
-  while (sound->samples.size() / 2 < max_frames) {
+  while (pcm.size() / 2 < max_frames) {
     const std::size_t got = reader.read(chunk);
     if (got == 0) {
       break;
     }
-    sound->samples.insert(sound->samples.end(), chunk.begin(),
-                          chunk.begin() + static_cast<std::ptrdiff_t>(got * 2));
+    pcm.insert(pcm.end(), chunk.begin(),
+               chunk.begin() + static_cast<std::ptrdiff_t>(got * 2));
   }
   if (reader.damaged() || !reader.at_end()) {
     why = "its file is damaged or too long";
@@ -216,42 +264,39 @@ load_sound(const json& spec, const json& entry, const fs::path& file,
   const auto frames_of = [](double ms) {
     return static_cast<std::size_t>(std::max(ms, 0.0) * rate / 1000.0);
   };
-  const std::size_t total = sound->samples.size() / 2;
+  const std::size_t total = pcm.size() / 2;
   const std::size_t head = frames_of(field(spec, entry, "trim_start_ms", 0));
   const std::size_t tail = frames_of(field(spec, entry, "trim_end_ms", 0));
   if (head + tail >= total) {
     why = "its trims leave no sound";
     return nullptr;
   }
-  sound->samples.erase(sound->samples.end() -
-                           static_cast<std::ptrdiff_t>(tail * 2),
-                       sound->samples.end());
-  sound->samples.erase(sound->samples.begin(),
-                       sound->samples.begin() +
-                           static_cast<std::ptrdiff_t>(head * 2));
+  pcm.erase(pcm.end() - static_cast<std::ptrdiff_t>(tail * 2), pcm.end());
+  pcm.erase(pcm.begin(), pcm.begin() + static_cast<std::ptrdiff_t>(head * 2));
   const std::size_t loop_start =
       frames_of(field(spec, entry, "loop_start_ms", 0));
-  if (loop_start >= sound->samples.size() / 2) {
+  if (loop_start >= pcm.size() / 2) {
     why = "its loop starts after its end";
     return nullptr;
   }
+  auto sound = std::make_unique<Mixer::EffectBank::Sound>();
   sound->start_offset = loop_start * 2;
   const double gain_db =
-      std::clamp(field(spec, entry, "gain_db", 0.0), -60.0, 12.0);
+      std::clamp(own_gain_only ? number(spec, "gain_db", 0.0)
+                               : field(spec, entry, "gain_db", 0.0),
+                 -60.0, 12.0);
   if (gain_db != 0.0) {
     const double g = std::pow(10.0, gain_db / 20.0);
-    for (int16_t& s : sound->samples) {
+    for (int16_t& s : pcm) {
       s = static_cast<int16_t>(
           std::lrint(std::clamp(s * g, -32768.0, 32767.0)));
     }
   }
-  const std::uint64_t used = sound->samples.size() * sizeof(int16_t);
-  if (pack_bytes + used > limits.max_pack_bytes) {
-    why = "the pack is over its memory budget of " +
-          music::mib(limits.max_pack_bytes);
+  const auto kept = store.intern(std::move(pcm), why);
+  if (!kept) {
     return nullptr;
   }
-  pack_bytes += used;
+  sound->samples = *kept;
   return sound;
 }
 
@@ -261,7 +306,7 @@ load_sound(const json& spec, const json& entry, const fs::path& file,
 // sound, in why.
 std::vector<Mixer::EffectBank::Sound>
 load_variants(const json& entry, bool has_variants, const fs::path& folder,
-              const EffectLimits& limits, std::uint64_t& pack_bytes,
+              const EffectLimits& limits, PcmStore& store, bool layer,
               std::string& why, std::string& refused) {
   std::vector<Mixer::EffectBank::Sound> sounds;
   const auto one = [&](const json& spec, std::string& reason) {
@@ -271,7 +316,7 @@ load_variants(const json& entry, bool has_variants, const fs::path& folder,
     }
     if (const auto file = contained(folder, text(spec, "file"), reason)) {
       if (auto sound =
-              load_sound(spec, entry, *file, limits, pack_bytes, reason)) {
+              load_sound(spec, entry, *file, limits, store, layer, reason)) {
         sounds.push_back(std::move(*sound));
       }
     }
@@ -487,7 +532,7 @@ load_effect_pack(const fs::path& folder,
   }
   pack.bank = std::make_unique<Mixer::EffectBank>();
   std::set<std::size_t> seen;
-  std::uint64_t pack_bytes = 0;
+  PcmStore store(*pack.bank, limits);
   for (const json& entry : *effects) {
     EffectOutcome outcome;
     if (!entry.is_object()) {
@@ -551,7 +596,7 @@ load_effect_pack(const fs::path& folder,
         std::string refused;
         auto sounds =
             load_variants(entry, v2 && entry.contains("variants"), folder,
-                          limits, pack_bytes, reason, refused);
+                          limits, store, false, reason, refused);
         if (!sounds.empty()) {
           outcome.replaced = true;
           outcome.variants = sounds.size();
@@ -633,7 +678,7 @@ load_effect_pack(const fs::path& folder,
       }
       else {
         std::string refused;
-        auto sounds = load_variants(layer, true, folder, limits, pack_bytes,
+        auto sounds = load_variants(layer, true, folder, limits, store, true,
                                     reason, refused);
         if (!sounds.empty()) {
           outcome.replaced = true;
@@ -646,6 +691,9 @@ load_effect_pack(const fs::path& folder,
               .min_pan = static_cast<float>(pan->first),
               .max_pan = static_cast<float>(pan->second),
               .rules = *rules,
+              .gain = static_cast<float>(std::pow(
+                  10.0, std::clamp(number(layer, "gain_db", 0.0), -60.0, 12.0) /
+                            20.0)),
               .max_voices = static_cast<std::size_t>(*voices)});
           reason = refused;
         }

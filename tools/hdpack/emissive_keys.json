@@ -1,0 +1,54 @@
+{
+  "schema": "plegacy.emissive-keys/1",
+  "_status": "Proposed by the curator 2026-11-14 from 'emissive.py plan' on the real export (manifest sha256 386f2622430d...80b8) and a visual check of every proposed colour. Not yet reviewed by the owner or the lighting lane.",
+  "_why_scopes": "In the shared restaurant palette (4) every warm colour the plan proposes is also wood, brass, floor tiles or brick, and palette-wide keys would light up furniture. Restaurant keys are therefore scoped to the sprites that really are lights. In the city atlas (1) the plan's yellows and reds are facades and roof tiles; only the sign colours are unique to signs.",
+  "palettes": {
+    "1": {
+      "_where": "gfx/landsym: tile A8 cinema letters (#fcf420), C8 green shop sign (#3cdc40, #bcfcb8), 8A arcade light (#fcf400). Each colour appears only in those tiles. Left out after the first run: DB neon stripes (#6c4cfc, #4c28cc), because the redraw moved the stripes and the glow no longer lines up; that tile needs a hand-painted mask.",
+      "sign": ["#fcf420", "#fcf400", "#3cdc40", "#bcfcb8"]
+    }
+  },
+  "scopes": [
+    {
+      "palette": "4",
+      "note": "Sabotage fire at night: flamethrower jet, rocket exhaust and blasts, bomb explosion. Nozzles, rocket bodies and the unlit bomb are left out. #e0c0b0 is the pale fire core (added after the first run left holes) and #c02810 the red rim.",
+      "only": [
+        "bob/nightw0/000[4-9]",
+        "bob/nightw0/00[1-3]?",
+        "bob/nightw2/001[2-9]",
+        "bob/nightw2/002?",
+        "bob/nightw3/000[3-9]"
+      ],
+      "flame": ["#e0c0b0", "#f0c040", "#d0a030", "#e0a050", "#d08040", "#c08020", "#c02810"]
+    },
+    {
+      "palette": "4",
+      "note": "Red glass lamps (4 rotations). Only the glass colours; the copper bracket shares no colour with this list.",
+      "only": ["bob/moebel/010[1-4]"],
+      "lamp": ["#fc8c80", "#fc7860", "#fc6040", "#fc4820", "#ec4800", "#e43800", "#cc0000", "#b40000"]
+    },
+    {
+      "palette": "4",
+      "note": "Green glass lamps (4 rotations), glass only.",
+      "only": ["bob/moebel/010[5-8]"],
+      "lamp": ["#4cec4c", "#1cc81c", "#0ca808", "#089004"]
+    },
+    {
+      "palette": "4",
+      "note": "White glass lamps (3 rotations), the light glass tones only.",
+      "only": ["bob/moebel/0109", "bob/moebel/011[01]"],
+      "lamp": ["#fcecd4", "#ecd0a8", "#e0c4a0", "#d4b894", "#bca084"]
+    },
+    {
+      "palette": "4",
+      "note": "Pinball playfield (0313-0315) and jukebox light tubes (0316-0319). The beige and brown cabinet colours are not keys.",
+      "only": ["bob/moebel/031[3-9]"],
+      "sign": [
+        "#fcf828", "#f4e424", "#f0d420", "#e4bc18", "#dcac18", "#e8fc9c",
+        "#28d828", "#1cc81c", "#18b810", "#cc0000",
+        "#5488d0", "#487cc8", "#345cb8"
+      ]
+    }
+  ],
+  "assets": {}
+}

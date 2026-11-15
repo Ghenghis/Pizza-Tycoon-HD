@@ -56,7 +56,8 @@ change only with `version`.
 | `origin`, `provenance`, `license` | no | Kept for the asset matrix; not read by the engine. |
 
 Files: WAV (PCM 8/16/24/32-bit, float) or MP3, decoded to 44100 Hz stereo with the same checks as
-music (header first, then the decoder). Limits per file: 16 MiB, 120 s; per pack: 96 MiB decoded (a sound two scenes share counts twice),
+music (header first, then the decoder). Limits per file: 16 MiB, 120 s; per pack: 64 MiB decoded (sounds that decode to the same samples, such as one file used by several
+scenes, share one buffer and count once),
 256 entries, a 1 MiB manifest.
 
 ## Version 2: variants, priorities, ambience
@@ -103,8 +104,8 @@ when `version` is `2`.
 | Field | Meaning |
 | --- | --- |
 | `variants` | Instead of `file`/`sha256`: 1 to 8 sounds, each with its own `file` and `sha256`, and optionally its own `gain_db`, `trim_start_ms`, `trim_end_ms`, `loop_start_ms`; the entry's values are the defaults. Each play picks one at random, never the one played last for that event, with the engine's own generator (never the game's random streams). A variant that is refused is left out with its reason (`variant 2: ...`) and the others play; with none left the event keeps its original. |
-| `priority` | `alert`, `feedback` or `ambience`, for an entry that is replaced. Without it: `phone-ringing` and `police-siren` are alerts; `restaurant-noise-1..3`, `traffic-1..2` ambience; the rest feedback. Anything else refuses the entry. |
-| `ambience` | Up to 8 scenes. A scene's `with` names its bed: an event (original or replaced) that the game loops. While the bed plays, each of its up to 8 layers plays one of its variants (rules as above) every `interval_ms` [least, most] (250 to 600000 ms, random in between), panned at random within `pan` [left, right] (-1 to 1, default [0, 0]). A layer starts its first interval when the bed starts, and stops when it stops. A layer that is refused (no name, unknown bed, bad interval or pan, no variant that loads) is reported in the outcomes with `layer` set, and the others play. |
+| `priority` | `alert`, `feedback` or `ambience`, for an entry that is replaced. Without it: `phone-ringing` and `police-siren` are alerts; `restaurant-noise-1..3`, `traffic-1..2`, `kitchen-busy` and `kitchen-idle` ambience; the rest feedback. Anything else refuses the entry. |
+| `ambience` | Up to 8 scenes. A scene's `with` names its bed: an event (original or replaced) that the game loops. While the bed plays, each of its up to 8 layers plays one of its variants (rules as above) every `interval_ms` [least, most] (250 to 600000 ms, random in between), panned at random within `pan` [left, right] (-1 to 1, default [0, 0]). A layer's own `gain_db` (-60 to +12 dB) is applied as it plays, not baked into its samples, so the same file in several scenes at different gains is decoded and kept once; a variant's own `gain_db` is baked as for entries. A layer starts its first interval when the bed starts, and stops when it stops. A layer that is refused (no name, unknown bed, bad interval or pan, no variant that loads) is reported in the outcomes with `layer` set, and the others play. |
 
 ### Pack events (version 2)
 

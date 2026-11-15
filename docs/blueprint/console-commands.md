@@ -193,6 +193,8 @@ Defined by `make_restaurant_commands()` in `src/core/debug/commands/RestaurantCo
 | `restaurant stock buy` |  | `<supplier_id:Int>` `<ingredient_id:Int>` `<kg:Int>` `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Buy stock for one ingredient from a supplier |
 | `restaurant stock clear` |  | `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Clear all ingredient stocks |
 | `restaurant stock fill` |  | `<kg:Int>` `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Buy the same weight of every ingredient sold |
+| `restaurant stock ingredient` |  | `<ingredient_id:Int>` `<kg:Int>` `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Buy one ingredient from the usual supplier (as the order screen does) |
+| `restaurant stock menu` |  | `<kg:Int>` `[player_id:PlayerId]` `[restaurant_id:RestaurantId]` | Buy what the menu's pizzas use, from the usual suppliers (as the order screen does) |
 
 Argument details:
 

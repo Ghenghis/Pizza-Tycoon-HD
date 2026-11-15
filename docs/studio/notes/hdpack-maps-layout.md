@@ -133,7 +133,17 @@ Added 2026-11-14 by the rendering lane. The engine looks for maps in `<pack>/_ma
 
 ## Proposed stage: emissive masks (`emissive.py`), spec for the curator
 
-Added 2026-11-14 by the rendering lane, for the curator to build. It is not implemented, and `tools/hdpack` is unchanged.
+Added 2026-11-14 by the rendering lane, for the curator to build.
+
+**Implemented 2026-11-14 as `tools/hdpack/emissive.py`** (`plan`, `run`, plus `sheet` for a review contact sheet; tests in `tests/test_emissive.py`). It differs from the text below in four places:
+
+* **Sidecar location.** The sidecar is `<maps>/_provenance/<asset id>/emissive/provenance.json`, so it sits beside the depth+normal sidecar of the same picture instead of replacing it.
+  * `input` is the HD picture.
+  * The new `inputs` list holds both the export picture and the HD picture, with their roles.
+* **Scoped keys.** The key file may also hold `scopes`, entries of the form `{"palette": "4", "only": ["bob/moebel/010[1-4]"], "lamp": [...]}`. Their keys apply only to the matching asset ids. `assets` entries may be globs.
+  * Scopes were needed because, in the shared restaurant palette, every proposed warm colour is also wood, brass, floor or brick somewhere.
+* **Spill colour.** In the dilated spill, the RGB is taken from the nearest kept texel instead of the wall under it.
+* **Resume rule.** A sidecar is also stale when the input hashes or the parameters (including `keys_sha256`) changed.
 
 **Goal.** Write `<maps>/<asset id>/emissive.png` (format above) for the pictures that have lit windows, lamps, signs, screens or flames. It must be cheap, deterministic, CPU only (Pillow and numpy), and need no model or GPU. That way it can run in CI and on any machine, with no broker grant.
 
