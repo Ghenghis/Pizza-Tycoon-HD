@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <charconv>
+#include <cmath>
 #include "engine/fx/DayNight.h"
 
 namespace fx {
@@ -422,7 +423,8 @@ FrameState resolve_frame(const LookSettings& settings,
     if (settings.music_accent && motion == AmbientMotion::Full &&
         f.emissive > 0.0f) {
       f.emissive =
-          std::clamp(f.emissive * (1.0f + 0.25f * music_level()), 0.0f, 1.0f);
+          std::clamp(f.emissive * (1.0f + 0.25f * music_accent(music_level())),
+                     0.0f, 1.0f);
     }
   }
   if (settings.day_night && clocked && !classic) {
@@ -648,6 +650,16 @@ void set_music_level(float level) noexcept {
   // NaN fails both comparisons and becomes 0.
   const float v = level > 0.0f ? (level < 1.0f ? level : 1.0f) : 0.0f;
   g_music_level.store(v, std::memory_order_relaxed);
+}
+
+float music_accent(float rms) noexcept {
+  if (!(rms > 0.0f)) {
+    return 0.0f; // silence, or not a number
+  }
+  const float db = 20.0f * std::log10(rms);
+  const float t = std::clamp(
+      (db - music_floor_db) / (music_ceiling_db - music_floor_db), 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
 }
 
 float music_level() noexcept {

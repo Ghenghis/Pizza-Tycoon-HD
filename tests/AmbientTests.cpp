@@ -11,7 +11,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -281,4 +284,50 @@ TEST_CASE("the same game time draws the same frame", "[fx][ambient][hd]") {
   classic_city.location.clear();
   CHECK(shown_frame(off) == shown_frame(fx::resolve_frame(
                                 vivid(fx::AmbientMotion::Full), classic_city)));
+}
+
+TEST_CASE("the music level is mapped to a perceptual accent", "[fx][ambient]") {
+  auto rms_at = [](float db) { return std::pow(10.0f, db / 20.0f); };
+  CHECK(fx::music_accent(0.0f) == 0.0f);
+  CHECK(fx::music_accent(-1.0f) == 0.0f);
+  CHECK(fx::music_accent(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
+  CHECK(fx::music_accent(rms_at(-50.0f)) == 0.0f); // below the floor
+  CHECK(fx::music_accent(rms_at(-40.0f)) == 0.0f);
+  CHECK(fx::music_accent(rms_at(-10.0f)) > 0.9999f);
+  CHECK(fx::music_accent(1.0f) == 1.0f); // above the ceiling
+  CHECK(std::abs(fx::music_accent(rms_at(-25.0f)) - 0.5f) < 1e-4f);
+  // Typical music, -20 dBFS (RMS 0.1): a pulse of 10 to 20%.
+  const float typical = 0.25f * fx::music_accent(0.1f);
+  CHECK(typical >= 0.10f);
+  CHECK(typical <= 0.20f);
+  // Rising, soft at both ends, and the same for the same level.
+  float last = 0.0f;
+  for (int db = -40; db <= -10; ++db) {
+    const float a = fx::music_accent(rms_at(static_cast<float>(db)));
+    CHECK(a >= last);
+    CHECK(a == fx::music_accent(rms_at(static_cast<float>(db))));
+    last = a;
+  }
+  CHECK(fx::music_accent(rms_at(-39.0f)) < 1.0f / 30.0f); // soft knee
+  CHECK(fx::music_accent(rms_at(-11.0f)) > 29.0f / 30.0f);
+
+  // In the frame: typical music raises a 0.7 glow by about 18%, and the
+  // cap holds: never more than 1.25x, never past full glow.
+  fx::FrameContext room = pole_city_night();
+  room.area = fx::Area::Restaurant;
+  fx::LookSettings s = vivid(fx::AmbientMotion::Full);
+  s.preset = fx::Preset::Studio;
+  const float quiet = fx::resolve_frame(s, room).emissive;
+  s.music_accent = true;
+  {
+    MusicLevel music(0.1f);
+    const float pulsed = fx::resolve_frame(s, room).emissive;
+    CHECK(pulsed / quiet >= 1.10f);
+    CHECK(pulsed / quiet <= 1.20f);
+  }
+  {
+    MusicLevel music(1.0f);
+    const float loudest = fx::resolve_frame(s, room).emissive;
+    CHECK(loudest <= std::min(1.0f, quiet * 1.25f) + 1e-6f);
+  }
 }
