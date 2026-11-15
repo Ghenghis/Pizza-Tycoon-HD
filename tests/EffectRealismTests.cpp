@@ -933,3 +933,175 @@ TEST_CASE("a private pack with ambience, through the real engine",
     CHECK(peak < 32767);
   }
 }
+
+namespace {
+
+struct Heard {
+  double rms_db = -200.0; // of the whole time it played
+  int peak = 0;
+  double seconds = 0.0;
+};
+
+// Plays one sound through the real mixer, from start() until it ends (a
+// one-shot, at most 10 s) or for 3 s (a loop, then stop()), and measures
+// the output.
+template <class Start, class Stop, class Playing>
+Heard hear(AudioManager& am, bool loop, Start start, Stop stop,
+           Playing playing) {
+  start();
+  double sum = 0.0;
+  std::size_t n = 0;
+  Heard h;
+  const std::size_t blocks =
+      (loop ? 3 : 10) * 44100 / audio::MIX_BLOCK_FRAMES + 1;
+  for (std::size_t b = 0; b < blocks; ++b) {
+    const auto out = music_test::fill(am);
+    for (const std::int16_t s : out) {
+      sum += static_cast<double>(s) * s;
+      h.peak = std::max(h.peak, std::abs(static_cast<int>(s)));
+    }
+    n += out.size();
+    if (!loop && !playing()) {
+      break;
+    }
+  }
+  stop();
+  for (int i = 0; i < 4; ++i) {
+    music_test::fill(am);
+  }
+  h.seconds = static_cast<double>(n / 2) / 44100.0;
+  const double r = n ? std::sqrt(sum / static_cast<double>(n)) / 32768.0 : 0.0;
+  h.rms_db = r > 0 ? 20.0 * std::log10(r) : -200.0;
+  return h;
+}
+
+bool game_loops(SoundId id) {
+  switch (id) {
+  case SoundId::RESTAURANT_NOISE_1:
+  case SoundId::RESTAURANT_NOISE_2:
+  case SoundId::RESTAURANT_NOISE_3:
+  case SoundId::TRAFFIC_1:
+  case SoundId::TRAFFIC_2:
+  case SoundId::PHONE_RINGING:
+  case SoundId::WEAPON_1:
+  case SoundId::POLICE_SIREN:
+    return true;
+  default:
+    return false;
+  }
+}
+
+} // namespace
+
+// Not run by default, as the one above: the original game and a pack that
+// fills every event.
+//
+//   PLEGACY_TEST_GAME_PATH=<folder with PT.EXE> PLEGACY_SFX_PACK=<pack folder>
+//     test_plegacy "[sfx-pack-v2]"
+//
+// All 23 original effects and the 7 pack events: each is replaced, plays
+// through the real mixer (as the game plays it: the loops looped), never
+// reaches full scale, is heard, and, for an original, stays within 15 dB of
+// the 1994 sound's level, so the pack keeps the game's balance.
+TEST_CASE("every original effect and pack event of a full pack loads, plays "
+          "and keeps its level",
+          "[.][sfx-pack-v2][audio]") {
+  const auto game = test_support::game_path();
+  const char* pack_env = std::getenv("PLEGACY_SFX_PACK");
+  if (!game || !pack_env || !*pack_env) {
+    SKIP("needs PLEGACY_TEST_GAME_PATH and PLEGACY_SFX_PACK");
+  }
+  music_test::PausedAudio a;
+  if (!a.ok) {
+    SKIP("SDL has no dummy audio driver");
+  }
+  AudioManager& am = a.am;
+  for (int m = 0; m <= 11; ++m) {
+    am.load_m_container((*game / "SOUND" / ("M" + std::to_string(m))).string());
+  }
+  am.effects_loaded();
+  am.effects_seed(11);
+  am.effects_pack(fs::path(pack_env));
+  REQUIRE(am.mixer().effect_count() ==
+          static_cast<std::size_t>(SoundId::COUNT));
+
+  // The 1994 level of each original first.
+  std::vector<Heard> original;
+  for (std::size_t i = 0; i < static_cast<std::size_t>(SoundId::COUNT); ++i) {
+    const auto id = static_cast<SoundId>(i);
+    const bool loop = game_loops(id);
+    original.push_back(hear(
+        am, loop,
+        [&] {
+          am.play_sound(id,
+                        loop ? audio::LoopMode::Loop : audio::LoopMode::Once);
+        },
+        [&] { am.stop_sound(id); }, [&] { return am.mixer().playing(i); }));
+  }
+
+  const auto done = am.select_effects(EffectsSet::ENHANCED);
+  INFO(done.error);
+  REQUIRE(done);
+  std::set<std::string> replaced;
+  for (const audio::EffectOutcome& o : done.outcomes) {
+    if (o.layer.empty() && o.replaced && o.reason.empty()) {
+      replaced.insert(o.event);
+    }
+  }
+
+  int covered = 0;
+  for (std::size_t i = 0; i < static_cast<std::size_t>(SoundId::COUNT); ++i) {
+    const auto id = static_cast<SoundId>(i);
+    const std::string event(audio::effect_event_id(id));
+    const bool loop = game_loops(id);
+    const Heard h = hear(
+        am, loop,
+        [&] {
+          am.play_sound(id,
+                        loop ? audio::LoopMode::Loop : audio::LoopMode::Once);
+        },
+        [&] { am.stop_sound(id); }, [&] { return am.mixer().playing(i); });
+    std::printf("[sfx-pack-v2] %-20s %s  %6.1f dBFS RMS (original %6.1f), "
+                "peak %5d, %.2f s\n",
+                event.c_str(),
+                replaced.contains(event) ? "replaced" : "ORIGINAL", h.rms_db,
+                original[i].rms_db, h.peak, h.seconds);
+    INFO(event);
+    CHECK(replaced.contains(event));
+    CHECK(h.peak > 0);
+    CHECK(h.peak < 32767);
+    CHECK(std::abs(h.rms_db - original[i].rms_db) <= 15.0);
+    covered += replaced.contains(event) ? 1 : 0;
+  }
+  for (std::size_t k = 0; k < static_cast<std::size_t>(audio::PackEvent::COUNT);
+       ++k) {
+    const auto e = static_cast<audio::PackEvent>(k);
+    const std::string event(audio::pack_event_id(e));
+    const bool loop = e == audio::PackEvent::KITCHEN_BUSY ||
+                      e == audio::PackEvent::KITCHEN_IDLE;
+    am.tick(5000); // past any spacing
+    const Heard h = hear(
+        am, loop,
+        [&] {
+          if (loop) {
+            am.start_event(e);
+          }
+          else {
+            am.play_event(e);
+          }
+        },
+        [&] { am.stop_event(e); }, [&] { return am.event_playing(e); });
+    std::printf("[sfx-pack-v2] %-20s %s  %6.1f dBFS RMS, peak %5d, %.2f s\n",
+                event.c_str(),
+                replaced.contains(event) ? "in pack " : "MISSING", h.rms_db,
+                h.peak, h.seconds);
+    INFO(event);
+    CHECK(replaced.contains(event));
+    CHECK(h.peak > 0);
+    CHECK(h.peak < 32767);
+    CHECK(h.rms_db > -60.0);
+    covered += replaced.contains(event) ? 1 : 0;
+  }
+  std::printf("[sfx-pack-v2] %d of 30 events covered\n", covered);
+  CHECK(covered == 30);
+}
