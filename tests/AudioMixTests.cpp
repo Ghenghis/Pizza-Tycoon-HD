@@ -357,3 +357,111 @@ TEST_CASE("setters hammered from another thread while the mix runs",
   // Never more than everything at full volume at once.
   CHECK(peak <= mixed(5000 + 1000 + 1000));
 }
+
+namespace {
+
+// A continuous sine on both channels, amplitude amp of full scale, in
+// blocks of MIX_BLOCK_FRAMES.
+struct Tone {
+  double amp;
+  double hz = 440.0;
+  std::size_t frame = 0;
+  std::vector<int16_t> next() {
+    std::vector<int16_t> block(MIX_BLOCK_SAMPLES);
+    for (std::size_t i = 0; i < MIX_BLOCK_FRAMES; ++i, ++frame) {
+      const double t = static_cast<double>(frame) / Mixer::RATE;
+      const auto v = static_cast<int16_t>(std::lround(
+          amp * 32767.0 * std::sin(2.0 * 3.14159265358979 * hz * t)));
+      block[2 * i] = v;
+      block[2 * i + 1] = v;
+    }
+    return block;
+  }
+};
+
+// Blocks in seconds of audio.
+std::size_t blocks_in(double seconds) {
+  return static_cast<std::size_t>(seconds * Mixer::RATE / MIX_BLOCK_FRAMES);
+}
+
+} // namespace
+
+TEST_CASE("the music meter is 0 while the music is off", "[audio][mix]") {
+  Mixer m;
+  Tone tone{.amp = 0.5};
+  CHECK(m.music_level() == 0.0f);
+
+  m.music_enabled(false);
+  for (std::size_t b = 0; b < blocks_in(1.0); ++b) {
+    const auto music = tone.next();
+    render(m, MIX_BLOCK_FRAMES, music);
+    REQUIRE(m.music_level() == 0.0f);
+  }
+
+  // Volume 0 and a muted output count as off too.
+  m.music_enabled(true);
+  m.music_volume(0.0f);
+  for (std::size_t b = 0; b < blocks_in(0.5); ++b) {
+    const auto music = tone.next();
+    render(m, MIX_BLOCK_FRAMES, music);
+    REQUIRE(m.music_level() == 0.0f);
+  }
+  m.music_volume(1.0f);
+  m.output_muted(true);
+  for (std::size_t b = 0; b < blocks_in(0.5); ++b) {
+    const auto music = tone.next();
+    render(m, MIX_BLOCK_FRAMES, music);
+    REQUIRE(m.music_level() == 0.0f);
+  }
+
+  // Effects are not music.
+  m.output_muted(false);
+  const auto fx = m.add_effect(constant(8 * MIX_BLOCK_FRAMES, 20000));
+  REQUIRE(fx);
+  REQUIRE(m.play(*fx, true));
+  for (std::size_t b = 0; b < blocks_in(0.5); ++b) {
+    render(m, MIX_BLOCK_FRAMES);
+    REQUIRE(m.music_level() == 0.0f);
+  }
+}
+
+TEST_CASE("a steady tone gives a steady music level in range", "[audio][mix]") {
+  Mixer m;
+  Tone tone{.amp = 0.5};
+  const float rms =
+      static_cast<float>(0.5 * 32767.0 / 32768.0 / std::sqrt(2.0));
+
+  // About 100 ms to settle; after 1 s it holds the tone's RMS.
+  for (std::size_t b = 0; b < blocks_in(1.0); ++b) {
+    const auto music = tone.next();
+    render(m, MIX_BLOCK_FRAMES, music);
+    const float level = m.music_level();
+    REQUIRE(level >= 0.0f);
+    REQUIRE(level <= 1.0f);
+  }
+  float low = 1.0f;
+  float high = 0.0f;
+  for (std::size_t b = 0; b < blocks_in(1.0); ++b) {
+    const auto music = tone.next();
+    render(m, MIX_BLOCK_FRAMES, music);
+    low = std::min(low, m.music_level());
+    high = std::max(high, m.music_level());
+  }
+  CHECK(std::abs(low - rms) < 0.01f);
+  CHECK(std::abs(high - rms) < 0.01f);
+  CHECK(high - low < 0.005f);
+
+  // The music volume is in it: half the volume, half the level.
+  m.music_volume(0.5f);
+  for (std::size_t b = 0; b < blocks_in(1.0); ++b) {
+    const auto music = tone.next();
+    render(m, MIX_BLOCK_FRAMES, music);
+  }
+  CHECK(std::abs(m.music_level() - 0.5f * rms) < 0.01f);
+
+  // When the song ends, the level falls away.
+  for (std::size_t b = 0; b < blocks_in(2.0); ++b) {
+    render(m, MIX_BLOCK_FRAMES);
+  }
+  CHECK(m.music_level() < 0.001f);
+}

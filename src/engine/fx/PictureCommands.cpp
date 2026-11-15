@@ -192,6 +192,8 @@ Example:
                                           frame_context(ctx.state));
         graded.graded_capture = true;
         set_frame_state(graded);
+        // Every map read and drawn: the same picture every time.
+        const MapStore::ScopedBlocking still;
         const bool ok = game.capture_screenshot(ctx.state, path);
         set_frame_state(saved);
         if (!ok) {

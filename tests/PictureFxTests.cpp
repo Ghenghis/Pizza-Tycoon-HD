@@ -80,6 +80,9 @@ struct ScopedMaps {
   ~ScopedMaps() { fx::MapStore::instance().configure({}); }
   ScopedMaps(const ScopedMaps&) = delete;
   ScopedMaps& operator=(const ScopedMaps&) = delete;
+  // Maps read on first lookup, as these tests expect (the background
+  // reading has tests of its own: MapLoadingTests.cpp).
+  fx::MapStore::ScopedBlocking blocking;
 };
 
 // A hemisphere bump: normals lean out from the centre (G = +Y up).

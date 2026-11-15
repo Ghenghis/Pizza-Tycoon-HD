@@ -666,6 +666,7 @@ set(PLEGACY_HEADERS
     src/engine/fx/Grade.h
     src/engine/fx/Look.h
     src/engine/fx/MapStore.h
+    src/engine/fx/MusicAccent.h
     src/engine/fx/NormalLight.h
     src/engine/fx/PackWarmup.h
     src/engine/fx/PictureCommands.h

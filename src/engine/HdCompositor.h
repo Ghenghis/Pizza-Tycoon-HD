@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "engine/gfx/HdImage.h"
 #include "engine/gfx/Surface.h"
@@ -93,6 +94,16 @@ public:
               double budget_ms);
   [[nodiscard]] std::size_t streaming() const noexcept {
     return stream_queue_.size();
+  }
+  // A normal or emissive map (fx::MapStore), drawable only once stream()
+  // has put it on the GPU: until then it is queued there, within the
+  // per-frame upload budget, and this is empty (the map is not drawn that
+  // frame). In MapStore's blocking mode it is uploaded at once.
+  Placed map_texture(const std::shared_ptr<const gfx::HdImage>& map);
+  // Grows by one each time stream() finishes uploading a map that
+  // map_texture() asked for, so the renderer draws glow and relief again.
+  [[nodiscard]] std::size_t map_uploads() const noexcept {
+    return map_uploads_;
   }
 
   // Uploads pictures ahead of use (a screen's art while it loads), up to
@@ -217,6 +228,9 @@ private:
   std::size_t budget_ = std::size_t{1536} << 20; // 1.5 GiB of textures
   int max_texture_size_ = 16384;
   std::vector<std::weak_ptr<const gfx::HdImage>> stream_queue_;
+  // Maps map_texture() queued in stream_queue_, not yet uploaded.
+  std::unordered_set<const gfx::HdImage*> maps_wanted_;
+  std::size_t map_uploads_ = 0;
   std::vector<Page> pages_;
   int page_w_ = 0; // atlas page size, set on first use
   int page_h_ = 0;

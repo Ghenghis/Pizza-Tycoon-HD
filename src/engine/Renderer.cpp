@@ -490,11 +490,24 @@ void Renderer::render_gpu() {
   const LightPass::Strength strength = light_strength();
   // Normal maps and emissive maps of pictures the pack loaded since.
   fx::MapStore& maps = fx::MapStore::instance();
-  maps.sync();
   const bool relief =
       maps.enabled() && hd_gpu_compositing() && fx::PostFx::is_gpu_driver(r);
+  maps.want_normals(relief);
+  maps.sync();
   if (relief && !normal_) {
     normal_ = std::make_unique<fx::NormalLightPass>(r);
+  }
+  // A map read in the background, or put on the GPU, since the last frame:
+  // the glow is drawn again (and the relief, which is drawn with the art).
+  // Until then a picture draws without its maps; nothing waits for them.
+  const std::size_t maps_now = maps.generation() + gpu_->map_uploads();
+  if (maps_now != maps_seen_) {
+    maps_seen_ = maps_now;
+    glow_ready_.clear();
+    if (relief) {
+      gpu_cached_.clear();
+    }
+    force_recompose_ = true;
   }
   const fx::Sun sun = look.sun_hours >= 0.0f && look.area == fx::Area::City
                           ? fx::sun_at(look.sun_hours)

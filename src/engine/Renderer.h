@@ -187,6 +187,10 @@ private:
   // Weather over the frame.
   std::unique_ptr<fx::SnowLayer> snow_;
   uint64_t snow_ticks_ = 0;
+  // fx::MapStore::generation() plus HdCompositor::map_uploads() when last
+  // seen: when it changes a map became drawable, and glow and relief are
+  // drawn again.
+  std::size_t maps_seen_ = 0;
   bool classic_ = false;
   std::optional<int> compare_x_;
   std::unique_ptr<HdCompositor> gpu_;

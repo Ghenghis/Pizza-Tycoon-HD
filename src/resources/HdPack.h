@@ -99,6 +99,18 @@ public:
   // original art) if the decode fails.
   void prefetch(std::vector<WarmEntry> entries, std::size_t budget_bytes);
 
+  // The entries of the last prefetch() and its budget. The serial grows by
+  // one per prefetch() (never reset); entries is null when there was none
+  // since configure(). The HD maps (fx::MapStore) queue the maps of
+  // these pictures from it, so a map is decoded in the background as soon
+  // as its picture is queued.
+  struct PrefetchRequest {
+    std::size_t serial = 0;
+    std::shared_ptr<const std::vector<WarmEntry>> entries;
+    std::size_t budget_bytes = 0;
+  };
+  [[nodiscard]] PrefetchRequest prefetch_request() const;
+
   // The screen now on top (see WarmEntry::screen). On a change, its
   // entries still waiting in the prefetch queue move to its front (in their
   // order), so a screen being opened gets its art first; pictures a screen
@@ -169,6 +181,7 @@ private:
   std::string screen_;
   std::vector<ImagePtr> prefetched_;
   std::vector<std::string> prefetch_warnings_;
+  PrefetchRequest request_;
   Stats stats_;
   std::jthread prefetcher_;
 };

@@ -45,6 +45,8 @@
 #include "engine/debug/RecordCommands.h"
 #include "engine/debug/ScreenCommands.h"
 #include "engine/fx/Look.h"
+#include "engine/fx/MapStore.h"
+#include "engine/fx/MusicAccent.h"
 #include "engine/fx/PackWarmup.h"
 #include "engine/fx/PictureCommands.h"
 #include "engine/fx/RendererSelect.h"
@@ -545,6 +547,8 @@ int Game::run() {
     }
     // The enhanced pack's ambience one-shots.
     audio_manager_->tick(context.clock.dt_ms);
+    // The picture's music accent: the music meter, once a frame.
+    fx::set_music_level(audio_manager_->music_level());
     // An enhanced sound pack that was refused says so, once.
     if (overlays) {
       if (std::string problem = audio_manager_->take_effects_problem();
@@ -1148,6 +1152,7 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
   // and stream the art; measure that state rather than a race against it.
   resources::HdPack::instance().wait_for_prefetch();
   resources::HdTypefaces::instance().wait_for_prewarm();
+  fx::MapStore::instance().wait_for_loads(); // the maps the warm-up queued
   renderer.warm_up_gpu();
   SDL_SetRenderVSync(sdl_.renderer.get(), SDL_RENDERER_VSYNC_DISABLED);
   std::vector<double> ms;
@@ -1290,6 +1295,7 @@ std::string Game::record_clip(GameState& gs, double seconds,
       gs.update(simulation_tick_ms);
     }
     audio_manager_->tick(dt);
+    fx::set_music_level(audio_manager_->music_level());
     if (music_) {
       music_->tick();
     }
@@ -1306,6 +1312,9 @@ std::string Game::record_clip(GameState& gs, double seconds,
 
 bool Game::capture_screenshot(GameState& gs, const std::string& path) {
   TemporaryStatusPanel status(context, gs);
+  // Every emissive and normal map read and drawn: the same picture every
+  // time, not a race against the background reading.
+  const fx::MapStore::ScopedBlocking still_maps;
 
   auto result = ViewFactory::create(context, gs);
   bool saved = false;

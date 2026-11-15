@@ -7,6 +7,7 @@
 #include "engine/fx/Look.h"
 
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include "engine/fx/DayNight.h"
 
@@ -444,7 +445,8 @@ FrameState resolve_frame(const LookSettings& settings,
 namespace {
 
 FrameState g_frame;
-float g_music_level = 0.0f;
+// Written from any thread (MusicAccent.h), read by the game thread.
+std::atomic<float> g_music_level{0.0f};
 
 struct AreaKey {
   std::string_view preset_key;
@@ -642,11 +644,15 @@ void set_frame_grade(const Grade& grade) {
 
 void set_frame_state(const FrameState& state) { g_frame = state; }
 
-void set_music_level(float level) {
-  g_music_level = std::clamp(level, 0.0f, 1.0f);
+void set_music_level(float level) noexcept {
+  // NaN fails both comparisons and becomes 0.
+  const float v = level > 0.0f ? (level < 1.0f ? level : 1.0f) : 0.0f;
+  g_music_level.store(v, std::memory_order_relaxed);
 }
 
-float music_level() { return g_music_level; }
+float music_level() noexcept {
+  return g_music_level.load(std::memory_order_relaxed);
+}
 
 const Grade& frame_grade() { return g_frame.grade; }
 

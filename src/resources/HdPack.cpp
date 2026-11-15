@@ -107,6 +107,8 @@ void HdPack::configure(const std::filesystem::path& root) {
   queue_.clear();
   screen_.clear();
   prefetched_.clear();
+  request_.entries.reset();
+  request_.budget_bytes = 0;
   stats_ = {};
   root_.clear();
   if (root.empty()) {
@@ -410,6 +412,9 @@ void HdPack::prefetch(std::vector<WarmEntry> entries,
   }
   {
     const std::lock_guard lock(mutex_);
+    ++request_.serial;
+    request_.entries = std::make_shared<const std::vector<WarmEntry>>(entries);
+    request_.budget_bytes = budget_bytes;
     queue_.assign(std::make_move_iterator(entries.begin()),
                   std::make_move_iterator(entries.end()));
     if (!screen_.empty()) {
@@ -456,6 +461,11 @@ void HdPack::screen(std::string_view name) {
   }
   screen_ = name;
   front_load(queue_, screen_);
+}
+
+HdPack::PrefetchRequest HdPack::prefetch_request() const {
+  const std::lock_guard lock(mutex_);
+  return request_;
 }
 
 std::vector<HdPack::WarmEntry> HdPack::queued() const {

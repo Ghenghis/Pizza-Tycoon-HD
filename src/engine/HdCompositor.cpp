@@ -429,6 +429,9 @@ void HdCompositor::stream(
       e = create(img);
     }
     if (!e || e->rows_done >= img->height) {
+      if (maps_wanted_.erase(img.get()) > 0 && e) {
+        ++map_uploads_; // on the GPU: drawable from the next frame
+      }
       ++done;
       continue;
     }
@@ -437,13 +440,39 @@ void HdCompositor::stream(
     const int before = e->rows_done;
     upload_rows(*e, *img, band);
     if (e->rows_done == before) {
-      ++done; // failed: left to be finished when it is drawn
+      // Failed: left to be finished when it is drawn (a map is asked for
+      // again by its next map_texture()).
+      maps_wanted_.erase(img.get());
+      ++done;
     }
   }
   stream_queue_.erase(stream_queue_.begin(),
                       stream_queue_.begin() +
                           static_cast<std::ptrdiff_t>(done));
+  if (stream_queue_.empty()) {
+    maps_wanted_.clear(); // also forgets maps gone before their upload
+  }
   flush_atlas();
+}
+
+HdCompositor::Placed
+HdCompositor::map_texture(const std::shared_ptr<const HdImage>& map) {
+  if (!map) {
+    return {};
+  }
+  if (fx::MapStore::instance().blocking()) {
+    return place(map);
+  }
+  const auto it = cache_.find(map.get());
+  if (it != cache_.end() && it->second.img.lock() == map &&
+      ready(it->second, *map)) {
+    it->second.last_used = frame_;
+    return {it->second.tex, it->second.x, it->second.y};
+  }
+  if (maps_wanted_.insert(map.get()).second) {
+    stream_queue_.emplace_back(map);
+  }
+  return {};
 }
 
 std::size_t
@@ -670,7 +699,7 @@ void HdCompositor::draw_layer(SDL_Texture* target, const gfx::Surface& layer,
     if (normal_pass_ && normal_lights_ && !text && !c.img->atlas &&
         normal_pass_->ready()) {
       if (auto map = fx::MapStore::instance().normal(c.img.get())) {
-        const Placed nm = place(map);
+        const Placed nm = map_texture(map);
         if (nm.tex) {
           flush_batch();
           const SDL_FRect src{
@@ -838,7 +867,7 @@ bool HdCompositor::draw_emissive(SDL_Texture* target, const gfx::Surface& layer,
     }
     // ...and adds its own.
     if (auto glow = glow_of(c)) {
-      const Placed g = place(glow);
+      const Placed g = map_texture(glow);
       if (g.tex) {
         draw(g.tex, c, g.x, g.y, 1.0f, SDL_BLENDMODE_ADD_PREMULTIPLIED);
       }

@@ -111,6 +111,7 @@ struct SoftScreen {
   }
 };
 
+// Maps read when first looked up, from `root`.
 struct ScopedMaps {
   explicit ScopedMaps(const fs::path& root) {
     fx::MapStore::instance().configure(root);
@@ -118,6 +119,9 @@ struct ScopedMaps {
   ~ScopedMaps() { fx::MapStore::instance().configure({}); }
   ScopedMaps(const ScopedMaps&) = delete;
   ScopedMaps& operator=(const ScopedMaps&) = delete;
+  // Maps read on first lookup, as these tests expect (the background
+  // reading has tests of its own: MapLoadingTests.cpp).
+  fx::MapStore::ScopedBlocking blocking;
 };
 
 // A w x h map, (r, g, b) left of x0, transparent right of it.

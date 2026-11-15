@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "engine/fx/MusicAccent.h"
 
 // The picture settings of the HD remaster, like a TV's picture modes: a
 // preset, a few sliders on top of it, and a preset per area of the game.
@@ -254,11 +255,7 @@ void set_frame_look(const LookSettings& settings, const FrameContext& context);
 void set_frame_look(const LookSettings& settings, Area area);
 void set_frame_grade(const Grade& grade);
 void set_frame_state(const FrameState& state);
-// The music's level (RMS, 0..1) for the music accent, set by whoever
-// measures it (the audio lane, from its own meter; this lane never reads
-// the audio). Stays 0 when nobody does, so the accent then does nothing.
-void set_music_level(float level);
-[[nodiscard]] float music_level();
+// The music accent's level, fx::set_music_level: see MusicAccent.h.
 [[nodiscard]] const Grade& frame_grade();
 [[nodiscard]] const FrameState& frame_state();
 

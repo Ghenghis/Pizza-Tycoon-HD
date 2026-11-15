@@ -20,7 +20,11 @@ Caveats that stay open:
   limit, level match, dither). No CC0 or approved recording fits: the PC3
   siren clips are short chirps (1.05 s and 0.69 s), not a 7.5 s wail.
 - kitchen-busy (-27.7 LUFS) and kitchen-idle (-29.7 LUFS) are under the bed
-  window of -23 +/- 2 LU. Both levels were accepted by the coordinator.
+  window of -23 +/- 2 LU. Both levels were accepted by the coordinator. A
+  gain change cannot fix busy: its true peak is already -1.1 dBTP, so it can
+  rise only 0.1 dB, to -27.6 LUFS. Idle could rise 4.7 dB to -25.0 without
+  clipping, but it would then be louder than busy, so it stays. Bringing both
+  in needs a limited derivative of busy, like restaurant-noise-1's.
 - The hidden `[sfx-pack-v2]` test is written and compiles, but this lane may
   not run tests; it has not been run. The level figures below are an offline
   prediction from the same files, not test output.

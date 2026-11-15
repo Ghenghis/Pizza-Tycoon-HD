@@ -365,6 +365,33 @@ float Mixer::pool_duck() const noexcept {
   return pool_env_seen_.load(std::memory_order_relaxed);
 }
 
+float Mixer::music_level() const noexcept {
+  return music_level_.load(std::memory_order_relaxed);
+}
+
+void Mixer::meter_music(std::span<const int16_t> music, std::size_t size,
+                        float gain) noexcept {
+  if (gain <= 0.0f || size == 0) {
+    music_square_ = 0.0f;
+    music_level_.store(0.0f, std::memory_order_relaxed);
+    return;
+  }
+  // Missing music (a short or empty block) counts as silence.
+  double sum = 0.0;
+  for (const int16_t s : music) {
+    sum += static_cast<double>(s) * static_cast<double>(s);
+  }
+  const double full = 32768.0 * 32768.0;
+  const auto square = static_cast<float>(
+      sum / (static_cast<double>(size) * full) * gain * gain);
+  const float frames = static_cast<float>(size / MIX_CHANNELS);
+  const float step =
+      1.0f - std::exp(-frames / (MUSIC_METER_S * static_cast<float>(RATE)));
+  music_square_ += step * (square - music_square_);
+  music_level_.store(std::clamp(std::sqrt(music_square_), 0.0f, 1.0f),
+                     std::memory_order_relaxed);
+}
+
 bool Mixer::play_extra(const EffectBank::Sound* sound, Placement place,
                        uint32_t pool, std::size_t max_voices, float duck_gain) {
   const std::lock_guard lock(bank_mutex_);
@@ -740,6 +767,8 @@ void Mixer::mix_block(std::span<int16_t> out, std::span<const int16_t> music) {
       music_enabled()
           ? music_volume_.load(std::memory_order_relaxed) * master * duck_
           : 0.0f;
+  meter_music(music, out.size(),
+              music_target > 0.0f ? 0.5f * (music_gain_ + music_target) : 0.0f);
   mix_add(acc, music, music_gain_, music_target);
   music_gain_ = music_target;
 
@@ -1356,6 +1385,8 @@ void AudioManager::sound_volume(float volume) { mixer_.sound_volume(volume); }
 void AudioManager::music_enabled(bool enabled) {
   mixer_.music_enabled(enabled);
 }
+
+float AudioManager::music_level() const { return mixer_.music_level(); }
 
 bool AudioManager::is_playing() const {
   if (!audio_enabled_) {

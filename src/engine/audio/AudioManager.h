@@ -315,6 +315,11 @@ public:
   // far down the pools that duck are (0: not at all, 1: their full depth).
   [[nodiscard]] float duck_gain() const noexcept;
   [[nodiscard]] float pool_duck() const noexcept;
+  // Any thread. The music as heard: its RMS after the music gain, 0..1 of
+  // full scale, smoothed over about MUSIC_METER_S. Effects are not in it. It
+  // is 0 while the music is off, at volume 0 or muted.
+  [[nodiscard]] float music_level() const noexcept;
+  static constexpr float MUSIC_METER_S = 0.1f;
 
   // Any thread. Volumes are clamped to 0..1 (NaN counts as 0). Turning the
   // music off mutes it; the song keeps its place.
@@ -478,6 +483,9 @@ private:
   void mix_extras(std::span<float> acc, float gain_from, float gain_to,
                   float env_from, float env_to);
   void mix_block(std::span<int16_t> out, std::span<const int16_t> music);
+  // Audio thread: the music meter, for a block of size samples.
+  void meter_music(std::span<const int16_t> music, std::size_t size,
+                   float gain) noexcept;
 
   std::array<Effect, MAX_EFFECTS> effects_;
   std::atomic<std::size_t> effect_count_{0};
@@ -507,7 +515,9 @@ private:
   std::atomic<float> duck_seen_{1.0f};
   float duck_ = 1.0f; // audio thread
   std::atomic<float> pool_env_seen_{0.0f};
-  float pool_env_ = 0.0f; // audio thread: 0 none .. 1 full depth
+  float pool_env_ = 0.0f;     // audio thread: 0 none .. 1 full depth
+  float music_square_ = 0.0f; // audio thread: smoothed mean square
+  std::atomic<float> music_level_{0.0f};
 
   std::atomic<float> music_volume_{1.0f};
   std::atomic<float> sound_volume_{0.9f};
@@ -586,6 +596,8 @@ public:
   void music_volume(float volume);
   void sound_volume(float volume);
   void music_enabled(bool enabled);
+  // Any thread. How loud the music is now, 0..1 (Mixer::music_level).
+  [[nodiscard]] float music_level() const;
   // Over music and effects together.
   void master_volume(float volume);
   // Music dips a little under alerts (phone, police) and comes back
