@@ -1,9 +1,76 @@
 # Game recording (R34): session API, video readback, encoder process
 
 2026-11-14. This is the design for recording the game's own picture and sound, after
-`RECORDING-AND-MUSIC.md` (the owner's proposal). Only the audio tap exists in code
-(`audio::MixTap`, `src/engine/audio/MixTap.h`). Everything else here is a plan and has not been
-built or measured.
+`RECORDING-AND-MUSIC.md` (the owner's proposal).
+
+**Built (the first slice):**
+- the audio tap;
+- the session, with the Classic picture path (`src/engine/record/`);
+- the owned FFmpeg process;
+- the `record` console command.
+
+**Planned:** the HD readback, the hardware encoders, the UI and the long acceptance runs.
+
+## The first slice, as built
+
+- **Commands.**
+  - `record start [seconds] [folder]`, `record stop` and `record status` work in the game.
+  - `record clip <seconds> [folder] [music]` works in batch mode (`--exec`). It records the
+    current screen in real time, with the simulation and the sound running.
+  - Output goes in a new `rec-<date>-<time>` folder, by default under `recordings/` beside the
+    saves.
+- **Picture.** Classic (HD off) only, for now; `record start` refuses the HD path.
+  - The software path's composed frame is already in memory as 640x400 RGBA. It is several
+    indexed layers, each with its own palette, put together, so no single indexed frame exists.
+  - When a frame is due, the game thread copies it into one of four slots allocated at the
+    start. No GPU readback and no waiting.
+  - A worker converts the frame to rgb24 and writes it to FFmpeg's stdin.
+  - Output frame k shows the game frame taken nearest to k/fps, within half a period. When the
+    game shows nothing new, the last frame is held.
+- **Sound.** The recorder's audio thread drains `MixTap`.
+  - Each frame is placed by its sample position; a gap is written as silence in its place.
+  - Audio from before the start is not used.
+- **Time 0.** Time 0 is when FFmpeg has taken the first frame, for both streams, so FFmpeg's
+  start-up never costs frames.
+  - Raw inputs run with `-probesize 32 -analyzeduration 0`. With probing on, FFmpeg waits for
+    about a second of audio before it reads more picture, and the start stalls.
+- **The end.**
+  - The stop point is at least what either stream has begun, so both streams end at exactly the
+    same length: N frames and N x 44100 / fps samples.
+  - Neither stream is ever written past the duration limit.
+- **Output.**
+  - `-f segment -segment_format matroska -reset_timestamps 0`, libx264 (veryfast, CRF 18,
+    yuv420p) with a keyframe forced at each segment start, plus AAC at 192 kb/s.
+  - `recording.json` holds the configuration, the FFmpeg path and version, counts (frames,
+    held, dropped, samples, gap samples), the stop reason, the exit code, and each segment's
+    times, size and SHA-256.
+- **Encoders.**
+  - `Capabilities::probe()` lists the encoders FFmpeg has, NVENC, AMF and QSV included.
+  - Only software encoders that open a trial encode here are offered: libx264, libopenh264 and
+    mpeg4. The hardware encoders are listed, never offered, until a later round initialises
+    them.
+- **Process.** `record::Subprocess` starts FFmpeg with arguments as a list, never through a shell.
+  - Windows: `CREATE_NO_WINDOW`, a Job object with kill-on-close, an explicit handle list, the
+    audio on a named pipe, and quoting by the `CommandLineToArgvW` rules (tested).
+  - Linux: `fork` + `execv`, not `posix_spawn`, because `PR_SET_PDEATHSIG` must be set in the
+    child. The child has its own process group, which a kill takes whole. It ends with the
+    thread that started it: the game thread, which calls `RecordingSession::start()`.
+  - Other POSIX: `posix_spawn` with its own process group.
+  - stderr is kept in a 64 KiB tail. A child that ends early, or stops reading, stops the
+    session with `encoder-error`, and the game goes on.
+
+**Measured in the cloud container** (Linux, FFmpeg 6.1.1, libx264). 5 s of a scripted
+synthetic game, through the real session, `MixTap` and FFmpeg, then decoded with
+ffprobe/ffmpeg:
+- 150 frames;
+- video 5.000 s, audio 5.039 s (AAC padding);
+- start times equal once the 1024-sample AAC priming is allowed for;
+- audio present (RMS 1393 for a 1414 tone);
+- no audio from before the start;
+- a white flash and a 1 kHz burst, both at 2.0 s, within 12–24 ms of each other.
+
+The same checks are in `tests/RecordingTests.cpp` (`[record][ffmpeg]`, skipped without FFmpeg).
+A game run (`record clip` in `--exec`) has not been run here.
 
 ## What is recorded
 
@@ -38,7 +105,7 @@ built or measured.
 Tests: `tests/MixTapTests.cpp` covers positions while off and on, partial reads, a full ring and
 its gap, a writer and reader running at once, and the bytes `fill_block()` gave the device.
 
-## Session API (planned)
+## Session API (as built; the frame type is 32-bit RGBA for now)
 
 ```cpp
 namespace recording {

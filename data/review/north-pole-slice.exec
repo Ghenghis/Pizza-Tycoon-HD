@@ -45,8 +45,12 @@ game dismiss
 city rent cheapest
 
 # Furnish it piece by piece: two round tables with a chair on each side, and
-# a small oven. Sizes from the sprites: table 70 x 68, chair 42 x 46 pixels;
-# the chairs overlap the table edge by 10 pixels, so they face and join it.
+# two small ovens. Sizes from the sprites: table 70 x 68, chair 42 x 46
+# pixels; the chairs overlap the table edge by 10 pixels, so they face and
+# join it; an oven is 92 x 86. Two ovens, because a cook can blow one up (the
+# original's BlowUpOven staff event): with one oven that leaves the kitchen
+# without any, and this player never buys another, so the whole week would
+# sell nothing. One small oven still bakes about a hundred pizzas a day.
 restaurant place ROUND_GRILL 46 4
 restaurant place TRADITIO_ROMANO 14 4
 restaurant place TRADITIO_ROMANO 106 4
@@ -54,6 +58,7 @@ restaurant place ROUND_GRILL 46 84
 restaurant place TRADITIO_ROMANO 14 84
 restaurant place TRADITIO_ROMANO 106 84
 restaurant place OVEN_SMALL 0 0
+restaurant place OVEN_SMALL 120 0
 
 # Menu, stock and staff: the standard pizzas at $8, 10 kg of every
 # ingredient, a cook (character 20) and a waiter (character 21).

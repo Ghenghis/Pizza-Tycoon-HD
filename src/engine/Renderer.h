@@ -49,6 +49,10 @@ public:
   // Size of the frame this renderer produces, in texels.
   [[nodiscard]] int frame_width() const;
   [[nodiscard]] int frame_height() const;
+  // The current frame. By default the composited frame itself (what the
+  // compare views and their tests read); with the picture setting "graded
+  // screenshots" (fx::FrameState::graded_capture) the frame as the window
+  // shows it, the picture pass and the weather included.
   void with_current_frame(std::function<void(SDL_Surface*)> callback) const;
   void set_display_height(int height) { display_height_ = height; }
   // Recomposite and present even when no layer is dirty.
@@ -155,7 +159,11 @@ private:
   [[nodiscard]] LightPass::Strength light_strength() const;
   // Draws the display texture to the window through the picture pass.
   void present_display_texture();
-  std::unique_ptr<fx::PostFx> post_;
+  // Mutable: a graded screenshot (with_current_frame) draws through it.
+  mutable std::unique_ptr<fx::PostFx> post_;
+  // The frame as the window shows it: `frame` with the weather and the
+  // picture pass, read back. Null when screenshots are not graded.
+  [[nodiscard]] SDL_Surface_unique_ptr graded_frame(SDL_Texture* frame) const;
   fx::PostFx::Path post_path_ = fx::PostFx::Path::Plain;
   // The picture settings of the last frame: a change redraws the frame.
   fx::FrameState last_state_;

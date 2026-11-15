@@ -41,6 +41,7 @@
 #include "engine/Logger.h"
 #include "engine/Random.h"
 #include "engine/audio/AudioManager.h"
+#include "engine/fx/Look.h"
 #include "engine/geom/Spaces.h"
 #include "engine/gfx/Draw.h"
 #include "engine/gfx/HdImage.h"
@@ -53,6 +54,7 @@
 #include "views/hd/MediumMapHd.h"
 #include "views/hd/WaterCycleHd.h"
 #include "views/screens/StatusDisplay.h"
+#include "views/screens/city_view/CityLamps.h"
 #include "views/screens/city_view/ZoomConfig.h"
 #include "views/ui/popups/ConfirmPopup.h"
 
@@ -81,23 +83,6 @@ constexpr std::array<std::array<std::array<uint8_t, 3>, 4>, 4> SEASON_COLORS = {
     }};
 
 namespace {
-
-// How the HD far map draws a tile (views/hd/CityMapHd.h).
-views::hd::MapTileClass far_map_tile_class(MapTileType type) {
-  switch (type) {
-  case MapTileType::TILE_TYPE_WATER:
-    return views::hd::MapTileClass::Water;
-  case MapTileType::TILE_TYPE_ROAD:
-  case MapTileType::TILE_TYPE_PATH:
-    return views::hd::MapTileClass::Road;
-  case MapTileType::TILE_TYPE_BUILDING:
-  case MapTileType::TILE_TYPE_VILLA:
-  case MapTileType::TILE_TYPE_RESIDENTIAL_BUILDING:
-    return views::hd::MapTileClass::Building;
-  default:
-    return views::hd::MapTileClass::Ground;
-  }
-}
 
 // A palette entry as a colour, black when out of range.
 gfx::Color palette_color(const std::vector<gfx::Color>& colors, uint8_t index) {
@@ -819,6 +804,44 @@ void CityView::render(const RenderContext& ctx) {
 
 bool CityView::smooth_motion() const { return state_.options().smooth_motion; }
 
+bool CityView::lighting(lighting::Scene& scene) {
+  const float night = fx::frame_state().night;
+  // The map's own lamps: the close map, and the medium one on its map tab.
+  const bool map_shown = zoom_ == ZoomLevel::CLOSE ||
+                         (zoom_ == ZoomLevel::MEDIUM &&
+                          active_tab_type_ != CityViewTabType::DISTRICTS &&
+                          active_tab_type_ != CityViewTabType::CONTROL);
+  if (night > 0.0f && map_shown && lamp_roads_.empty()) {
+    lamp_roads_.assign(static_cast<std::size_t>(city_->data_length()), 0);
+    for (int i = 0; i < city_->data_length(); ++i) {
+      lamp_roads_[static_cast<std::size_t>(i)] = city_->is_road_tile(i) ? 1 : 0;
+    }
+  }
+  // Where the map is drawn this frame: with the smoothed camera, as render()
+  // draws it, so the lamps stay on their roads while it glides.
+  Camera drawn = camera_;
+  if (smooth_motion()) {
+    drawn.scroll(scroll_smoother_.drawn(camera_, context_.clock.tick_alpha));
+  }
+  const auto cfg = ZoomConfig::for_zoom_level(zoom_);
+  const ViewPoint o = drawn.origin_offset_in_view();
+  const float zoom = static_cast<float>(std::max(drawn.zoom(), 1));
+  const views::city_lamps::MapPlacement at{
+      .tile_px =
+          static_cast<float>(BASE_MAP_TILE_WIDTH * BASE_MAP_ZOOM_MULTIPLIER) /
+          zoom,
+      .origin = {.x = static_cast<float>(cfg.x_borders_offset + o.x) -
+                      (static_cast<float>(drawn.scroll().x) / zoom),
+                 .y = static_cast<float>(cfg.y_borders_offset + o.y) -
+                      (static_cast<float>(drawn.scroll().y) / zoom)},
+      .visible = viewport_rect()};
+  scene = views::city_lamps::city_scene(
+      night, map_shown ? lamp_roads_ : std::vector<uint8_t>{},
+      map_shown ? MAP_TILES_PER_ROW : 0, map_shown ? MAP_TILES_PER_COLUMN : 0,
+      at);
+  return scene.active();
+}
+
 void CityView::advance(uint32_t dt_ms) {
   if (!smooth_motion()) {
     zoom_transition_.cancel();
@@ -1056,7 +1079,7 @@ void CityView::render_map_zoom_far(const RenderContext& ctx) {
       if (hd) {
         hd_tiles[static_cast<std::size_t>(i)] = {
             .color = palette_index,
-            .cls = far_map_tile_class(city_->tile_category(i))};
+            .cls = views::hd::far_map_tile_class(type, city_->is_road_tile(i))};
       }
     }
     if (hd) {

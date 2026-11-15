@@ -18,6 +18,29 @@
 
 namespace views::hd {
 
+MapTileClass far_map_tile_class(uint8_t tile, bool road) {
+  if (road) {
+    return MapTileClass::Road;
+  }
+  const uint8_t row = tile & 0x0F;
+  const uint8_t col = tile >> 4;
+  switch (row) {
+  case 0x3:
+    return MapTileClass::Water;
+  case 0x5: // paths
+    return MapTileClass::Road;
+  case 0x4:
+  case 0x9:
+  case 0xA:
+  case 0xB:
+    return MapTileClass::Building;
+  case 0x8:
+    return col >= 0x9 ? MapTileClass::Building : MapTileClass::Ground;
+  default:
+    return MapTileClass::Ground;
+  }
+}
+
 namespace {
 
 struct Rgb {

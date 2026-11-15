@@ -144,9 +144,26 @@ struct MusicPlayback::Worker {
   void apply(Command& c) {
     switch (c.kind) {
     case Command::Kind::QUEUE: {
+      std::vector<QueuedTrack> old = std::move(queue);
       queue = std::move(c.tracks);
       repeat = c.repeat;
       if (!reader.is_open()) {
+        // A PLAY taken in the same batch has not opened its track yet: its
+        // index is a place in the old list, so it moves with its track.
+        // Going by the index alone would start whatever the new list has
+        // there.
+        if (index < old.size()) {
+          const TrackId& next = old[index].id;
+          if (c.keep_index < queue.size() && queue[c.keep_index].id == next) {
+            index = c.keep_index;
+          }
+          else if (const auto it = std::find_if(
+                       queue.begin(), queue.end(),
+                       [&](const QueuedTrack& t) { return t.id == next; });
+                   it != queue.end()) {
+            index = static_cast<std::size_t>(it - queue.begin());
+          }
+        }
         break;
       }
       // The track being decoded plays on, from its place in the new list.

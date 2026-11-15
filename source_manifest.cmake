@@ -109,6 +109,7 @@ set(GAME_PLEGACY_SOURCES
     src/core/restaurant/StaffEventDialogs.cpp
     src/core/restaurant/StaffEvents.cpp
     src/core/save/CheckpointTimer.cpp
+    src/core/save/RecoveryBrowser.cpp
     src/core/save/SaveGameCharacter.cpp
     src/core/save/SaveGameCity.cpp
     src/core/save/SaveGameFood.cpp
@@ -181,6 +182,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/screens/Terminal.cpp
     src/views/screens/WinSequenceView.cpp
     src/views/screens/WorldMapView.cpp
+    src/views/screens/city_view/CityLamps.cpp
     src/views/screens/city_view/CityView.cpp
     src/views/screens/depot/DepotExportScreen.cpp
     src/views/screens/depot/DepotMain.cpp
@@ -197,6 +199,7 @@ set(GAME_PLEGACY_SOURCES
     src/views/screens/menus/MenuNorthPole.cpp
     src/views/screens/menus/MenuOptions.cpp
     src/views/screens/menus/MenuQuickstart.cpp
+    src/views/screens/menus/MenuRecovery.cpp
     src/views/screens/menus/MenuRecipeExport.cpp
     src/views/screens/menus/MenuRecipeImport.cpp
     src/views/screens/menus/MenuSave.cpp
@@ -334,12 +337,15 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/audio/EffectPack.cpp
     src/engine/audio/MixTap.cpp
     src/engine/audio/VocDecoder.cpp
+    src/engine/debug/RecordCommands.cpp
     src/engine/debug/ScreenCommands.cpp
     src/engine/fx/DayNight.cpp
     src/engine/fx/Grade.cpp
     src/engine/fx/Look.cpp
     src/engine/fx/MapStore.cpp
     src/engine/fx/NormalLight.cpp
+    src/engine/fx/PackWarmup.cpp
+    src/engine/fx/PictureCommands.cpp
     src/engine/fx/PostFx.cpp
     src/engine/fx/RendererSelect.cpp
     src/engine/fx/Weather.cpp
@@ -374,6 +380,9 @@ set(ENGINE_PLEGACY_SOURCES
     src/engine/music/PcmRing.cpp
     src/engine/music/TrackDecoder.cpp
     src/engine/music/VlcDecoder.cpp
+    src/engine/record/Recorder.cpp
+    src/engine/record/RecordingSession.cpp
+    src/engine/record/Subprocess.cpp
     src/engine/ui/CursorManager.cpp
     src/engine/ui/InteractionManager.cpp
     src/engine/ui/PointerTracker.cpp
@@ -550,6 +559,7 @@ set(PLEGACY_HEADERS
     src/core/restaurant/StaffEventDialogs.h
     src/core/restaurant/StaffEvents.h
     src/core/save/CheckpointTimer.h
+    src/core/save/RecoveryBrowser.h
     src/core/save/SaveGameCharacter.h
     src/core/save/SaveGameCity.h
     src/core/save/SaveGameDate.h
@@ -645,12 +655,15 @@ set(PLEGACY_HEADERS
     src/engine/audio/EffectPack.h
     src/engine/audio/MixTap.h
     src/engine/audio/VocDecoder.h
+    src/engine/debug/RecordCommands.h
     src/engine/debug/ScreenCommands.h
     src/engine/fx/DayNight.h
     src/engine/fx/Grade.h
     src/engine/fx/Look.h
     src/engine/fx/MapStore.h
     src/engine/fx/NormalLight.h
+    src/engine/fx/PackWarmup.h
+    src/engine/fx/PictureCommands.h
     src/engine/fx/PostFx.h
     src/engine/fx/RendererSelect.h
     src/engine/fx/Weather.h
@@ -703,6 +716,9 @@ set(PLEGACY_HEADERS
     src/engine/music/PcmRing.h
     src/engine/music/TrackDecoder.h
     src/engine/music/VlcDecoder.h
+    src/engine/record/Recorder.h
+    src/engine/record/RecordingSession.h
+    src/engine/record/Subprocess.h
     src/engine/ui/CursorManager.h
     src/engine/ui/ICursorManager.h
     src/engine/ui/InteractionEvent.h
@@ -806,6 +822,7 @@ set(PLEGACY_HEADERS
     src/views/screens/Terminal.h
     src/views/screens/WinSequenceView.h
     src/views/screens/WorldMapView.h
+    src/views/screens/city_view/CityLamps.h
     src/views/screens/city_view/CityView.h
     src/views/screens/city_view/CityViewTab.h
     src/views/screens/city_view/ZoomConfig.h
@@ -824,6 +841,7 @@ set(PLEGACY_HEADERS
     src/views/screens/menus/MenuNorthPole.h
     src/views/screens/menus/MenuOptions.h
     src/views/screens/menus/MenuQuickstart.h
+    src/views/screens/menus/MenuRecovery.h
     src/views/screens/menus/MenuRecipeExport.h
     src/views/screens/menus/MenuRecipeImport.h
     src/views/screens/menus/MenuSave.h

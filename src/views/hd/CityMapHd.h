@@ -31,6 +31,16 @@ enum class MapTileClass : uint8_t {
   Building, // crisp blocks with a light top-left and a dark bottom-right edge
 };
 
+// The class of a city map tile from its byte (City::type). The low nibble
+// is the tile's row in landsym.vga, which is its kind (City::
+// tile_description: 3 water, 4 building, 5 path, 6 and 7 road, 9 villa,
+// 10 shop, 11 residential, 8 with a high nibble of 9 or more a named
+// building); the high nibble only picks the picture within the row. `road`
+// is City::is_road_tile() for the tile, the game's own road test (rows 6
+// and 7 but two special tiles). Anything else is Ground: drawn as it is,
+// with no smoothing.
+[[nodiscard]] MapTileClass far_map_tile_class(uint8_t tile, bool road);
+
 struct FarMapTile {
   uint8_t color = 0; // the palette index the indexed far map uses
   MapTileClass cls = MapTileClass::Ground;

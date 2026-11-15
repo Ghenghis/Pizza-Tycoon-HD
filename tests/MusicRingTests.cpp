@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <random>
 #include <thread>
@@ -162,13 +163,18 @@ TEST_CASE("producer and consumer threads at different block sizes",
   bool in_order = true;
   std::vector<std::int16_t> out(1024 * 2);
   while (expect < total) {
+    // Whether the producer had finished before this read: then a read that
+    // comes back empty means there is nothing more. Checked after the read
+    // instead, done could turn true between the two with the last writes
+    // still in the ring.
+    const bool finished = done.load();
     const std::size_t want = 1 + rng() % 1024;
     const std::size_t got = ring.read(std::span(out).first(want * 2), 1);
     for (std::size_t f = 0; f < got; ++f) {
       in_order = in_order && count_at(out, f) == expect + f;
     }
     expect += static_cast<std::uint32_t>(got);
-    if (got == 0 && done) {
+    if (got == 0 && finished) {
       break;
     }
   }
@@ -200,7 +206,14 @@ TEST_CASE("a late producer's audio is never read", "[music][ring][threads]") {
   bool clean = true;
   std::uint64_t frames = 0;
   std::vector<std::int16_t> out(256 * 2);
-  for (int i = 0; i < 20000; ++i) {
+  // At least 20000 reads, and on until the producer has been heard and has
+  // been late at least once: on a loaded machine it may not run at all for
+  // a while, so a fixed count alone proves nothing.
+  const auto until =
+      std::chrono::steady_clock::now() + std::chrono::seconds(30);
+  for (int i = 0; (i < 20000 || frames == 0 || ring.blocks_dropped() == 0) &&
+                  std::chrono::steady_clock::now() < until;
+       ++i) {
     if (i % 50 == 0) {
       wanted.fetch_add(1);
     }
@@ -209,6 +222,9 @@ TEST_CASE("a late producer's audio is never read", "[music][ring][threads]") {
     frames += got;
     for (std::size_t s = 0; s < got * 2; ++s) {
       clean = clean && out[s] == static_cast<std::int16_t>(gen);
+    }
+    if (got == 0) {
+      std::this_thread::yield();
     }
   }
   stop = true;

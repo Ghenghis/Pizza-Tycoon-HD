@@ -1,0 +1,64 @@
+# GPU-driver bench: the HD gate's perf route (tools/ci/hd_gates.py
+# gate_perf), once per picture feature, each one switched on in turn, so the
+# cost of each shows next to the plain frame. For a coordinator-run slot on
+# the owner's PC:
+#
+#   "Pizza Legacy" --config <folder>/bench-gpu.ini --game-path <PT folder> \
+#       --hd-scale 6 --hd-pack <4K pack> --seed 7 \
+#       --exec data/review/bench-gpu.exec > bench-gpu.log
+#
+# with `renderer=gpu` in bench-gpu.ini (or SDL_RENDER_DRIVER=gpu in the
+# environment). Run it twice, like the gate: the first run writes the warm
+# list. The first `picture` line says which renderer SDL gave
+# (renderer=gpu post_fx_shader=yes); on any other driver the shader
+# features cost nothing because they do not run, and the lines say so.
+#
+# Every bench prints the gate's line ("... frames at ...: avg, p50, p95,
+# p99, first frame ..."); the `picture` line before it says what was on.
+# Display only: nothing here changes the game.
+
+# The gate's route.
+restaurant qs 0 0
+nav restaurant 0
+game tick 300
+
+# 1. Baseline: Classic, the identity (one plain draw, as before).
+picture preset classic
+picture
+bench 300
+
+# 2. Post-FX: Studio is the colour grade alone (no bloom, no vignette).
+picture preset studio
+picture
+bench 300
+
+# 3. Bloom: Natural with bloom at its strongest (the downsample chain and
+#    the tent filter), plus its vignette.
+picture preset natural
+picture set picture_bloom 50
+picture
+bench 300
+picture set picture_bloom 0
+
+# 4. Snow over the frame (one geometry call, 520 flakes).
+picture set weather_restaurant snow
+picture
+bench 300
+picture set weather_restaurant none
+
+# 5. Relief and night glow: day and night on at night (lamps, glow) and the
+#    normal-map pass. Both need the pack's _maps folder (maps=yes on the
+#    `picture` line); without it this run measures the night tint only.
+picture set picture_day_night on
+game time set 22:00
+picture
+bench 300
+# By day on the city map: the sun's relief over the map's normal maps.
+game time set 12:00
+nav cityview @
+picture
+bench 300
+
+# Back to the defaults.
+picture set picture_day_night off
+picture preset classic

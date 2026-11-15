@@ -93,6 +93,18 @@ MenuGameLoad::MenuGameLoad(GameContext& context, GameState& state)
       context, "Load", [this] { load_selected_file(); }, face, button_style,
       sel_button_style));
 
+  // The Recovery Center, for the versions behind each save
+  add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 260, 194));
+  add_menu_item(std::make_unique<TextMenuItem>(
+                    context, "Versions",
+                    [this] {
+                      state_.ui().push<ScreenTag>(
+                          ScreenTag::Kind::MenuRecovery);
+                    },
+                    face, button_style, sel_button_style))
+      .help_text("Opens the Recovery Center: each save's verified versions "
+                 "and the checkpoints, to load or copy an earlier one.");
+
   // Delete button
   add_menu_item(std::make_unique<PositionMarkerMenuItem>(context, 440, 160));
   add_menu_item(std::make_unique<TextMenuItem>(

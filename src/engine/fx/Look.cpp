@@ -7,6 +7,7 @@
 #include "engine/fx/Look.h"
 
 #include <algorithm>
+#include <charconv>
 #include "engine/fx/DayNight.h"
 
 namespace fx {
@@ -331,6 +332,7 @@ FrameState resolve_frame(const LookSettings& settings,
   f.grade = resolve(settings, context.area);
   f.weather = settings.weather_for(context.area);
   f.reduced_motion = settings.reduced_motion;
+  f.graded_capture = settings.graded_screenshots;
   // Day and night: places with a clock, never in the Classic preset.
   const bool clocked = context.area == Area::City ||
                        context.area == Area::Restaurant ||
@@ -354,8 +356,174 @@ FrameState resolve_frame(const LookSettings& settings,
 }
 
 namespace {
+
 FrameState g_frame;
+
+struct AreaKey {
+  std::string_view preset_key;
+  std::string_view weather_key;
+  Area area;
+};
+constexpr std::array area_keys{
+    AreaKey{"picture_city", "weather_city", Area::City},
+    AreaKey{"picture_restaurant", "weather_restaurant", Area::Restaurant},
+    AreaKey{"picture_kitchen", "weather_kitchen", Area::Kitchen},
+    AreaKey{"picture_north_pole", "weather_north_pole", Area::NorthPole},
+};
+
+struct SliderKey {
+  std::string_view key;
+  int Sliders::*field;
+};
+constexpr std::array slider_keys{
+    SliderKey{"picture_intensity", &Sliders::intensity},
+    SliderKey{"picture_shadows", &Sliders::shadows},
+    SliderKey{"picture_bloom", &Sliders::bloom},
+    SliderKey{"picture_warmth", &Sliders::warmth},
+    SliderKey{"picture_vignette", &Sliders::vignette},
+};
+
+struct SwitchKey {
+  std::string_view key;
+  bool (*get)(const LookSettings&);
+  void (*set)(LookSettings&, bool);
+};
+const std::array switch_keys{
+    SwitchKey{"picture_crt",
+              [](const LookSettings& s) { return s.sliders.crt; },
+              [](LookSettings& s, bool v) { s.sliders.crt = v; }},
+    SwitchKey{"picture_day_night",
+              [](const LookSettings& s) { return s.day_night; },
+              [](LookSettings& s, bool v) { s.day_night = v; }},
+    SwitchKey{"picture_reduced_motion",
+              [](const LookSettings& s) { return s.reduced_motion; },
+              [](LookSettings& s, bool v) { s.reduced_motion = v; }},
+    SwitchKey{"picture_screenshots",
+              [](const LookSettings& s) { return s.graded_screenshots; },
+              [](LookSettings& s, bool v) { s.graded_screenshots = v; }},
+};
+
 } // namespace
+
+const std::vector<std::string_view>& setting_keys() {
+  static const std::vector<std::string_view> keys = [] {
+    std::vector<std::string_view> k{"picture_preset"};
+    for (const SliderKey& s : slider_keys) {
+      k.push_back(s.key);
+    }
+    k.push_back("picture_crt");
+    for (const AreaKey& a : area_keys) {
+      k.push_back(a.preset_key);
+    }
+    k.push_back("picture_day_night");
+    k.push_back("picture_reduced_motion");
+    for (const AreaKey& a : area_keys) {
+      k.push_back(a.weather_key);
+    }
+    k.push_back("picture_screenshots");
+    return k;
+  }();
+  return keys;
+}
+
+std::optional<std::string> apply_setting(LookSettings& settings,
+                                         std::string_view key,
+                                         std::string_view value) {
+  const std::string v(value);
+  if (key == "picture_preset") {
+    if (auto p = preset_from_config_value(value)) {
+      settings.preset = *p;
+      return std::nullopt;
+    }
+    return "Expected classic, natural, vivid, cinematic or studio, got '" + v +
+           "'";
+  }
+  for (const SliderKey& s : slider_keys) {
+    if (key == s.key) {
+      int parsed = 0;
+      auto [ptr, ec] =
+          std::from_chars(value.data(), value.data() + value.size(), parsed);
+      if (ec != std::errc{} || ptr != value.data() + value.size()) {
+        return "Expected a number, got '" + v + "'";
+      }
+      if (parsed < Sliders::MIN || parsed > Sliders::MAX) {
+        return std::string(key) + " takes -50 to 50, got '" + v + "'";
+      }
+      settings.sliders.*s.field = parsed;
+      return std::nullopt;
+    }
+  }
+  for (const SwitchKey& s : switch_keys) {
+    if (key == s.key) {
+      if (value == "true" || value == "on" || value == "1") {
+        s.set(settings, true);
+      }
+      else if (value == "false" || value == "off" || value == "0") {
+        s.set(settings, false);
+      }
+      else {
+        return "Expected on or off, got '" + v + "'";
+      }
+      return std::nullopt;
+    }
+  }
+  for (const AreaKey& a : area_keys) {
+    if (key == a.preset_key) {
+      const auto p = area_preset_from_config_value(value);
+      if (!p) {
+        return "Expected same or a preset, got '" + v + "'";
+      }
+      if (*p == AreaPreset::Same) {
+        settings.per_area.erase(a.area);
+      }
+      else {
+        settings.per_area[a.area] = *p;
+      }
+      return std::nullopt;
+    }
+    if (key == a.weather_key) {
+      const auto w = weather_from_config_value(value);
+      if (!w) {
+        return "Expected none, snow or light_snow, got '" + v + "'";
+      }
+      if (*w == Weather::None) {
+        settings.weather.erase(a.area);
+      }
+      else {
+        settings.weather[a.area] = *w;
+      }
+      return std::nullopt;
+    }
+  }
+  return "Unknown picture setting '" + std::string(key) + "'";
+}
+
+std::string setting_value(const LookSettings& settings, std::string_view key) {
+  if (key == "picture_preset") {
+    return std::string(to_config_value(settings.preset));
+  }
+  for (const SliderKey& s : slider_keys) {
+    if (key == s.key) {
+      return std::to_string(settings.sliders.*s.field);
+    }
+  }
+  for (const SwitchKey& s : switch_keys) {
+    if (key == s.key) {
+      return s.get(settings) ? "true" : "false";
+    }
+  }
+  for (const AreaKey& a : area_keys) {
+    if (key == a.preset_key) {
+      const auto it = settings.per_area.find(a.area);
+      return std::string(to_config_value(
+          it == settings.per_area.end() ? AreaPreset::Same : it->second));
+    }
+    if (key == a.weather_key) {
+      return std::string(to_config_value(settings.weather_for(a.area)));
+    }
+  }
+  return {};
+}
 
 void set_frame_look(const LookSettings& settings, const FrameContext& context) {
   g_frame = resolve_frame(settings, context);

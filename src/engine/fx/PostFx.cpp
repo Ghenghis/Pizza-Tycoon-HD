@@ -226,14 +226,16 @@ void PostFx::fill_bloom(SDL_Texture* frame) {
 
 namespace {
 
-// The size the frame is drawn at: the logical size when the window has a
-// logical presentation, else the target's size.
+// The size the frame is drawn at: the logical size when drawing to the
+// window with a logical presentation, else the target's size (a texture
+// target, as in a graded screenshot, ignores the presentation).
 SDL_FPoint logical_size(SDL_Renderer* r) {
   int w = 0;
   int h = 0;
   SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
   SDL_GetRenderLogicalPresentation(r, &w, &h, &mode);
-  if (w <= 0 || h <= 0 || mode == SDL_LOGICAL_PRESENTATION_DISABLED) {
+  if (w <= 0 || h <= 0 || mode == SDL_LOGICAL_PRESENTATION_DISABLED ||
+      SDL_GetRenderTarget(r) != nullptr) {
     SDL_GetCurrentRenderOutputSize(r, &w, &h);
   }
   return {static_cast<float>(w), static_cast<float>(h)};
@@ -306,7 +308,8 @@ PostFx::Path PostFx::draw(SDL_Texture* frame, const Grade& grade,
   FrameInfo frame_info = info;
   // The aperture mask follows the screen's own pixels.
   SDL_FRect shown{};
-  if (SDL_GetRenderLogicalPresentationRect(renderer_, &shown) && shown.w > 0) {
+  if (!SDL_GetRenderTarget(renderer_) &&
+      SDL_GetRenderLogicalPresentationRect(renderer_, &shown) && shown.w > 0) {
     frame_info.mask_cols = shown.w;
   }
   const PostFxUniforms u = make_uniforms(grade, frame_info, out);

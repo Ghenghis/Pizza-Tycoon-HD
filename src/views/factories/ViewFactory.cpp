@@ -68,6 +68,7 @@
 #include "views/screens/menus/MenuMissionSelect.h"
 #include "views/screens/menus/MenuNewGame.h"
 #include "views/screens/menus/MenuNorthPole.h"
+#include "views/screens/menus/MenuRecovery.h"
 #include "views/screens/menus/MenuOptions.h"
 #include "views/screens/menus/MenuQuickstart.h"
 #include "views/screens/menus/MenuRecipeExport.h"
@@ -152,6 +153,7 @@ bool is_menu_screen(ScreenTag::Kind kind) {
   case K::MenuSaveAsMission:
   case K::MissionSelect:
   case K::MenuNorthPole:
+  case K::MenuRecovery:
     return true;
   default:
     return false;
@@ -314,6 +316,9 @@ ViewFactory::Result ViewFactory::create(GameContext& context, GameState& gs) {
               break;
             case K::MenuNorthPole:
               view = std::make_unique<MenuNorthPole>(context, gs);
+              break;
+            case K::MenuRecovery:
+              view = std::make_unique<MenuRecovery>(context, gs);
               break;
             }
           },

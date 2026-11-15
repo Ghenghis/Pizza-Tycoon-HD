@@ -49,6 +49,9 @@ public:
   // clock; the view is drawn every frame while anything glides.
   void advance(uint32_t dt_ms) override;
   void render(const RenderContext& ctx) override;
+  // Street lamps at night (the lighting lane's day and night): inactive by
+  // day and with "Day and night" off, so the map is then as before.
+  bool lighting(lighting::Scene& scene) override;
   InterruptionRate interruption_rate() const override {
     return InterruptionRate::Full;
   }
@@ -236,4 +239,7 @@ private:
   // the way only right after a tick that moved them.
   uint64_t tick_serial_{0};
   uint64_t cars_moved_tick_{0};
+  // Road tiles of the city (one byte each, row-major) for the street lamps,
+  // built on first use; the roads never change.
+  std::vector<uint8_t> lamp_roads_;
 };

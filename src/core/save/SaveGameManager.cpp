@@ -1816,14 +1816,53 @@ bool SaveGameManager::load_over_current(GameState& state, GameContext& context,
   return loaded;
 }
 
+bool SaveGameManager::load_version(GameState& state, GameContext& context,
+                                   const std::string& filename,
+                                   std::uint64_t sequence, std::string* error,
+                                   std::string* notice,
+                                   const fs::path& checkpoint_slot) {
+  bool kept = true;
+  const bool loaded = load_slot(
+      state, context, filename, error, notice,
+      [&] {
+        kept = checkpoint(state, context, CheckpointReason::BeforeLoad,
+                          checkpoint_slot) != CheckpointResult::Failed;
+      },
+      sequence);
+  if (!kept && notice != nullptr) {
+    *notice = std::string(checkpoint_failed_notice);
+  }
+  return loaded;
+}
+
 bool SaveGameManager::load_slot(GameState& state, GameContext& context,
                                 const std::string& filename, std::string* error,
                                 std::string* notice,
-                                const std::function<void()>& before_replacing) {
+                                const std::function<void()>& before_replacing,
+                                std::optional<std::uint64_t> only_version) {
   Logger::info("Loading game from {}", filename);
   const fs::path path = get_full_path(filename);
   wait_for_background(path);
-  const std::vector<LoadCopy> copies = plan_load(path);
+  std::vector<LoadCopy> copies;
+  if (only_version) {
+    const SaveSlot slot(path);
+    const SaveSlot::ManifestRead read = slot.read_manifest();
+    const SaveVersion* v =
+        read.manifest ? read.manifest->find(*only_version) : nullptr;
+    if (v == nullptr || v->status != VersionStatus::Working) {
+      Logger::warn("Version {} of {} is not a working version", *only_version,
+                   display(path));
+      set_message(error, restore_not_working_message);
+      return false;
+    }
+    copies.push_back(
+        {.file = slot.version_path(v->sequence),
+         .expected = FileDigest{.size = v->size, .checksum = v->checksum},
+         .version = *v});
+  }
+  else {
+    copies = plan_load(path);
+  }
 
   enum class Built { Loaded, Rejected, Lost };
   // Builds the game from the save in a scratch state first. Damage the

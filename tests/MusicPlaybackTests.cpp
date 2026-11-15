@@ -427,6 +427,30 @@ TEST_CASE("the queue can change while a song plays on", "[music][playback]") {
   CHECK(log.started() == std::vector<std::string>{id('a'), id('c')});
 }
 
+TEST_CASE("a queue edit right after the start moves the track to start with "
+          "it",
+          "[music][playback]") {
+  // The start and the edit reach the worker together or one after the
+  // other, as it happens: the outcome is the same either way.
+  for (int round = 0; round < 5; ++round) {
+    AudioManager am;
+    MusicPlayback mp(am);
+    mp.set_backend(music::Backend::BUILTIN);
+    Tones t;
+    const QueuedTrack a = t.wav('a', 440, 0.3);
+    const QueuedTrack b = t.wav('b', 660, 0.2);
+    const QueuedTrack c = t.wav('c', 880, 0.2);
+    mp.set_repeat(music::Repeat::OFF);
+    mp.set_queue({a, b, c});
+    mp.set_mode(Mode::CHRISTMAS_BACKGROUND);
+    mp.edit_queue({b, a, c});
+    NoticeLog log;
+    listen_to_end(am, mp, log);
+    INFO("round " << round);
+    CHECK(log.started() == std::vector<std::string>{id('a'), id('c')});
+  }
+}
+
 TEST_CASE("repeat one and repeat off", "[music][playback]") {
   AudioManager am;
   MusicPlayback mp(am);

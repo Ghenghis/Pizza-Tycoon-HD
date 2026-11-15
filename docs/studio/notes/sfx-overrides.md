@@ -108,13 +108,15 @@ when `version` is `2`.
 
 ### Pack events (version 2)
 
-Six events had no sound in 1994. Only a pack sounds them; without one (Original effects, or a
-pack that does not list them) they are silent and nothing at all changes in the output.
+Seven events had no sound in 1994. Only a pack sounds them; without one (Original effects, or a
+pack that does not list them) they are silent and nothing at all changes in the output. These slot
+numbers are final (published 2026-11-14 with `door-close`, before any pack shipped).
 
 | Event | Slot | Plays | Default priority | Call it when |
 | --- | --- | --- | --- | --- |
-| `guest-enter` | 58 | once | feedback | a guest comes in through the door |
-| `guest-leave` | 59 | once | feedback | a guest goes out through the door |
+| `guest-enter` | 57 | once | feedback | a guest comes in through the door (the door opens) |
+| `guest-leave` | 58 | once | feedback | a guest goes out through the door (the door opens) |
+| `door-close` | 59 | once | feedback | the door shuts behind a guest, a moment after either |
 | `payment` | 60 | once | feedback | a guest pays |
 | `plate-served` | 61 | once | feedback | a waiter puts a pizza on a table |
 | `kitchen-busy` | 62 | loops | ambience | the kitchen view is open and the kitchen is busy |

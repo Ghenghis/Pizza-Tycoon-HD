@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -16,6 +17,7 @@
 #include <limits>
 #include <numeric>
 #include <system_error>
+#include <thread>
 
 #include "core/common/Ids.h"
 #include "core/debug/DebugCommands.h"
@@ -40,8 +42,11 @@
 #include "engine/SDL_include.h"
 #include "engine/Screenshot.h"
 #include "engine/Version.h"
+#include "engine/debug/RecordCommands.h"
 #include "engine/debug/ScreenCommands.h"
 #include "engine/fx/Look.h"
+#include "engine/fx/PackWarmup.h"
+#include "engine/fx/PictureCommands.h"
 #include "engine/fx/RendererSelect.h"
 #include "engine/gfx/Surface.h"
 #include "engine/gfx/Upscaler.h"
@@ -228,14 +233,22 @@ int Game::run() {
   }
 
   configure_hd(loaded_options);
-  // HD art the last session used is decoded in the background while the
-  // intro plays, so screens open without a pause (see HdPack.h).
+  // HD art is decoded in the background while the intro plays, so screens
+  // open without a pause (see HdPack.h): what the last session used, the
+  // pack's own list and, for a first session, the pack's biggest pictures
+  // (fx::session_warm_list).
   const std::filesystem::path hd_warm_list =
       std::filesystem::path(effective_config).parent_path() / "hd_warm.txt";
+  constexpr std::size_t warm_budget = std::size_t{1536} << 20; // 1.5 GiB
+  const std::string warm_game_path = engine::find_dos_game(
+      game_path_override_ ? *game_path_override_
+                          : configManager.active_game_path());
   if (resources::HdPack::instance().enabled()) {
-    constexpr std::size_t warm_budget = std::size_t{1536} << 20; // 1.5 GiB
     resources::HdPack::instance().prefetch(
-        resources::HdPack::load_warm_list(hd_warm_list), warm_budget);
+        fx::session_warm_list(hd_warm_list,
+                              resources::HdPack::instance().root(),
+                              warm_game_path, gfx::hd_scale()),
+        warm_budget);
   }
 
   resources::upscaling({
@@ -323,6 +336,10 @@ int Game::run() {
   for (auto& command : engine::make_screen_commands(*this, context, state)) {
     debug_console.add_command(std::move(command));
   }
+  for (auto& command : fx::make_picture_commands(*this, context, state)) {
+    debug_console.add_command(std::move(command));
+  }
+  debug_console.add_command(engine::make_record_command(*this, state));
 
   // And logger that logs to in-game console (removed with the console).
   const Logger::ScopedSink console_sink(
@@ -342,6 +359,15 @@ int Game::run() {
   // Everything from here on needs the original game's files.
   auto begin_game = [&](const std::string& path) {
     fileutils::game_data_path(path);
+    // A game folder only now known (the first session): its pictures can
+    // be read, so the pack's are queued too. Decoded ones are skipped.
+    if (path != warm_game_path && resources::HdPack::instance().enabled()) {
+      resources::HdPack::instance().prefetch(
+          fx::session_warm_list(hd_warm_list,
+                                resources::HdPack::instance().root(), path,
+                                gfx::hd_scale()),
+          warm_budget);
+    }
     load_game_data();
     state.create_placeholder_players();
 
@@ -731,6 +757,7 @@ int Game::run() {
     // For software cursor:
     cursor_manager_->cursor_position(pointer_->position());
     renderer.render();
+    record_frame(renderer);
 
     // Bring the window to the foreground. Raising only takes effect once the
     // event queue has been drained at least once, which handle_events did at
@@ -1036,6 +1063,7 @@ bool Game::init(int display_height, const GameOptions& options) {
           .user_music =
               music::path_from_utf8(platform_paths::user_music_dir())});
   context.music = music_.get();
+  recorder_ = std::make_unique<record::Recorder>(audio_manager_->mix_tap());
 
   auto [win_w, win_h] = window_size_for(options.double_size, display_height);
   SDL_Window* window = nullptr;
@@ -1208,6 +1236,80 @@ std::string Game::benchmark_frames(GameState& gs, int frames) {
       sorted.back(), first_ms, first_files, first_pack_ms, first_upload_ms,
       first_times.views_ms, first_times.compose_ms, first_times.present_ms,
       comp ? comp->texture_count() : 0, comp ? comp->texture_bytes() >> 20 : 0);
+}
+
+bool Game::records_classic() {
+  return !(gfx::hd_scale() > 1 && hd_gpu_compositing());
+}
+
+void Game::record_frame(Renderer& renderer) {
+  if (!recorder_) {
+    return;
+  }
+  // The software path's frame is already in memory: a copy, no readback.
+  if (recorder_->wants_frame() && records_classic()) {
+    renderer.with_current_frame([this](SDL_Surface* frame) {
+      if (frame && frame->format == SDL_PIXELFORMAT_RGBA8888) {
+        recorder_->frame(static_cast<const uint32_t*>(frame->pixels), frame->w,
+                         frame->h, frame->pitch);
+      }
+    });
+  }
+  recorder_->tick();
+}
+
+std::string Game::record_clip(GameState& gs, double seconds,
+                              const std::string& folder, bool music) {
+  TemporaryStatusPanel status(context, gs);
+  auto result = ViewFactory::create(context, gs);
+  if (!result.view || !recorder_) {
+    return {};
+  }
+  // Batch mode never shows the intro, which is where the sound starts.
+  if (!audio_manager_->is_initialized()) {
+    audio_manager_->init();
+    audio_manager_->load_default_assets();
+  }
+  if (music) {
+    audio_manager_->play_music(audio::MusicId::TEA_SHOPPE);
+  }
+  Renderer renderer(sdl_, display_height_);
+  renderer.add_layers(result.view.get());
+  const std::string started = recorder_->start(
+      record::Recorder::Start{.folder = folder, .seconds = seconds},
+      records_classic());
+  if (!recorder_->recording()) {
+    return started;
+  }
+  // Real time: the sound plays at its own pace, so the picture keeps it.
+  using clock = std::chrono::steady_clock;
+  auto last = clock::now();
+  uint32_t sim_ms = 0;
+  while (recorder_->recording()) {
+    const auto now = clock::now();
+    const auto dt = static_cast<uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last)
+            .count());
+    last = now;
+    sim_ms += dt;
+    while (sim_ms >= simulation_tick_ms) {
+      sim_ms -= simulation_tick_ms;
+      result.view->tick();
+      gs.update(simulation_tick_ms);
+    }
+    audio_manager_->tick(dt);
+    if (music_) {
+      music_->tick();
+    }
+    renderer.render();
+    record_frame(renderer);
+    std::this_thread::sleep_until(now + std::chrono::milliseconds(16));
+  }
+  record_frame(renderer); // lets the finished session go
+  if (music) {
+    audio_manager_->stop_music();
+  }
+  return started + "\n" + recorder_->status();
 }
 
 bool Game::capture_screenshot(GameState& gs, const std::string& path) {

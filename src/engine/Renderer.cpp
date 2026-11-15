@@ -993,8 +993,86 @@ SDL_Surface_unique_ptr Renderer::to_sdl_surface(const Surface& src,
   return SDL_Surface_unique_ptr(rgba);
 }
 
+SDL_Surface_unique_ptr Renderer::graded_frame(SDL_Texture* frame) const {
+  const fx::FrameState look = frame_state();
+  if (!look.graded_capture || !frame) {
+    return nullptr;
+  }
+  SDL_Renderer* r = sdl_.renderer.get();
+  if (!post_) {
+    post_ = std::make_unique<fx::PostFx>(r);
+  }
+  const int w = frame->w;
+  const int h = frame->h;
+  SDL_Texture* staged = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888,
+                                          SDL_TEXTUREACCESS_TARGET, w, h);
+  SDL_Texture* out = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888,
+                                       SDL_TEXTUREACCESS_TARGET, w, h);
+  if (!staged || !out) {
+    fatal(SDL_GetError());
+  }
+  SDL_SetTextureBlendMode(staged, SDL_BLENDMODE_NONE);
+  // 1. The frame, and the weather over it, as render_gpu() shows them.
+  SDL_BlendMode blend = SDL_BLENDMODE_NONE;
+  SDL_GetTextureBlendMode(frame, &blend);
+  SDL_SetTextureBlendMode(frame, SDL_BLENDMODE_NONE);
+  SDL_SetRenderTarget(r, staged);
+  SDL_RenderTexture(r, frame, nullptr, nullptr);
+  SDL_SetTextureBlendMode(frame, blend);
+  const int split =
+      compare_x_ ? *compare_x_ * w / DisplayConstants::SCREEN_WIDTH : 0;
+  if (snow_) {
+    const SDL_Rect right{split, 0, w - split, h};
+    snow_->draw(compare_x_ ? &right : nullptr);
+  }
+  // 2. Through the picture pass, as present_display_texture() draws it.
+  SDL_SetRenderTarget(r, out);
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+  SDL_RenderClear(r);
+  fx::FrameInfo info;
+  if (compare_x_) {
+    info.split_u = static_cast<float>(*compare_x_) /
+                   static_cast<float>(DisplayConstants::SCREEN_WIDTH);
+  }
+  info.scan_rows = static_cast<float>(DisplayConstants::SCREEN_HEIGHT);
+  info.mask_cols = static_cast<float>(w);
+  post_->draw(staged, look.grade, info);
+  SDL_Surface* read = SDL_RenderReadPixels(r, nullptr);
+  SDL_SetRenderTarget(r, nullptr);
+  SDL_DestroyTexture(out);
+  SDL_DestroyTexture(staged);
+  if (!read) {
+    fatal(SDL_GetError());
+  }
+  SDL_Surface_unique_ptr graded(
+      SDL_ConvertSurface(read, SDL_PIXELFORMAT_RGBA8888));
+  SDL_DestroySurface(read);
+  if (!graded) {
+    fatal(SDL_GetError());
+  }
+  return graded;
+}
+
 void Renderer::with_current_frame(
     std::function<void(SDL_Surface*)> callback) const {
+  if (auto graded = graded_frame(back_tex_)) {
+    callback(graded.get());
+    return;
+  }
+  if (!back_tex_ && frame_state().graded_capture && backbuffer_) {
+    // The original resolution: the CPU frame goes through the same pass.
+    SDL_Surface* source = software_crt() ? apply_crt_scaling(backbuffer_.get())
+                                         : backbuffer_.get();
+    SDL_Texture* tex =
+        SDL_CreateTextureFromSurface(sdl_.renderer.get(), source);
+    if (!tex) {
+      fatal(SDL_GetError());
+    }
+    auto graded = graded_frame(tex);
+    SDL_DestroyTexture(tex);
+    callback(graded.get());
+    return;
+  }
   if (back_tex_) {
     SDL_Renderer* r = sdl_.renderer.get();
     SDL_SetRenderTarget(r, back_tex_);

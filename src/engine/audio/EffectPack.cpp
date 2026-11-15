@@ -48,7 +48,7 @@ bool is_hex64(std::string_view s) {
 
 constexpr std::array<std::string_view,
                      static_cast<std::size_t>(PackEvent::COUNT)>
-    pack_event_ids = {"guest-enter",  "guest-leave",  "payment",
+    pack_event_ids = {"guest-enter",  "guest-leave",  "door-close",  "payment",
                       "plate-served", "kitchen-busy", "kitchen-idle"};
 static_assert(pack_event_ids.size() == Mixer::PACK_EVENTS);
 

@@ -24,6 +24,13 @@ DiskMenu::DiskMenu(GameContext& context, GameState& state)
       [&state] { state.ui().push<ScreenTag>(ScreenTag::Kind::MenuGameLoad); },
       face, style, sel_style, item_align));
   add_menu_item(std::make_unique<TextMenuItem>(
+      context, "Recovery",
+      [&state] { state.ui().push<ScreenTag>(ScreenTag::Kind::MenuRecovery); },
+      face, style, sel_style, item_align))
+      .help_text("Every save and checkpoint with its verified versions: load "
+                 "an earlier one, copy it into a new save, or undo a "
+                 "restore.");
+  add_menu_item(std::make_unique<TextMenuItem>(
       context, "Options",
       [&state] { state.ui().push<ScreenTag>(ScreenTag::Kind::MenuOptions); },
       face, style, sel_style, item_align));

@@ -59,6 +59,7 @@ struct ScreenTag {
 
     // Added later, so the values above stay put.
     MenuNorthPole,
+    MenuRecovery,
   };
 
   Kind kind;

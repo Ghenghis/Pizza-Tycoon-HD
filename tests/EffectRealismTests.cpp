@@ -526,8 +526,9 @@ TEST_CASE("pack events are silent without a pack, and the original output "
   AudioManager& am = g.a.am;
   am.play_sound(SoundId::RESTAURANT_NOISE_1, audio::LoopMode::Loop);
   const std::int16_t bed = level_now(am);
-  for (const char* id : {"guest-enter", "guest-leave", "payment",
-                         "plate-served", "kitchen-busy", "kitchen-idle"}) {
+  for (const char* id :
+       {"guest-enter", "guest-leave", "payment", "plate-served", "kitchen-busy",
+        "kitchen-idle", "door-close"}) {
     CHECK_FALSE(am.has_event(id));
     CHECK_FALSE(am.play_event(id));
     CHECK_FALSE(am.start_event(id));
@@ -539,7 +540,9 @@ TEST_CASE("pack events are silent without a pack, and the original output "
   CHECK(audio::pack_event_id(audio::PackEvent::PLATE_SERVED) == "plate-served");
   CHECK(audio::pack_event_slot(audio::PackEvent::GUEST_ENTER) ==
         audio::Mixer::EVENT_BASE);
-  CHECK(audio::slot_event_id(audio::Mixer::EVENT_BASE + 5) == "kitchen-idle");
+  CHECK(audio::slot_event_id(audio::Mixer::EVENT_BASE + 2) == "door-close");
+  CHECK(audio::slot_event_id(audio::Mixer::EVENT_BASE + 6) == "kitchen-idle");
+  CHECK(audio::Mixer::EVENT_BASE == 57);
 }
 
 TEST_CASE("a pack sounds its events: one-shots once, the kitchen beds loop "
@@ -826,7 +829,8 @@ TEST_CASE("a private pack with ambience, through the real engine",
   // The pack's one-shot events, each heard on its own.
   for (const audio::PackEvent e :
        {audio::PackEvent::GUEST_ENTER, audio::PackEvent::GUEST_LEAVE,
-        audio::PackEvent::PAYMENT, audio::PackEvent::PLATE_SERVED}) {
+        audio::PackEvent::DOOR_CLOSE, audio::PackEvent::PAYMENT,
+        audio::PackEvent::PLATE_SERVED}) {
     const std::string id(audio::pack_event_id(e));
     if (!am.has_event(id)) {
       std::printf("[sfx-pack-v1] event %-20s not in this pack\n", id.c_str());

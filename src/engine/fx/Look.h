@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // The picture settings of the HD remaster, like a TV's picture modes: a
 // preset, a few sliders on top of it, and a preset per area of the game.
@@ -110,6 +111,10 @@ struct LookSettings {
   std::map<Area, Weather> weather;
   // Fewer, slower particles with no sway.
   bool reduced_motion = false;
+  // Screenshots show the frame as the window does (the picture pass and the
+  // weather included) instead of the composited frame underneath. Off by
+  // default: the compare views and their tests read the frame itself.
+  bool graded_screenshots = false;
 
   [[nodiscard]] Preset preset_for(Area area) const;
   [[nodiscard]] Weather weather_for(Area area) const;
@@ -175,10 +180,26 @@ struct FrameState {
   Weather weather = Weather::None;
   bool reduced_motion = false;
   Area area = Area::Other;
+  // Screenshots through the picture pass (LookSettings::graded_screenshots).
+  bool graded_capture = false;
   bool operator==(const FrameState&) const = default;
 };
 [[nodiscard]] FrameState resolve_frame(const LookSettings& settings,
                                        const FrameContext& context);
+
+// The settings.conf keys of LookSettings, in the order the settings file
+// lists them (picture_preset, picture_intensity, ..., weather_north_pole,
+// picture_screenshots).
+[[nodiscard]] const std::vector<std::string_view>& setting_keys();
+// Sets one of them from its settings.conf spelling (true/false or on/off
+// for switches). Returns what was wrong, or nothing when it was set.
+[[nodiscard]] std::optional<std::string> apply_setting(LookSettings& settings,
+                                                       std::string_view key,
+                                                       std::string_view value);
+// The value of one of them, spelled as settings.conf spells it; empty for
+// an unknown key.
+[[nodiscard]] std::string setting_value(const LookSettings& settings,
+                                        std::string_view key);
 
 // The look of the frame being drawn, set by the game loop once per frame
 // (like lighting::set_enabled) and read by the renderer. Starts as the

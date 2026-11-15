@@ -270,10 +270,15 @@ TEST_CASE("effects are stored in whole frames, within a fixed table",
   CHECK(all_equal(render(m, 4), 0, 8, 0));
   CHECK_FALSE(m.any_effect_playing());
 
-  while (m.effect_count() < Mixer::MAX_EFFECTS) {
+  // The table's last PACK_EVENTS slots are the pack events', never an
+  // original's.
+  while (m.effect_count() < Mixer::EVENT_BASE) {
     REQUIRE(m.add_effect(constant(1, 1)));
   }
   CHECK_FALSE(m.add_effect(constant(1, 1)));
+  CHECK(m.effect_count() == Mixer::EVENT_BASE);
+  CHECK(m.valid(Mixer::MAX_EFFECTS - 1));
+  CHECK_FALSE(m.valid(Mixer::MAX_EFFECTS));
 
   // An odd output size leaves the stray sample silent.
   std::vector<int16_t> odd_out(5, int16_t{-1});

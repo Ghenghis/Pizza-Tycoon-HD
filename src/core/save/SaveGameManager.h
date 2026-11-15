@@ -230,6 +230,15 @@ public:
                     std::string* notice = nullptr,
                     const std::filesystem::path& checkpoint_slot = {});
 
+  // As load_over_current, for one working version of a slot (the Recovery
+  // Center's Load this version): that version alone is tried, checked
+  // against its manifest entry first.
+  static bool load_version(GameState& state, GameContext& context,
+                           const std::string& filename, std::uint64_t sequence,
+                           std::string* error = nullptr,
+                           std::string* notice = nullptr,
+                           const std::filesystem::path& checkpoint_slot = {});
+
   // The hook the game calls before something replaces the game in progress:
   // keeps that game as a new version of the checkpoint slot. Nothing is
   // written when there is no game, or when the newest checkpoint holds this
@@ -353,10 +362,12 @@ private:
 
   // load and load_over_current. before_replacing runs once, after the save
   // passed every check and before it replaces the game.
+  // With only_version, that working version alone is tried.
   static bool load_slot(GameState& state, GameContext& context,
                         const std::string& filename, std::string* error,
                         std::string* notice,
-                        const std::function<void()>& before_replacing);
+                        const std::function<void()>& before_replacing,
+                        std::optional<std::uint64_t> only_version = {});
 
   static std::string get_full_path(const std::string& filename);
 };

@@ -556,6 +556,10 @@ CommandDef make_nav_commands() {
       .add_subcommand(make_screen_nav("northpole", {"np"},
                                       "North Pole preset chooser",
                                       ScreenTag::Kind::MenuNorthPole))
+      .add_subcommand(make_screen_nav("recovery", {"rc"},
+                                      "Recovery Center: saves and their "
+                                      "versions",
+                                      ScreenTag::Kind::MenuRecovery))
 
       // Screens
       .add_subcommand(make_screen_nav("advertising", {"ad"}, "advertising",

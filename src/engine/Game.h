@@ -20,6 +20,7 @@
 #include "engine/SDLContext.h"
 #include "engine/input/GlobalActionHandler.h"
 #include "engine/music/MusicSystem.h"
+#include "engine/record/Recorder.h"
 #include "engine/ui/CursorManager.h"
 #include "engine/ui/InteractionManager.h"
 #include "engine/ui/PointerTracker.h"
@@ -31,6 +32,7 @@
 #include "views/helpers//OverlayManager.h"
 
 class ConsoleLayer;
+class Renderer;
 class DebugConsole;
 class TutorialLayer;
 
@@ -66,6 +68,17 @@ public:
   std::string benchmark_frames(GameState& gs, int frames);
   bool write_screen_as_vga(GameState& gs, const std::string& path);
 
+  // Recording (record start|stop|status|clip).
+  [[nodiscard]] record::Recorder* recorder() { return recorder_.get(); }
+  // Whether frames come from the software path (no GPU readback): the only
+  // one recorded so far.
+  [[nodiscard]] static bool records_classic();
+  // Batch mode: records seconds of the current screen, with the simulation
+  // and the sound running in real time (with music: an original song), and
+  // returns how it went. Empty when there is nothing to render.
+  std::string record_clip(GameState& gs, double seconds,
+                          const std::string& folder, bool music);
+
 private:
   struct LoopState {
     OverlayManager* overlays = nullptr;
@@ -82,6 +95,8 @@ private:
   bool init(int display_height, const GameOptions& options);
   // F7 (compare false) and F8 (compare true).
   void toggle_look(LoopState& loop_state, bool compare);
+  // After a frame is drawn: copies it for a recording when one is due.
+  void record_frame(Renderer& renderer);
   Renderable* change_state(GameState& gs);
   void apply_fullscreen(bool enabled);
   void load_game_data();
@@ -119,6 +134,8 @@ private:
   std::unique_ptr<audio::AudioManager> audio_manager_;
   // After the AudioManager, so it is destroyed first.
   std::unique_ptr<music::MusicSystem> music_;
+  // After the AudioManager too: it reads its tap.
+  std::unique_ptr<record::Recorder> recorder_;
   std::unique_ptr<View> current_view_{nullptr};
   std::unique_ptr<GlobalActionHandler> global_actions_;
   TutorialLayer* tutorial_layer_{nullptr};

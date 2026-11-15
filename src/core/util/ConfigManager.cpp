@@ -360,6 +360,16 @@ const auto option_defs = std::to_array({
     weather_option<fx::Area::Restaurant>("weather_restaurant"),
     weather_option<fx::Area::Kitchen>("weather_kitchen"),
     weather_option<fx::Area::NorthPole>("weather_north_pole"),
+    OptionDef{"picture_screenshots",
+              [](const GameOptions& o) {
+                return from_bool(o.picture.graded_screenshots);
+              },
+              [](GameOptions& o, const std::string& s) {
+                o.picture.graded_screenshots = to_bool(s);
+              },
+              {},
+              "screenshots show the picture as the window does (preset, "
+              "weather); off writes the frame underneath"},
 });
 
 // Where the original game lives.

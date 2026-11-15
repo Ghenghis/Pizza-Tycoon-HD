@@ -130,7 +130,8 @@ enum class MusicId {
 // unchanged). Their ids are in docs/studio/notes/sfx-overrides.md.
 enum class PackEvent : uint8_t {
   GUEST_ENTER,  // "guest-enter": a guest comes in through the door
-  GUEST_LEAVE,  // "guest-leave": a guest goes out
+  GUEST_LEAVE,  // "guest-leave": a guest goes out (the door opens)
+  DOOR_CLOSE,   // "door-close": the door shuts behind a guest
   PAYMENT,      // "payment": a guest pays
   PLATE_SERVED, // "plate-served": a waiter puts a pizza down
   KITCHEN_BUSY, // "kitchen-busy": the kitchen's bed, busy (loops)
@@ -247,7 +248,7 @@ public:
   static constexpr std::size_t MAX_EFFECTS = 64;
   // The last slots are for events only a pack has (audio::PackEvent): they
   // hold no original and are silent without a pack that fills them.
-  static constexpr std::size_t PACK_EVENTS = 6;
+  static constexpr std::size_t PACK_EVENTS = 7;
   static constexpr std::size_t EVENT_BASE = MAX_EFFECTS - PACK_EVENTS;
   // Variants an effect of a pack may have, voices for ambience one-shots,
   // and the ambience one-shots waiting to start.

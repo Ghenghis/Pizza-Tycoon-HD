@@ -1,0 +1,247 @@
+# Picture presets review: the restaurant and the city map in every preset,
+# by day and at night, without and with snow, captured as the window shows
+# them (`picture shot`: the picture pass and the weather included).
+#
+# Real console commands only, one per line (docs/blueprint/console-commands.md;
+# `picture` is in src/engine/fx/PictureCommands.cpp). With --exec the window
+# stays hidden and the game exits at the end:
+#
+#   "Pizza Legacy" --config <empty folder>/review.ini --game-path <PT folder> \
+#       --hd-scale 3 [--hd-pack <pack>] --seed 7 \
+#       --exec data/review/picture-presets.exec > review.log
+#
+# Here (no GPU) run it on SDL's software renderer:
+#   SDL_VIDEO_DRIVER=offscreen SDL_RENDER_DRIVER=software SDL_AUDIO_DRIVER=dummy
+# which shows what fixed-function SDL can do: warmth and brightness (and the
+# day/night tint through them), the room lights, emissive glow and snow.
+# Contrast, saturation, lift/gamma/gain, bloom, vignette and CRT need SDL's
+# GPU driver: on the PC put renderer=gpu in the --config file (or set
+# SDL_RENDER_DRIVER=gpu) and run the same script.
+#
+# The pictures go to the screenshots folder as
+#   picture-<preset>-<restaurant|city>-<day|night>-<clear|snow>.png
+# plus picture-classic-plain-*.png, written by the plain `screenshot`
+# command: Classic by day without snow, through the picture pass, must equal
+# it byte for byte.
+# Each block starts with a `picture` line (settings, renderer, night factor)
+# in the log, so the pictures can be matched to what made them.
+#
+# Display only: nothing here changes the game, but the clock is set, so do
+# not take fingerprints after it.
+
+# A running game with one furnished, staffed and open restaurant.
+game options set lighting on
+restaurant qs 0 0
+nav restaurant 0
+game tick 200
+
+# Day and night follows the clock (it never applies in the Classic preset).
+picture set picture_day_night on
+
+# The reference: Classic through the plain screenshot command.
+game time set 12:00
+nav restaurant 0
+screenshot picture-classic-plain-restaurant-day.png
+nav cityview @
+screenshot picture-classic-plain-city-day.png
+
+# Classic
+picture preset classic
+game time set 12:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-classic-restaurant-day-clear.png
+nav cityview @
+picture
+picture shot picture-classic-city-day-clear.png
+game time set 12:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-classic-restaurant-day-snow.png
+nav cityview @
+picture
+picture shot picture-classic-city-day-snow.png
+game time set 23:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-classic-restaurant-night-clear.png
+nav cityview @
+picture
+picture shot picture-classic-city-night-clear.png
+game time set 23:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-classic-restaurant-night-snow.png
+nav cityview @
+picture
+picture shot picture-classic-city-night-snow.png
+
+# Natural
+picture preset natural
+game time set 12:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-natural-restaurant-day-clear.png
+nav cityview @
+picture
+picture shot picture-natural-city-day-clear.png
+game time set 12:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-natural-restaurant-day-snow.png
+nav cityview @
+picture
+picture shot picture-natural-city-day-snow.png
+game time set 23:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-natural-restaurant-night-clear.png
+nav cityview @
+picture
+picture shot picture-natural-city-night-clear.png
+game time set 23:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-natural-restaurant-night-snow.png
+nav cityview @
+picture
+picture shot picture-natural-city-night-snow.png
+
+# Vivid
+picture preset vivid
+game time set 12:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-vivid-restaurant-day-clear.png
+nav cityview @
+picture
+picture shot picture-vivid-city-day-clear.png
+game time set 12:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-vivid-restaurant-day-snow.png
+nav cityview @
+picture
+picture shot picture-vivid-city-day-snow.png
+game time set 23:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-vivid-restaurant-night-clear.png
+nav cityview @
+picture
+picture shot picture-vivid-city-night-clear.png
+game time set 23:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-vivid-restaurant-night-snow.png
+nav cityview @
+picture
+picture shot picture-vivid-city-night-snow.png
+
+# Cinematic
+picture preset cinematic
+game time set 12:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-cinematic-restaurant-day-clear.png
+nav cityview @
+picture
+picture shot picture-cinematic-city-day-clear.png
+game time set 12:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-cinematic-restaurant-day-snow.png
+nav cityview @
+picture
+picture shot picture-cinematic-city-day-snow.png
+game time set 23:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-cinematic-restaurant-night-clear.png
+nav cityview @
+picture
+picture shot picture-cinematic-city-night-clear.png
+game time set 23:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-cinematic-restaurant-night-snow.png
+nav cityview @
+picture
+picture shot picture-cinematic-city-night-snow.png
+
+# Studio
+picture preset studio
+game time set 12:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-studio-restaurant-day-clear.png
+nav cityview @
+picture
+picture shot picture-studio-city-day-clear.png
+game time set 12:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-studio-restaurant-day-snow.png
+nav cityview @
+picture
+picture shot picture-studio-city-day-snow.png
+game time set 23:00
+picture set weather_restaurant none
+picture set weather_city none
+nav restaurant 0
+picture
+picture shot picture-studio-restaurant-night-clear.png
+nav cityview @
+picture
+picture shot picture-studio-city-night-clear.png
+game time set 23:00
+picture set weather_restaurant snow
+picture set weather_city snow
+nav restaurant 0
+picture
+picture shot picture-studio-restaurant-night-snow.png
+nav cityview @
+picture
+picture shot picture-studio-city-night-snow.png
+
+# Back to the defaults for anything that follows in this run.
+picture preset classic
+picture set picture_day_night off
+picture set weather_restaurant none
+picture set weather_city none

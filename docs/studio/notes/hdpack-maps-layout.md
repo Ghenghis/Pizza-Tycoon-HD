@@ -130,3 +130,83 @@ Added 2026-11-14 by the rendering lane. The engine looks for maps in `<pack>/_ma
 * `depth_16.png` is not read yet.
 * With no `_maps` folder, or no map for a picture, the picture is drawn exactly as before.
 * `maps.py` does not make emissive masks. They are hand-painted or made by a future stage, and need a provenance sidecar like every other output.
+
+## Proposed stage: emissive masks (`emissive.py`), spec for the curator
+
+Added 2026-11-14 by the rendering lane, for the curator to build. It is not implemented, and `tools/hdpack` is unchanged.
+
+**Goal.** Write `<maps>/<asset id>/emissive.png` (format above) for the pictures that have lit windows, lamps, signs, screens or flames. It must be cheap, deterministic, CPU only (Pillow and numpy), and need no model or GPU. That way it can run in CI and on any machine, with no broker grant.
+
+### Inputs (per asset)
+
+* the original picture from the asset export (`<export>/<asset id>.png`). The export writes RGBA decoded through the picture's palette, with index 0 as alpha 0. `manifest.json` names that palette. Because each texel is a palette colour exactly, its RGB identifies its palette entry. Two entries with the same colour count as one key.
+* the HD pack picture (`<pack>/<asset id>.png`), the same picture at k times the size;
+* a key file, `tools/hdpack/emissive_keys.json`, the only hand-made input:
+
+```json
+{
+  "schema": "plegacy.emissive-keys/1",
+  "palettes": {
+    "<palette id>": {
+      "window": [ "#rrggbb", ... ],
+      "lamp":   [ "#rrggbb", ... ],
+      "sign":   [ "#rrggbb", ... ],
+      "flame":  [ "#rrggbb", ... ]
+    }
+  },
+  "assets": { "<asset id>": { "skip": true } }
+}
+```
+
+### Step 1: propose the keys (`emissive.py plan <export> --out keys.proposed.json`)
+
+* Count every distinct colour (palette entry) over all exported pictures that use the palette, as `manifest.json` lists them.
+* Propose a colour as a light colour when its RGB, in HSV, falls in one of the classes below:
+
+| Class | Hue | Saturation | Value | Covers |
+|---|---|---|---|---|
+| window | 38–62° | ≥ 0.45 | ≥ 0.70 | yellow window panes |
+| lamp | any | ≤ 0.20 | ≥ 0.92 | lamp whites |
+| flame | 10–38° | ≥ 0.55 | ≥ 0.75 | oven mouths and fire |
+| sign | any | ≥ 0.60 | ≥ 0.85 | neon and screens |
+
+* Exclude a colour when it covers more than 20% of the texels of the pictures that use it, since that is a wall or sky, not a light. The 20% is a parameter.
+* For each palette, write the proposal with a swatch, a count and three example assets.
+* The curator reviews the proposal and copies the colours to keep into `emissive_keys.json`. Only that file decides; the proposal is never used directly.
+
+### Step 2: make the masks (`emissive.py run <export> <pack> <maps>`)
+
+1. **Key mask:** the original picture's texels whose RGB is exactly a key colour of its palette (alpha 255), with the class kept. Upscale it to the HD size with **nearest** sampling: k × k texels per original pixel, from `--k` or from the size ratio.
+2. **Follow the HD art:** keep a key texel only where the HD texel is bright enough to be the light. The test is luma ≥ 0.55 × the key colour's luma and alpha ≥ 128. A redraw that moved a window by a texel or two then still lines up.
+3. **Dilate:** a square structuring element of radius `r = max(1, round(0.5 × k))` texels, so the glow spills just past the pane edge. Then a 3×3 box blur feather. Both are deterministic integer operations.
+4. **Colour and strength:**
+   * The RGB is the HD texel colour, scaled so its largest channel is 1. The glow keeps the art's colour but is always bright.
+   * The alpha is mask × class strength: window 0.85, lamp 1.0, sign 0.9, flame 0.8.
+   * It is written straight (not premultiplied), 8-bit.
+5. **Skip:** pictures with no key texel get no file, so the engine draws them unchanged. So do pictures listed with `"skip": true`.
+
+Parameters (`--luma-ratio`, `--radius`, class strengths, the 20% limit) go into `parameters` of the sidecar.
+
+### Provenance and determinism
+
+* **Sidecar:** `stage` is `emissive`. `input` lists the export picture and the HD picture with their SHA-256. The key file's SHA-256 goes under `parameters.keys_sha256`. `workflow` and `models` are null, and `seed` is null with `seed_scheme` `none`.
+* **Resume rule:** the same as the other stages. A stale sidecar means the picture is redone.
+* **Determinism:** the same inputs and key file give byte-identical PNGs. Write them with Pillow `optimize=False` and a fixed compression level.
+* **Validation:** `hdpack.py validate --provenance` covers the new files like every other output.
+
+### Tests for the stage
+
+* A synthetic 8×8 sprite with two key colours, plus its 4× HD copy:
+  * the mask covers exactly the dilated key area;
+  * a non-key bright texel stays dark;
+  * a key texel whose HD texel is dark (the redraw moved it) stays dark.
+* Two runs give identical bytes.
+* A picture with no keys writes no file.
+* The plan step proposes a yellow pane colour and not a yellow wall that covers 60% of the picture.
+
+### Engine side (already in)
+
+* `fx::MapStore` reads `emissive.png` from `<pack>/_maps/<asset id>/` and resizes it to the picture if needed.
+* `HdCompositor::draw_emissive` adds the glow only where the art is visible, with later pictures covering it.
+* The Renderer adds the glow over the lit frame, scaled by the night factor, when "Day and night" is on in a preset other than Classic.
+* With no `_maps` folder, nothing changes.

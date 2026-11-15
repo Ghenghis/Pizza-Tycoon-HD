@@ -509,6 +509,15 @@ void MenuOptions::build_graphics(GameState& state) {
                       changed();
                     }))
       .help_text("Fewer snowflakes, falling slowly and straight down.");
+  add_menu_item(std::make_unique<ToggleMenuItem>(
+                    context_, "Screenshots as shown", look.graded_screenshots,
+                    [&look, changed] {
+                      look.graded_screenshots = !look.graded_screenshots;
+                      changed();
+                    }))
+      .help_text("On: screenshots show the picture as you see it, with the "
+                 "preset, day and night and the weather. Off: the picture "
+                 "underneath, as the 1994 comparison uses it.");
 }
 
 void MenuOptions::build_gameplay(GameState& state) {

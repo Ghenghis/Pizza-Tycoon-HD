@@ -224,6 +224,31 @@ The hidden `[bench][checkpoint]` case measures what each step costs.
   name that is already a save is refused. A failure partway removes the new slot.
 - `undo_restore(slot)` restores `previous_active`. Undoing twice goes back again.
 
+## Recovery Center view
+
+The view is `MenuRecovery`, with the screen kind `MenuRecovery`. It opens from the in-game Disk
+menu ("Recovery"), from the Load screen ("Versions"), and with `nav recovery` (alias `rc`).
+
+`save::RecoveryBrowser` (`src/core/save/RecoveryBrowser.{h,cpp}`) holds what it shows:
+
+- **Rows:** `recovery_rows` lists the checkpoints first, then the other saves by name. Each save
+  gets its own row, then its versions, newest first.
+- **A version row shows:** its level or "damaged (level)", the time it was made, its game day,
+  why it was made, and `*` on the active one.
+- **The detail box:** the chosen row's explanation, including why a version can't be used.
+- **Paging:** sized to the font. Left and Right on a row turn the page.
+
+The three actions each ask first, through a ConfirmPopup:
+
+- **Load this version:** `load_version`. It keeps the game in progress as a checkpoint first.
+- **Restore as a new save:** `restore_as_branch`, to `<name>-<version>`, and a free name after that.
+- **Undo last restore:** `undo_restore`.
+
+None of them deletes anything. Every control has help text.
+
+Browsing only reads the folder, and a menu stops the game's clock. The tests check that the game's
+fingerprint, its random state and every file in the folder stay as they were.
+
 ## Fault tests
 
 `tests/SaveVersionTests.cpp` uses `util::testing::ScopedAtomicFault`, a test-only seam in
